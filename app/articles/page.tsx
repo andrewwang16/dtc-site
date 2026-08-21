@@ -1,16 +1,72 @@
-import FeaturedGrid from "../../components/home/FeaturedGrid";
-import LatestArticles from "../../components/home/LatestArticles";
+import Link from "next/link";
+import { getAllArticles } from "@/lib/articles";
+
+function formatArticleDate(date: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(`${date}T12:00:00Z`));
+}
 
 export default function ArticlesPage() {
+  const articles = getAllArticles();
+
   return (
     <div style={{ display: "grid", gap: "5.5rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up">
         <p className="kicker">Articles</p>
-        <h1 className="section-title">Coming Soon</h1>
+        <h1 className="section-title">Cardinals Coverage</h1>
         <p style={{ marginTop: "0.9rem", color: "var(--muted)", maxWidth: "64ch" }}>
+          Original writing from the Dealin&apos; the Cards team on the Cardinals roster, prospects, and the season as it unfolds.
         </p>
+      </section>
 
-        
+      <section className="container fade-up" style={{ animationDelay: "0.08s" }}>
+        {articles.length === 0 ? (
+          <p style={{ color: "var(--muted)" }}>No articles published yet.</p>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gap: "1.25rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            }}
+          >
+            {articles.map((article) => (
+              <Link
+                key={article.slug}
+                href={`/articles/${article.slug}`}
+                style={{
+                  display: "grid",
+                  border: "1px solid var(--line)",
+                  borderRadius: "18px",
+                  background: "var(--panel)",
+                  overflow: "hidden",
+                  color: "inherit",
+                }}
+              >
+                <div style={{ aspectRatio: "16 / 9", overflow: "hidden" }}>
+                  <img
+                    src={article.image}
+                    alt={article.title}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                </div>
+
+                <div style={{ padding: "1.15rem", display: "grid", gap: "0.5rem" }}>
+                  <p className="kicker" style={{ margin: 0 }}>
+                    {formatArticleDate(article.date)} · {article.author}
+                  </p>
+                  <h2 style={{ margin: 0, fontSize: "1.15rem" }}>{article.title}</h2>
+                  <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.55 }}>
+                    {article.excerpt}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

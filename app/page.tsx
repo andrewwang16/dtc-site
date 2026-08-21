@@ -1,6 +1,7 @@
 import Hero from "../components/home/Hero";
 import CardinalsLiveScore from "../components/home/CardinalsLiveScore";
 import DivisionStandings from "../components/home/DivisionStandings";
+import LatestArticles from "../components/home/LatestArticles";
 
 export default function Home() {
   return (
@@ -16,6 +17,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <LatestArticles />
 
       <DivisionStandings />
 

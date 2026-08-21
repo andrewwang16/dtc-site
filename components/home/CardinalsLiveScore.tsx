@@ -680,7 +680,7 @@ function NotablePlayersList({
               <p style={{ margin: 0, fontWeight: 700, fontSize: "0.92rem" }}>
                 {player.fullName}
               </p>
-              <p style={{ margin: 0, color: "rgba(15,31,61,.65)", fontSize: "0.8rem" }}>
+              <p style={{ margin: 0, color: "rgba(253,250,243,0.72)", fontSize: "0.8rem" }}>
                 {player.position} · AVG {player.avg} · HR {player.homeRuns} · RBI{" "}
                 {player.rbi} · OPS {player.ops}
               </p>
