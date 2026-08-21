@@ -132,7 +132,7 @@ a {
   }
 
   .social-icons-row {
-    display: none;
+    display: none !important;
   }
 
   .nav-links-row-collapsed {
