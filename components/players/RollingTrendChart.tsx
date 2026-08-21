@@ -161,8 +161,8 @@ export default function RollingTrendChart({
   }
 
   return (
-    <div style={{ display: "grid", gap: "1rem" }}>
-      <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap", alignItems: "center" }}>
+    <div className="rolling-trend-root" style={{ display: "grid", gap: "1rem" }}>
+      <div className="rolling-trend-controls" style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
           {WINDOW_SIZES.map((size) => {
             const isActive = size === windowSize;
@@ -216,6 +216,7 @@ export default function RollingTrendChart({
           Not enough games this season for a {windowSize}-game rolling average.
         </p>
       ) : (
+        <div className="rolling-trend-scroll">
         <svg
           viewBox={`0 0 ${width} ${height}`}
           style={{ width: "100%", height: "auto", display: "block" }}
@@ -367,6 +368,7 @@ export default function RollingTrendChart({
               );
             })()}
         </svg>
+        </div>
       )}
     </div>
   );

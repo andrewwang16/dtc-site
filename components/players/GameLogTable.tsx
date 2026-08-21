@@ -20,8 +20,8 @@ export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
   }, [gameLog, mode]);
 
   return (
-    <div style={{ display: "grid", gap: "0.75rem" }}>
-      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+    <div className="game-log-root" style={{ display: "grid", gap: "0.75rem" }}>
+      <div className="game-log-tabs" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
         {(
           [
             { key: "last15" as const, label: "Last 15" },
@@ -56,7 +56,7 @@ export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
       {rows.length === 0 ? (
         <p style={{ color: "var(--muted)" }}>No games found for this season.</p>
       ) : (
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div className="game-log-scroll" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px" }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.85rem" }}>

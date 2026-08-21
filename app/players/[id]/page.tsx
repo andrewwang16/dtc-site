@@ -182,6 +182,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
   return (
     <div
+      className="player-page-root"
       style={{
         display: "grid",
         gap: "3.5rem",
@@ -189,7 +190,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         paddingTop: "2.2rem",
       }}
     >
-      <section className="container fade-up">
+      <section className="container fade-up player-page-section">
         <div
           className="player-header-row"
           style={{
@@ -294,7 +295,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       </section>
 
       <section
-        className="container fade-up"
+        className="container fade-up player-page-section"
         style={{ animationDelay: "0.08s" }}
       >
         <div
@@ -307,7 +308,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             marginBottom: "1rem",
           }}
         >
-          <h2 style={{ margin: 0 }}>Season Stats</h2>
+          <h2 className="player-section-title" style={{ margin: 0 }}>Season Stats</h2>
 
           <div className="player-header-controls" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
             {isTwoWay && (
@@ -379,10 +380,10 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       </section>
 
       <section
-        className="container fade-up"
+        className="container fade-up player-page-section"
         style={{ animationDelay: "0.11s" }}
       >
-        <h2 style={{ margin: "0 0 1rem" }}>Splits by Month</h2>
+        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Splits by Month</h2>
         {monthRows.length === 0 ? (
           <p style={{ color: "var(--muted)" }}>No monthly data for {selectedYear}.</p>
         ) : (
@@ -391,10 +392,10 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       </section>
 
       <section
-        className="container fade-up"
+        className="container fade-up player-page-section"
         style={{ animationDelay: "0.14s" }}
       >
-        <h2 style={{ margin: "0 0 1rem" }}>Splits by Handedness</h2>
+        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Splits by Handedness</h2>
         {handednessRows.length === 0 ? (
           <p style={{ color: "var(--muted)" }}>No handedness splits for {selectedYear}.</p>
         ) : (
@@ -403,11 +404,12 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       </section>
 
       <section
-        className="container fade-up"
+        className="container fade-up player-page-section"
         style={{ animationDelay: "0.17s" }}
       >
-        <h2 style={{ margin: "0 0 1rem" }}>Rolling Trend</h2>
+        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Rolling Trend</h2>
         <article
+          className="rolling-trend-card"
           style={{
             border: "1px solid var(--line)",
             borderRadius: "18px",
@@ -420,11 +422,12 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       </section>
 
       <section
-        className="container fade-up"
+        className="container fade-up player-page-section"
         style={{ animationDelay: "0.2s" }}
       >
-        <h2 style={{ margin: "0 0 1rem" }}>Game Log</h2>
+        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Game Log</h2>
         <article
+          className="game-log-card"
           style={{
             border: "1px solid var(--line)",
             borderRadius: "18px",

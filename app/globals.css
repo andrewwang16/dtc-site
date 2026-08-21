@@ -185,32 +185,117 @@ a {
 }
 
 /*
- * Player profile header: on desktop this is a wrapping flex row (photo,
- * name/team, bio-info card side by side). On mobile that wrap left the
- * photo stranded alone on its own line with the name/team and bio-info
- * card wrapping unpredictably beneath it. Stack it into one centered
- * column instead, and let the bio-info card use the full width so its
- * own auto-fit grid lays out properly.
+ * Player profile page on mobile: the whole page (header, season stats,
+ * both splits tables, rolling trend, game log) needs to fit on one
+ * screen without scrolling the page — only each section's own rows/
+ * chart scroll internally, within a capped height. That means the
+ * header has to stay compact (photo + name on one row, not stacked),
+ * and every data area gets a short max-height + overflow-y: auto.
  */
 @media (max-width: 740px) {
+  .player-page-root {
+    gap: 0.35rem !important;
+    padding-top: 0.6rem !important;
+    padding-bottom: 0.6rem !important;
+  }
+
+  .player-page-section {
+    margin: 0 !important;
+  }
+
+  .player-section-title {
+    font-size: 0.9rem !important;
+    margin: 0 0 0.3rem !important;
+  }
+
   .player-header-row {
-    flex-direction: column !important;
-    text-align: center;
+    gap: 0.65rem !important;
   }
 
   .player-header-photo {
-    width: 200px !important;
-    height: 248px !important;
+    width: 56px !important;
+    height: 70px !important;
+    border-radius: 10px !important;
+  }
+
+  .player-header-name .kicker {
+    font-size: 0.62rem !important;
+    margin-bottom: 0.1rem !important;
+  }
+
+  .player-header-name h1 {
+    font-size: 1.05rem !important;
   }
 
   .player-header-team {
-    justify-content: center;
+    margin-top: 0.2rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .player-header-team img {
+    width: 16px !important;
+    height: 16px !important;
   }
 
   .player-header-info {
     align-self: stretch !important;
     flex-basis: auto !important;
     width: 100%;
+    padding: 0.55rem !important;
+    gap: 0.4rem !important;
+    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)) !important;
+  }
+
+  .player-header-info .kicker {
+    font-size: 0.55rem !important;
+    margin-bottom: 0.1rem !important;
+  }
+
+  .player-header-info p {
+    font-size: 0.68rem !important;
+  }
+
+  .stat-table-scroll {
+    max-height: 110px !important;
+    overflow-y: auto !important;
+  }
+
+  .rolling-trend-card,
+  .game-log-card {
+    padding: 0.5rem !important;
+  }
+
+  .rolling-trend-root {
+    gap: 0.4rem !important;
+  }
+
+  .rolling-trend-controls {
+    gap: 0.35rem !important;
+  }
+
+  .rolling-trend-controls button,
+  .rolling-trend-controls select {
+    padding: 0.22rem 0.45rem !important;
+    font-size: 0.62rem !important;
+  }
+
+  .rolling-trend-scroll {
+    max-height: 150px !important;
+    overflow-y: auto !important;
+  }
+
+  .game-log-root {
+    gap: 0.4rem !important;
+  }
+
+  .game-log-tabs button {
+    padding: 0.3rem 0.6rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  .game-log-scroll {
+    max-height: 110px !important;
+    overflow-y: auto !important;
   }
 }
 
