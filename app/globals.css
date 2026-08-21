@@ -203,32 +203,17 @@ a {
   }
 
   /*
-   * Winning/Losing/Save used the same auto-fit(minmax(200px,1fr)) grid
-   * as desktop, so on a narrow phone only one 200px column fit and the
-   * three cards stacked into separate rows instead of sitting together.
-   * Now that the headshots are hidden, force all three onto one row.
+   * Winning/Losing/Save was three separate cards, which either wrapped
+   * onto their own rows or (once forced onto one row) still read as
+   * three cells. Replace it on mobile with a single outlined cell of
+   * last names on one line, and hide the desktop card grid.
    */
   .wls-grid {
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 0.35rem !important;
+    display: none !important;
   }
 
-  .wls-card {
-    padding: 0.5rem !important;
-  }
-
-  .wls-card .kicker {
-    font-size: 0.62rem !important;
-    margin-bottom: 0.3rem !important;
-  }
-
-  .wls-card h3 {
-    font-size: 0.75rem !important;
-    line-height: 1.15;
-  }
-
-  .wls-card p {
-    font-size: 0.68rem !important;
+  .wls-compact {
+    display: flex !important;
   }
 
   .top-performers-grid {
@@ -259,6 +244,25 @@ a {
   .top-performer-card p {
     font-size: 0.62rem !important;
     line-height: 1.2;
+  }
+}
+
+/*
+ * Team names in the scoreboard's linescore ("St. Louis Cardinals") only
+ * need shortening once the screen is genuinely tight, not at the full
+ * 740px mobile breakpoint.
+ */
+.team-name-short {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .team-name-full {
+    display: none;
+  }
+
+  .team-name-short {
+    display: inline;
   }
 }
 

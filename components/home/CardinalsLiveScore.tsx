@@ -24,6 +24,7 @@ type MlbPlayerStats = {
 type MlbTeam = {
   id: number;
   name: string;
+  teamName?: string;
 };
 
 type MlbGame = {
@@ -171,6 +172,16 @@ function addDays(date: Date, days: number) {
 
 function teamLogoUrl(teamId: number) {
   return `https://www.mlbstatic.com/team-logos/team-cap-on-dark/${teamId}.svg`;
+}
+
+function getLastName(fullName?: string) {
+  if (!fullName) {
+    return "-";
+  }
+
+  const parts = fullName.trim().split(/\s+/);
+
+  return parts[parts.length - 1];
 }
 
 function playerHeadshotUrl(
@@ -1182,7 +1193,8 @@ export default async function CardinalsLiveScore() {
                         height={20}
                         alt=""
                       />
-                      {away.team.name}
+                      <span className="team-name-full">{away.team.name}</span>
+                      <span className="team-name-short">{away.team.teamName ?? away.team.name}</span>
                       {away.leagueRecord && (
                         <span style={{ fontWeight: 400, color: "rgba(253,250,243,0.72)" }}>
                           ({away.leagueRecord.wins}-{away.leagueRecord.losses})
@@ -1284,7 +1296,8 @@ export default async function CardinalsLiveScore() {
                         height={20}
                         alt=""
                       />
-                      {home.team.name}
+                      <span className="team-name-full">{home.team.name}</span>
+                      <span className="team-name-short">{home.team.teamName ?? home.team.name}</span>
                       {home.leagueRecord && (
                         <span style={{ fontWeight: 400, color: "rgba(253,250,243,0.72)" }}>
                           ({home.leagueRecord.wins}-{home.leagueRecord.losses})
@@ -1646,6 +1659,31 @@ export default async function CardinalsLiveScore() {
           </div>
         ) : isFinal ? (
           selectedGame.decisions ? (
+            <>
+            <div
+              className="wls-compact"
+              style={{
+                display: "none",
+                border: "1px solid var(--line)",
+                borderRadius: "14px",
+                padding: "0.6rem 0.75rem",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                flexWrap: "wrap",
+                gap: "0.4rem",
+              }}
+            >
+              <span>W: {getLastName(selectedGame.decisions.winner?.fullName)}</span>
+              <span style={{ color: "rgba(253,250,243,0.5)" }}>|</span>
+              <span>L: {getLastName(selectedGame.decisions.loser?.fullName)}</span>
+              {selectedGame.decisions.save && (
+                <>
+                  <span style={{ color: "rgba(253,250,243,0.5)" }}>|</span>
+                  <span>S: {getLastName(selectedGame.decisions.save.fullName)}</span>
+                </>
+              )}
+            </div>
+
             <div
               className="wls-grid"
               style={{
@@ -1951,6 +1989,7 @@ export default async function CardinalsLiveScore() {
                 </div>
               )}
             </div>
+            </>
           ) : (
             <p
               style={{
