@@ -98,6 +98,25 @@ a {
   }
 }
 
+/*
+ * Mobile hamburger menu: the toggle button only exists below the mobile
+ * breakpoint, and the nav-links row only collapses there too — desktop
+ * always renders the full row exactly as before, untouched.
+ */
+.nav-hamburger-toggle {
+  display: none;
+}
+
+@media (max-width: 740px) {
+  .nav-hamburger-toggle {
+    display: inline-flex;
+  }
+
+  .nav-links-row-collapsed {
+    display: none !important;
+  }
+}
+
 .home-top-grid {
   display: grid;
   gap: 1.5rem;

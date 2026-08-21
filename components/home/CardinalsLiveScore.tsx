@@ -183,6 +183,7 @@ function gameTimeLabel(date: string) {
     weekday: "short",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Chicago",
     timeZoneName: "short",
   }).format(new Date(date));
 }
@@ -193,6 +194,7 @@ function gameDateTimeLabel(date: string) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Chicago",
     timeZoneName: "short",
   }).format(new Date(date));
 }

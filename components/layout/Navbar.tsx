@@ -122,6 +122,7 @@ const socialLinks = [
 export default function Navbar() {
   const pathname = usePathname();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <header
@@ -157,34 +158,73 @@ export default function Navbar() {
             DEALIN&apos; THE CARDS
           </Link>
 
-          <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
-            {socialLinks.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={item.label}
-                title={item.label}
-                style={{
-                  width: "1.95rem",
-                  height: "1.95rem",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: "999px",
-                  border: "1px solid rgba(253,250,243, 0.45)",
-                  background: "rgba(253,250,243, 0.16)",
-                  color: "#fdfaf3",
-                }}
-              >
-                {item.icon}
-              </a>
-            ))}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+              {socialLinks.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={item.label}
+                  title={item.label}
+                  style={{
+                    width: "1.95rem",
+                    height: "1.95rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(253,250,243, 0.45)",
+                    background: "rgba(253,250,243, 0.16)",
+                    color: "#fdfaf3",
+                  }}
+                >
+                  {item.icon}
+                </a>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              className="nav-hamburger-toggle"
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileMenuOpen}
+              onClick={() => setMobileMenuOpen((open) => !open)}
+              style={{
+                width: "2.2rem",
+                height: "2.2rem",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "999px",
+                border: "1px solid rgba(253,250,243, 0.45)",
+                background: "rgba(253,250,243, 0.16)",
+                color: "#fdfaf3",
+                cursor: "pointer",
+              }}
+            >
+              <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+                {mobileMenuOpen ? (
+                  <path
+                    d="M5 5L15 15M15 5L5 15"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                ) : (
+                  <>
+                    <line x1="3" y1="5.5" x2="17" y2="5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <line x1="3" y1="14.5" x2="17" y2="14.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </>
+                )}
+              </svg>
+            </button>
           </div>
         </div>
 
         <div
+          className={mobileMenuOpen ? undefined : "nav-links-row-collapsed"}
           style={{
             display: "flex",
             gap: "1.15rem",
@@ -203,6 +243,7 @@ export default function Navbar() {
                   key={item.href}
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
+                  onClick={() => setMobileMenuOpen(false)}
                   style={{
                     color: isActive ? "#ffffff" : "inherit",
                     fontWeight: isActive ? 700 : 400,
@@ -232,6 +273,7 @@ export default function Navbar() {
                     aria-current={isActive ? "page" : undefined}
                     aria-haspopup="true"
                     aria-expanded={isOpen}
+                    onClick={() => setMobileMenuOpen(false)}
                     style={{
                       color: isActive ? "#ffffff" : "inherit",
                       fontWeight: isActive ? 700 : 400,
@@ -284,7 +326,10 @@ export default function Navbar() {
                       <Link
                         key={child.href}
                         href={child.href}
-                        onClick={() => setOpenMenu(null)}
+                        onClick={() => {
+                          setOpenMenu(null);
+                          setMobileMenuOpen(false);
+                        }}
                         style={{
                           display: "block",
                           padding: "0.55rem 0.7rem",
