@@ -34,14 +34,14 @@ export type TeamPlayerSeason = {
   position: string;
   role: "Hitter" | "Pitcher";
   imageUrl: string;
-  hitting?: SeasonStatLine;
-  pitching?: SeasonStatLine;
+  hitting: SeasonStatLine | undefined;
+  pitching: SeasonStatLine | undefined;
 };
 
 export type LeaderboardPlayer = {
   id: number;
   name: string;
-  position?: string;
+  position: string;
   imageUrl: string;
   displayValue: string;
   sortValue: number;
