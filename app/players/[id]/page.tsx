@@ -266,10 +266,6 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
             }}
           >
-            <InfoTile
-              label="Position"
-              value={bio.primaryPosition?.abbreviation ?? "-"}
-            />
             <InfoTile label="Age" value={age !== null ? String(age) : "-"} />
             <InfoTile
               label="Bats / Throws"
