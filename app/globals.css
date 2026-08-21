@@ -1,0 +1,169 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Anton&display=swap");
+
+:root {
+  --bg: #f7f4ee;
+  --bg-soft: #eee8db;
+  --panel: #ffffff;
+  --line: #dcd3c0;
+  --text: #17181c;
+  --muted: #5a5c63;
+  --accent: #c41e3a;
+  --accent-soft: #0f2a52;
+  --navy: #0f2a52;
+  --positive: #1a7a3c;
+  --negative: #b42318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  color: var(--text);
+  font-family: "Space Grotesk", sans-serif;
+  background:
+    radial-gradient(circle at 12% -8%, rgba(196, 30, 58, 0.12), transparent 36%),
+    radial-gradient(circle at 102% 16%, rgba(15, 42, 82, 0.1), transparent 34%),
+    linear-gradient(165deg, #fbf9f4 0%, #f7f2e7 56%, #f9f5ec 100%);
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.container {
+  margin: 0 auto;
+  max-width: 1440px;
+  width: min(1440px, 94vw);
+}
+
+.section-title {
+  font-family: "Anton", sans-serif;
+  font-size: clamp(1.85rem, 3.1vw, 2.75rem);
+  letter-spacing: 0.03em;
+  margin: 0;
+}
+
+.kicker {
+  color: var(--accent-soft);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  margin: 0 0 0.6rem;
+}
+
+.fade-up {
+  animation: fadeUp 0.75s ease both;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 740px) {
+  .container {
+    width: min(1440px, 100% - 1.2rem);
+  }
+}
+
+.home-top-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.home-podcasts {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, 1fr);
+  order: 1;
+}
+
+.home-scoreboard {
+  order: 2;
+}
+
+.podcast-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  padding: 0.9rem;
+}
+
+.podcast-video {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+/*
+ * The scoreboard's busiest internal row (winning/losing/save pitcher, or
+ * top performers) needs ~616px to lay 3 cards out without wrapping. At
+ * 3fr of a 5fr split, that only clears at a container width of ~1118px,
+ * i.e. a viewport around 1200px (container is min(1440px, 94vw)). Below
+ * that, stay stacked full-width so the scoreboard never gets squeezed
+ * into wrapping/cutting off its player cards.
+ */
+@media (min-width: 1200px) {
+  .home-top-grid {
+    grid-template-columns: 3fr 2fr;
+    align-items: stretch;
+  }
+
+  .home-podcasts {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    order: 2;
+  }
+
+  .home-scoreboard {
+    order: 1;
+  }
+
+  .podcast-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .podcast-video {
+    aspect-ratio: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+.podcast-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 700px) {
+  .podcast-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 980px) {
+  .podcast-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
