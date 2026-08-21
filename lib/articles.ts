@@ -14,7 +14,7 @@ const articles: Article[] = [
   {
     slug: "kyle-leahy-cardinals-bullpen-role",
     title: "Kyle Leahy Is Quietly Becoming a Cardinals Bullpen Fixture",
-    author: "Andrew Wang",
+    author: "Claude",
     date: "2026-08-21",
     image: "/images/articletestimage.png",
     excerpt:
