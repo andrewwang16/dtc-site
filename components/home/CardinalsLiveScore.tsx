@@ -1061,6 +1061,7 @@ export default async function CardinalsLiveScore() {
                 "1px solid rgba(15,31,61,.15)",
               paddingTop: "1rem",
               overflowX: "auto",
+              WebkitOverflowScrolling: "touch",
             }}
           >
             <table

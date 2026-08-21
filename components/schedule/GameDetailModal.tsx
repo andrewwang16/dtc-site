@@ -163,7 +163,7 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
       <h3 style={{ margin: 0 }}>{label}</h3>
 
       {batters.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "440px" }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.85rem" }}>
@@ -203,7 +203,7 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
       )}
 
       {pitchers.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "440px" }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.85rem" }}>
@@ -410,7 +410,7 @@ export default function GameDetailModal({
         ) : (
           <div style={{ marginTop: "1.25rem", display: "grid", gap: "1.5rem" }}>
             {innings.length > 0 && (
-              <div style={{ overflowX: "auto" }}>
+              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px" }}>
                   <thead>
                     <tr style={{ textAlign: "center", color: "var(--muted)", fontSize: "0.85rem" }}>

@@ -56,7 +56,7 @@ export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
       {rows.length === 0 ? (
         <p style={{ color: "var(--muted)" }}>No games found for this season.</p>
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px" }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.85rem" }}>

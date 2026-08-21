@@ -40,6 +40,7 @@ function StandingsTable({
             overflowX: "auto",
             overflowY: "auto",
             maxHeight: STANDINGS_TABLE_MAX_HEIGHT,
+            WebkitOverflowScrolling: "touch",
           }}
         >
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "360px" }}>

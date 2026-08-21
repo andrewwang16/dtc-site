@@ -147,6 +147,35 @@ a {
   }
 }
 
+/*
+ * Season Stats / Splits controls (year dropdown, team dropdown,
+ * hitting-pitching toggle) render at full desktop size on mobile too,
+ * making them look oversized next to the section heading. Shrink them
+ * below the mobile breakpoint only.
+ */
+@media (max-width: 740px) {
+  .player-header-controls select,
+  .player-header-controls a {
+    padding: 0.4rem 0.7rem !important;
+    font-size: 0.8rem !important;
+  }
+}
+
+/*
+ * Stat tables (season stats, splits by month/handedness) are wide
+ * multi-column tables that already scroll horizontally within their own
+ * card. Shrinking the cell padding/text on mobile reduces how much
+ * scrolling is needed, and momentum scrolling makes the swipe feel
+ * natural on iOS instead of clipped/stuck.
+ */
+@media (max-width: 740px) {
+  .stat-table th,
+  .stat-table td {
+    padding: 0.4rem 0.5rem !important;
+    font-size: 0.8rem !important;
+  }
+}
+
 .home-top-grid {
   display: grid;
   gap: 1.5rem;

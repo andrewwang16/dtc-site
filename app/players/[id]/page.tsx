@@ -34,8 +34,8 @@ function StatTable({
   teamColumn?: boolean;
 }) {
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "640px" }}>
+    <div className="stat-table-scroll" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+      <table className="stat-table" style={{ width: "100%", borderCollapse: "collapse", minWidth: "640px" }}>
         <thead>
           <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.85rem" }}>
             <th style={{ padding: "0.5rem 0.75rem" }}></th>
@@ -309,7 +309,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         >
           <h2 style={{ margin: 0 }}>Season Stats</h2>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          <div className="player-header-controls" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
             {isTwoWay && (
               <div style={{ display: "flex", gap: "0.4rem" }}>
                 <a
