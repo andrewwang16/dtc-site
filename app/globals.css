@@ -117,6 +117,36 @@ a {
   }
 }
 
+/*
+ * Player profile header: on desktop this is a wrapping flex row (photo,
+ * name/team, bio-info card side by side). On mobile that wrap left the
+ * photo stranded alone on its own line with the name/team and bio-info
+ * card wrapping unpredictably beneath it. Stack it into one centered
+ * column instead, and let the bio-info card use the full width so its
+ * own auto-fit grid lays out properly.
+ */
+@media (max-width: 740px) {
+  .player-header-row {
+    flex-direction: column !important;
+    text-align: center;
+  }
+
+  .player-header-photo {
+    width: 200px !important;
+    height: 248px !important;
+  }
+
+  .player-header-team {
+    justify-content: center;
+  }
+
+  .player-header-info {
+    align-self: stretch !important;
+    flex-basis: auto !important;
+    width: 100%;
+  }
+}
+
 .home-top-grid {
   display: grid;
   gap: 1.5rem;

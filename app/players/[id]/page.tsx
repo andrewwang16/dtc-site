@@ -191,6 +191,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     >
       <section className="container fade-up">
         <div
+          className="player-header-row"
           style={{
             display: "flex",
             gap: "1.5rem",
@@ -199,6 +200,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           }}
         >
           <div
+            className="player-header-photo"
             style={{
               width: "168px",
               height: "208px",
@@ -221,7 +223,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             />
           </div>
 
-          <div>
+          <div className="player-header-name">
             <p className="kicker" style={{ marginBottom: "0.35rem" }}>
               {bio.primaryPosition?.name ?? role} · #{bio.primaryNumber ?? "-"}
             </p>
@@ -230,6 +232,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
             {bio.currentTeam ? (
               <div
+                className="player-header-team"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -251,6 +254,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           </div>
 
           <article
+            className="player-header-info"
             style={{
               flex: "1 1 320px",
               border: "1px solid var(--line)",
