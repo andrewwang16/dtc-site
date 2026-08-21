@@ -42,12 +42,17 @@ export type MlbGame = {
   };
 };
 
-export function toIsoDate(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
+const CHICAGO_ISO_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Chicago",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
-  return `${year}-${month}-${day}`;
+export function toIsoDate(date: Date) {
+  // Pinned to Central time so "today" matches the Cardinals' local day
+  // regardless of the server's own timezone (typically UTC).
+  return CHICAGO_ISO_DATE_FORMATTER.format(date);
 }
 
 export function formatGameDate(date: string) {

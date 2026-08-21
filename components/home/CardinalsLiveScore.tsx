@@ -144,20 +144,19 @@ type LiveFeedResponse = {
 
 const CARDINALS_TEAM_ID = 138;
 
+const CHICAGO_ISO_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Chicago",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 function toIsoDate(date: Date) {
-  const year = date.getFullYear();
-
-  const month = `${date.getMonth() + 1}`.padStart(
-    2,
-    "0"
-  );
-
-  const day = `${date.getDate()}`.padStart(
-    2,
-    "0"
-  );
-
-  return `${year}-${month}-${day}`;
+  // "en-CA" formats as YYYY-MM-DD. The server can run in any timezone
+  // (typically UTC), so this must be pinned to Central time explicitly —
+  // otherwise "today" flips to the wrong calendar day during evening
+  // games, when it's already tomorrow in UTC but still today in Chicago.
+  return CHICAGO_ISO_DATE_FORMATTER.format(date);
 }
 
 function addDays(date: Date, days: number) {
@@ -343,7 +342,7 @@ function selectScoreboardGame(
 async function findMostRecentFinalGame(
   today: Date
 ): Promise<MlbGame | null> {
-  const currentYear = today.getFullYear();
+  const currentYear = Number(toIsoDate(today).slice(0, 4));
 
   for (const year of [currentYear, currentYear - 1]) {
     try {
@@ -794,7 +793,7 @@ export default async function CardinalsLiveScore() {
    * NOTABLE POSITION PLAYERS
    */
 
-  const currentSeasonYear = new Date().getFullYear();
+  const currentSeasonYear = Number(todayIso.slice(0, 4));
 
   const [awayNotablePlayers, homeNotablePlayers] = await Promise.all([
     getTeamNotablePositionPlayers(away.team.id, currentSeasonYear),
