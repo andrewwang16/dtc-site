@@ -1664,7 +1664,6 @@ export default async function CardinalsLiveScore() {
               className="wls-compact"
               style={{
                 display: "none",
-                border: "1px solid var(--line)",
                 borderRadius: "14px",
                 padding: "0.6rem 0.75rem",
                 fontSize: "0.8rem",

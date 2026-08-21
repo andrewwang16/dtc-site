@@ -135,7 +135,7 @@ export default function Navbar() {
       }}
     >
       <nav className="container" style={{ minHeight: "4.2rem", padding: "0.8rem 0" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+        <div className="navbar-top-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
           <Link
             href="/"
             style={{
@@ -158,8 +158,8 @@ export default function Navbar() {
             DEALIN&apos; THE CARDS
           </Link>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+          <div className="navbar-controls" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <div className="social-icons-row" style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
               {socialLinks.map((item) => (
                 <a
                   key={item.label}
@@ -224,7 +224,7 @@ export default function Navbar() {
         </div>
 
         <div
-          className={mobileMenuOpen ? undefined : "nav-links-row-collapsed"}
+          className={`nav-links-row${mobileMenuOpen ? "" : " nav-links-row-collapsed"}`}
           style={{
             display: "flex",
             gap: "1.15rem",
@@ -347,6 +347,32 @@ export default function Navbar() {
               </div>
             );
           })}
+
+          <div className="mobile-drawer-socials">
+            {socialLinks.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={item.label}
+                title={item.label}
+                style={{
+                  width: "2.2rem",
+                  height: "2.2rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(253,250,243, 0.45)",
+                  background: "rgba(253,250,243, 0.16)",
+                  color: "#fdfaf3",
+                }}
+              >
+                {item.icon}
+              </a>
+            ))}
+          </div>
         </div>
       </nav>
     </header>

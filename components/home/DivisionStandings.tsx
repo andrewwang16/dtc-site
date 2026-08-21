@@ -36,6 +36,7 @@ function StandingsTable({
         </p>
       ) : (
         <div
+          className={wildCardCutoff !== undefined ? "wildcard-standings-scroll" : undefined}
           style={{
             overflowX: "auto",
             overflowY: "auto",

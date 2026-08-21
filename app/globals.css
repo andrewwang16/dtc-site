@@ -107,13 +107,80 @@ a {
   display: none;
 }
 
+.mobile-drawer-socials {
+  display: none;
+}
+
 @media (max-width: 740px) {
   .nav-hamburger-toggle {
     display: inline-flex;
   }
 
+  /* Logo centers once the social row is hidden and only the hamburger
+     button remains; pull the controls out of flow so they don't skew
+     the centering. */
+  .navbar-top-row {
+    justify-content: center !important;
+    position: relative;
+  }
+
+  .navbar-controls {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .social-icons-row {
+    display: none;
+  }
+
   .nav-links-row-collapsed {
     display: none !important;
+  }
+
+  /* Expanded state: a full-bleed, full-height drawer instead of a
+     wrapped inline list. left/right span the sticky header's full
+     viewport width automatically since header is the nearest
+     positioned ancestor; top: 100% starts right where the header's
+     own (dynamic-height) box ends, so no hardcoded offset is needed. */
+  .nav-links-row:not(.nav-links-row-collapsed) {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+    margin-top: 0 !important;
+    padding: 0.5rem 1.2rem 2rem !important;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #c41e3a 0%, #a8172f 100%);
+    z-index: 10;
+  }
+
+  .nav-links-row:not(.nav-links-row-collapsed) > a,
+  .nav-links-row:not(.nav-links-row-collapsed) > div {
+    width: 100%;
+    padding: 0.9rem 0 !important;
+    margin: 0 !important;
+    border-bottom: 1px solid rgba(253, 250, 243, 0.15);
+    font-size: 1.05rem;
+  }
+
+  .nav-links-row:not(.nav-links-row-collapsed) > div > span {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .mobile-drawer-socials {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-top: 1.2rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid rgba(253, 250, 243, 0.15);
   }
 }
 
@@ -244,6 +311,20 @@ a {
   .top-performer-card p {
     font-size: 0.62rem !important;
     line-height: 1.2;
+  }
+}
+
+/*
+ * Wild Card standings were capped to match NL Central's height (with
+ * its own internal scroll) so the two cards would line up side by
+ * side. Once the grid stacks them (below ~782px, where two 360px
+ * columns no longer fit), that height match no longer matters — let
+ * Wild Card expand to show every team instead of scrolling.
+ */
+@media (max-width: 782px) {
+  .wildcard-standings-scroll {
+    max-height: none !important;
+    overflow-y: visible !important;
   }
 }
 
