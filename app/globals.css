@@ -188,8 +188,47 @@ a {
     display: none !important;
   }
 
+  /*
+   * The table itself still declared min-width: 620px for the innings
+   * that are now hidden, so the browser stretched the remaining Team
+   * column to fill that width and pushed R/H/E off-screen. Let it size
+   * to just the visible columns instead.
+   */
+  .linescore-table {
+    min-width: 0 !important;
+  }
+
   .decision-photo {
     display: none !important;
+  }
+
+  /*
+   * Winning/Losing/Save used the same auto-fit(minmax(200px,1fr)) grid
+   * as desktop, so on a narrow phone only one 200px column fit and the
+   * three cards stacked into separate rows instead of sitting together.
+   * Now that the headshots are hidden, force all three onto one row.
+   */
+  .wls-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 0.35rem !important;
+  }
+
+  .wls-card {
+    padding: 0.5rem !important;
+  }
+
+  .wls-card .kicker {
+    font-size: 0.62rem !important;
+    margin-bottom: 0.3rem !important;
+  }
+
+  .wls-card h3 {
+    font-size: 0.75rem !important;
+    line-height: 1.15;
+  }
+
+  .wls-card p {
+    font-size: 0.68rem !important;
   }
 
   .top-performers-grid {

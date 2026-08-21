@@ -1067,6 +1067,7 @@ export default async function CardinalsLiveScore() {
             }}
           >
             <table
+              className="linescore-table"
               style={{
                 width: "100%",
                 borderCollapse:
@@ -1646,6 +1647,7 @@ export default async function CardinalsLiveScore() {
         ) : isFinal ? (
           selectedGame.decisions ? (
             <div
+              className="wls-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns:
@@ -1656,6 +1658,7 @@ export default async function CardinalsLiveScore() {
               {/* WINNING PITCHER */}
 
               <div
+                className="wls-card"
                 style={{
                   border:
                     "1px solid var(--line)",
@@ -1753,6 +1756,7 @@ export default async function CardinalsLiveScore() {
               {/* LOSING PITCHER */}
 
               <div
+                className="wls-card"
                 style={{
                   border:
                     "1px solid var(--line)",
@@ -1851,6 +1855,7 @@ export default async function CardinalsLiveScore() {
 
               {selectedGame.decisions.save && (
                 <div
+                  className="wls-card"
                   style={{
                     border:
                       "1px solid var(--line)",
