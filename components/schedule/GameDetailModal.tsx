@@ -302,6 +302,7 @@ export default function GameDetailModal({
   return createPortal(
     <div
       onClick={onClose}
+      className="modal-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -318,6 +319,7 @@ export default function GameDetailModal({
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        className="modal-dialog"
         style={{
           width: "100%",
           maxWidth: "760px",

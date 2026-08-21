@@ -82,6 +82,22 @@ a {
   }
 }
 
+/*
+ * Nav dropdowns (Podcast, Players) normally open on hover, which doesn't
+ * exist on touch. Below the mobile breakpoint, show a tap target to open
+ * them instead; desktop never renders this, so its hover behavior is
+ * untouched.
+ */
+.nav-dropdown-toggle {
+  display: none;
+}
+
+@media (max-width: 740px) {
+  .nav-dropdown-toggle {
+    display: inline-flex;
+  }
+}
+
 .home-top-grid {
   display: grid;
   gap: 1.5rem;
@@ -165,5 +181,56 @@ a {
 @media (min-width: 980px) {
   .podcast-grid {
     grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/*
+ * Two videos side by side gets too cramped on small phones (each card
+ * shrinks below a legible width). Stack to one column below 560px.
+ */
+@media (max-width: 560px) {
+  .home-podcasts {
+    grid-template-columns: 1fr;
+  }
+
+  .podcast-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/*
+ * The schedule calendar's 7-column grid gets tight on phones. Shrink the
+ * per-day padding, logo, and result text so nothing wraps awkwardly or
+ * gets clipped, without touching the desktop sizing.
+ */
+@media (max-width: 480px) {
+  .calendar-day-cell {
+    padding: 0.25rem !important;
+    min-height: 84px !important;
+    gap: 0.2rem !important;
+  }
+
+  .calendar-game-logo {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  .calendar-game-result {
+    font-size: 0.7rem !important;
+  }
+}
+
+/*
+ * The box-score modal's default padding eats too much of a phone's width.
+ * Trim it below the mobile breakpoint only.
+ */
+@media (max-width: 480px) {
+  .modal-overlay {
+    padding: 0.6rem !important;
+  }
+
+  .modal-dialog {
+    padding: 1rem !important;
+    border-radius: 14px !important;
   }
 }

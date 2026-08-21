@@ -122,6 +122,7 @@ function PersonModal({
   return (
     <div
       onClick={onClose}
+      className="modal-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -138,6 +139,7 @@ function PersonModal({
         role="dialog"
         aria-modal="true"
         aria-label={person.name}
+        className="modal-dialog"
         style={{
           width: "100%",
           maxWidth: "560px",

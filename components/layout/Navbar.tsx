@@ -226,18 +226,42 @@ export default function Navbar() {
                 onMouseEnter={() => setOpenMenu(item.href)}
                 onMouseLeave={() => setOpenMenu(null)}
               >
-                <Link
-                  href={item.href}
-                  aria-current={isActive ? "page" : undefined}
-                  aria-haspopup="true"
-                  aria-expanded={isOpen}
-                  style={{
-                    color: isActive ? "#ffffff" : "inherit",
-                    fontWeight: isActive ? 700 : 400,
-                  }}
-                >
-                  {item.label}
-                </Link>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                  <Link
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
+                    aria-haspopup="true"
+                    aria-expanded={isOpen}
+                    style={{
+                      color: isActive ? "#ffffff" : "inherit",
+                      fontWeight: isActive ? 700 : 400,
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+
+                  <button
+                    type="button"
+                    className="nav-dropdown-toggle"
+                    aria-label={`${isOpen ? "Hide" : "Show"} ${item.label} menu`}
+                    aria-expanded={isOpen}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setOpenMenu(isOpen ? null : item.href);
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "inherit",
+                      padding: "0.2rem",
+                      cursor: "pointer",
+                      fontSize: "0.7rem",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {isOpen ? "▲" : "▼"}
+                  </button>
+                </span>
 
                 {isOpen ? (
                   <div

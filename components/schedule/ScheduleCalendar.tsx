@@ -67,7 +67,7 @@ export default function ScheduleCalendar({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(7, 1fr)",
+          gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
           gap: "0.4rem",
           marginBottom: "0.5rem",
         }}
@@ -93,7 +93,7 @@ export default function ScheduleCalendar({
             key={weekIndex}
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(7, 1fr)",
+              gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
               gap: "0.4rem",
             }}
           >
@@ -107,6 +107,7 @@ export default function ScheduleCalendar({
               return (
                 <div
                   key={cell.dateKey}
+                  className="calendar-day-cell"
                   style={{
                     minHeight: "98px",
                     border: "1px solid var(--line)",
@@ -157,10 +158,12 @@ export default function ScheduleCalendar({
                             title={opponent.team.name}
                             width={24}
                             height={24}
+                            className="calendar-game-logo"
                             style={{ display: "block" }}
                           />
                         </div>
                         <div
+                          className="calendar-game-result"
                           style={{
                             color: postponed ? theme.muted : isFinal ? resultColor : theme.muted,
                             fontWeight: isFinal ? 800 : 400,

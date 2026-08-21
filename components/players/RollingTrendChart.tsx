@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent, type TouchEvent } from "react";
 import {
   HITTER_COLUMNS,
   PITCHER_COLUMNS,
@@ -118,19 +118,18 @@ export default function RollingTrendChart({
   const hovered =
     chart && hoveredIndex !== null ? chart.coords[hoveredIndex] : undefined;
 
-  function handlePointerMove(event: MouseEvent<SVGRectElement>) {
+  function updateHoveredFromClientX(svg: SVGSVGElement | null | undefined, clientX: number) {
     if (!chart) {
       return;
     }
 
-    const svg = event.currentTarget.ownerSVGElement;
     const rect = svg?.getBoundingClientRect();
 
     if (!rect) {
       return;
     }
 
-    const xInViewBox = ((event.clientX - rect.left) / rect.width) * width;
+    const xInViewBox = ((clientX - rect.left) / rect.width) * width;
 
     let nearestIndex = 0;
     let nearestDistance = Infinity;
@@ -145,6 +144,20 @@ export default function RollingTrendChart({
     });
 
     setHoveredIndex(nearestIndex);
+  }
+
+  function handlePointerMove(event: MouseEvent<SVGRectElement>) {
+    updateHoveredFromClientX(event.currentTarget.ownerSVGElement, event.clientX);
+  }
+
+  function handleTouchMove(event: TouchEvent<SVGRectElement>) {
+    const touch = event.touches[0];
+
+    if (!touch) {
+      return;
+    }
+
+    updateHoveredFromClientX(event.currentTarget.ownerSVGElement, touch.clientX);
   }
 
   return (
@@ -302,7 +315,10 @@ export default function RollingTrendChart({
             fill="transparent"
             onMouseMove={handlePointerMove}
             onMouseLeave={() => setHoveredIndex(null)}
-            style={{ cursor: "crosshair" }}
+            onTouchStart={handleTouchMove}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={() => setHoveredIndex(null)}
+            style={{ cursor: "crosshair", touchAction: "none" }}
           />
 
           {hovered &&
