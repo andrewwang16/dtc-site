@@ -43,12 +43,14 @@ type MlbGame = {
       score?: number;
       team: MlbTeam;
       probablePitcher?: MlbPlayerRef;
+      leagueRecord?: { wins: number; losses: number };
     };
 
     home: {
       score?: number;
       team: MlbTeam;
       probablePitcher?: MlbPlayerRef;
+      leagueRecord?: { wins: number; losses: number };
     };
   };
 
@@ -1090,6 +1092,7 @@ export default async function CardinalsLiveScore() {
                     (inning) => (
                       <th
                         key={inning.num}
+                        className="linescore-inning"
                         style={{
                           textAlign:
                             "center",
@@ -1179,6 +1182,11 @@ export default async function CardinalsLiveScore() {
                         alt=""
                       />
                       {away.team.name}
+                      {away.leagueRecord && (
+                        <span style={{ fontWeight: 400, color: "rgba(253,250,243,0.72)" }}>
+                          ({away.leagueRecord.wins}-{away.leagueRecord.losses})
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -1186,6 +1194,7 @@ export default async function CardinalsLiveScore() {
                     (inning) => (
                       <td
                         key={`away-${inning.num}`}
+                        className="linescore-inning"
                         style={{
                           textAlign:
                             "center",
@@ -1275,6 +1284,11 @@ export default async function CardinalsLiveScore() {
                         alt=""
                       />
                       {home.team.name}
+                      {home.leagueRecord && (
+                        <span style={{ fontWeight: 400, color: "rgba(253,250,243,0.72)" }}>
+                          ({home.leagueRecord.wins}-{home.leagueRecord.losses})
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -1282,6 +1296,7 @@ export default async function CardinalsLiveScore() {
                     (inning) => (
                       <td
                         key={`home-${inning.num}`}
+                        className="linescore-inning"
                         style={{
                           textAlign:
                             "center",
@@ -1662,6 +1677,7 @@ export default async function CardinalsLiveScore() {
                 <PlayerLink playerId={selectedGame.decisions.winner?.id}>
                   {selectedGame.decisions.winner?.id ? (
                     <div
+                      className="decision-photo"
                       style={{
                         width: "84px",
                         height: "104px",
@@ -1695,6 +1711,7 @@ export default async function CardinalsLiveScore() {
                     </div>
                   ) : (
                     <div
+                      className="decision-photo"
                       style={{
                         width: "84px",
                         height: "104px",
@@ -1757,6 +1774,7 @@ export default async function CardinalsLiveScore() {
                 <PlayerLink playerId={selectedGame.decisions.loser?.id}>
                   {selectedGame.decisions.loser?.id ? (
                     <div
+                      className="decision-photo"
                       style={{
                         width: "84px",
                         height: "104px",
@@ -1790,6 +1808,7 @@ export default async function CardinalsLiveScore() {
                     </div>
                   ) : (
                     <div
+                      className="decision-photo"
                       style={{
                         width: "84px",
                         height: "104px",
@@ -1853,6 +1872,7 @@ export default async function CardinalsLiveScore() {
                   <PlayerLink playerId={selectedGame.decisions.save.id}>
                     {selectedGame.decisions.save.id ? (
                       <div
+                        className="decision-photo"
                         style={{
                           width: "84px",
                           height: "104px",
@@ -1886,6 +1906,7 @@ export default async function CardinalsLiveScore() {
                       </div>
                     ) : (
                       <div
+                        className="decision-photo"
                         style={{
                           width: "84px",
                           height: "104px",
@@ -2174,6 +2195,7 @@ export default async function CardinalsLiveScore() {
             </p>
 
             <div
+              className="top-performers-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
@@ -2183,6 +2205,7 @@ export default async function CardinalsLiveScore() {
               {topPerformers.map((performer) => (
                 <div
                   key={performer.id}
+                  className="top-performer-card"
                   style={{
                     border: "1px solid var(--line)",
                     borderRadius: "14px",
@@ -2192,6 +2215,7 @@ export default async function CardinalsLiveScore() {
                 >
                   <PlayerLink playerId={performer.id}>
                   <div
+                    className="top-performer-photo"
                     style={{
                       width: "84px",
                       height: "104px",

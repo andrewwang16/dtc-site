@@ -176,6 +176,53 @@ a {
   }
 }
 
+/*
+ * Home scoreboard on mobile: drop the inning-by-inning linescore columns
+ * (keep just team/R/H/E) and the winning/losing/save pitcher headshots
+ * (keep just the name), and shrink the top-performer cards enough that
+ * all three fit on one row instead of wrapping. Desktop is untouched —
+ * these rules only exist under max-width: 740px.
+ */
+@media (max-width: 740px) {
+  .linescore-inning {
+    display: none !important;
+  }
+
+  .decision-photo {
+    display: none !important;
+  }
+
+  .top-performers-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 0.35rem !important;
+  }
+
+  .top-performer-card {
+    padding: 0.5rem !important;
+  }
+
+  .top-performer-card a {
+    flex-direction: column !important;
+    gap: 0.35rem !important;
+    text-align: center;
+  }
+
+  .top-performer-photo {
+    width: 44px !important;
+    height: 54px !important;
+  }
+
+  .top-performer-card h3 {
+    font-size: 0.7rem !important;
+    line-height: 1.15;
+  }
+
+  .top-performer-card p {
+    font-size: 0.62rem !important;
+    line-height: 1.2;
+  }
+}
+
 .home-top-grid {
   display: grid;
   gap: 1.5rem;
