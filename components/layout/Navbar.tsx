@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 
 type NavChild = { label: string; href: string };
 type NavItem = { label: string; href: string; children?: NavChild[] };
@@ -278,9 +278,9 @@ export default function Navbar() {
                 )}
               </div>
             ) : status !== "loading" ? (
-              <button
-                type="button"
-                onClick={() => signIn("google")}
+              <Link
+                href="/sign-in"
+                onClick={() => setMobileMenuOpen(false)}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -291,11 +291,10 @@ export default function Navbar() {
                   color: "#fdfaf3",
                   fontWeight: 700,
                   fontSize: "0.85rem",
-                  cursor: "pointer",
                 }}
               >
                 Sign in
-              </button>
+              </Link>
             ) : null}
 
             <button
