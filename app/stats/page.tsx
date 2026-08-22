@@ -591,9 +591,6 @@ export default async function StatsPage() {
       <section className="container fade-up">
         <p className="kicker">Players · Leaders</p>
         <h1 className="section-title">Cardinals Leaderboards</h1>
-        <p style={{ marginTop: "0.9rem", color: "var(--muted)", maxWidth: "72ch" }}>
-          Use the hitter and pitcher sub tabs to switch between qualified rate leaders and Cardinals counting leaders for the current season.
-        </p>
       </section>
 
       <section className="container fade-up" style={{ animationDelay: "0.12s" }}>

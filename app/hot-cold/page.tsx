@@ -229,19 +229,6 @@ export default async function HotColdPage() {
       <section className="container fade-up">
         <p className="kicker">Players · Trends</p>
         <h1 className="section-title">Trends</h1>
-        <p
-          style={{
-            marginTop: "0.9rem",
-            color: "var(--muted)",
-            maxWidth: "68ch",
-          }}
-        >
-          Biggest risers and fallers on the active roster over the last {TRAILING_WINDOW_DAYS} days.
-          Hitters are ranked by the change in OPS between their last-{TRAILING_WINDOW_DAYS}-day
-          rolling average and their season mark; pitchers by the same change in ERA (an improved,
-          lower ERA counts as &quot;hot&quot;). Players need at least {MIN_SEASON_GAMES} games this
-          season and {MIN_RECENT_GAMES} in the trailing window to qualify.
-        </p>
       </section>
 
       <section

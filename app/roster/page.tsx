@@ -84,16 +84,6 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       <section className="container fade-up">
         <p className="kicker">Players</p>
         <h1 className="section-title">Cardinals Roster</h1>
-        <p
-          style={{
-            marginTop: "0.9rem",
-            color: "var(--muted)",
-            maxWidth: "62ch",
-          }}
-        >
-          Switch between the active 26-man roster and the full 40-man roster.
-          Click a player for bio info, season stats, splits, and a game log.
-        </p>
       </section>
 
       <section className="container fade-up" style={{ animationDelay: "0.04s" }}>
