@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { auth } from "@/auth";
 import { getAllArticles } from "@/lib/articles";
 
 function formatArticleDate(date: string) {
@@ -9,14 +10,39 @@ function formatArticleDate(date: string) {
   }).format(new Date(`${date}T12:00:00Z`));
 }
 
-export default function ArticlesPage() {
-  const articles = getAllArticles();
+export default async function ArticlesPage() {
+  const [articles, session] = await Promise.all([getAllArticles(), auth()]);
+  const isAdmin = Boolean(session?.user?.isAdmin);
 
   return (
     <div style={{ display: "grid", gap: "5.5rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up">
-        <p className="kicker">Articles</p>
-        <h1 className="section-title">Cardinals Coverage</h1>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <div>
+            <p className="kicker">Articles</p>
+            <h1 className="section-title">Cardinals Coverage</h1>
+          </div>
+
+          {isAdmin && (
+            <Link
+              href="/articles/new"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "0.6rem 1.1rem",
+                borderRadius: "999px",
+                border: "1px solid #8a1024",
+                background: "rgba(196,30,58,0.18)",
+                color: "var(--text)",
+                fontWeight: 700,
+                textDecoration: "none",
+              }}
+            >
+              + Write Article
+            </Link>
+          )}
+        </div>
+
         <p style={{ marginTop: "0.9rem", color: "var(--muted)", maxWidth: "64ch" }}>
           Original writing from the Dealin&apos; the Cards team on the Cardinals roster, prospects, and the season as it unfolds.
         </p>

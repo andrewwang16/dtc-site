@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signIn, signOut, useSession } from "next-auth/react";
 
 type NavChild = { label: string; href: string };
 type NavItem = { label: string; href: string; children?: NavChild[] };
@@ -123,6 +124,8 @@ export default function Navbar() {
   const pathname = usePathname();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const { data: session, status } = useSession();
 
   return (
     <header
@@ -184,6 +187,116 @@ export default function Navbar() {
                 </a>
               ))}
             </div>
+
+            {status === "authenticated" && session?.user ? (
+              <div
+                style={{ position: "relative" }}
+                onMouseEnter={() => setAccountMenuOpen(true)}
+                onMouseLeave={() => setAccountMenuOpen(false)}
+              >
+                <button
+                  type="button"
+                  aria-label="Account menu"
+                  aria-expanded={accountMenuOpen}
+                  onClick={() => setAccountMenuOpen((open) => !open)}
+                  style={{
+                    width: "2.2rem",
+                    height: "2.2rem",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(253,250,243, 0.45)",
+                    background: "rgba(253,250,243, 0.16)",
+                    overflow: "hidden",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                >
+                  {session.user.image ? (
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name ?? "Account"}
+                      title={session.user.name ?? undefined}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    <span style={{ color: "#fdfaf3", fontWeight: 700, fontSize: "0.85rem" }}>
+                      {(session.user.name ?? session.user.email ?? "?").charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </button>
+
+                {accountMenuOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      right: 0,
+                      minWidth: "160px",
+                      border: "1px solid var(--line)",
+                      borderRadius: "14px",
+                      background: "var(--panel)",
+                      boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+                      padding: "0.4rem",
+                      display: "grid",
+                      gap: "0.15rem",
+                      zIndex: 40,
+                    }}
+                  >
+                    {session.user.isAdmin && (
+                      <p
+                        style={{
+                          margin: 0,
+                          padding: "0.4rem 0.7rem",
+                          color: "var(--muted)",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                        }}
+                      >
+                        Admin
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => signOut()}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "0.55rem 0.7rem",
+                        borderRadius: "10px",
+                        color: "var(--text)",
+                        fontWeight: 600,
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : status !== "loading" ? (
+              <button
+                type="button"
+                onClick={() => signIn("google")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "0.5rem 0.9rem",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(253,250,243, 0.45)",
+                  background: "rgba(253,250,243, 0.16)",
+                  color: "#fdfaf3",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                }}
+              >
+                Sign in
+              </button>
+            ) : null}
 
             <button
               type="button"

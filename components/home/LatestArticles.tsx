@@ -8,8 +8,8 @@ function formatArticleDate(date: string) {
   }).format(new Date(`${date}T12:00:00Z`));
 }
 
-export default function LatestArticles() {
-  const articles = getRecentArticles(3);
+export default async function LatestArticles() {
+  const articles = await getRecentArticles(3);
 
   if (articles.length === 0) {
     return null;

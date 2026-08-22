@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import Navbar from "../components/layout/Navbar";
 import Footer from "../components/layout/Footer";
+import Providers from "./providers";
 
 export const metadata: Metadata = {
   title: "Dealin' the Cards",
@@ -17,13 +18,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-neutral-950 text-white">
-        <Navbar />
+        <Providers>
+          <Navbar />
 
-        <main className="min-h-screen">
-          {children}
-        </main>
+          <main className="min-h-screen">
+            {children}
+          </main>
 
-        <Footer />
+          <Footer />
+        </Providers>
       </body>
     </html>
   );
