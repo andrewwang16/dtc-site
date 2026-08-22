@@ -208,6 +208,32 @@ a {
     margin: 0 0 0.3rem !important;
   }
 
+  .player-page-topbar {
+    gap: 0.35rem !important;
+  }
+
+  .player-page-topbar > div {
+    gap: 0.4rem !important;
+  }
+
+  .player-page-topbar a {
+    font-size: 0.8rem !important;
+  }
+
+  .player-page-topbar > div > div {
+    padding: 0.6rem !important;
+  }
+
+  .player-page-topbar .kicker {
+    font-size: 0.6rem !important;
+    margin-bottom: 0.3rem !important;
+  }
+
+  .player-page-topbar input {
+    padding: 0.45rem 0.7rem !important;
+    font-size: 0.85rem !important;
+  }
+
   .player-header-row {
     gap: 0.65rem !important;
   }

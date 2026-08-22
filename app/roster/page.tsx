@@ -1,11 +1,6 @@
 import Link from "next/link";
 import PlayerSearch from "@/components/players/PlayerSearch";
-import { getCardinalsRoster, playerHeadshotUrl, type RosterEntry, type RosterType } from "@/lib/mlb";
-
-const TABS: Array<{ slug: string; label: string; rosterType: RosterType }> = [
-  { slug: "26man", label: "26-Man Roster", rosterType: "active" },
-  { slug: "40man", label: "40-Man Roster", rosterType: "40Man" },
-];
+import { getCardinalsRoster, playerHeadshotUrl, type RosterEntry } from "@/lib/mlb";
 
 const POSITION_GROUPS = [
   { label: "Pitchers", positions: new Set(["P", "SP", "RP"]) },
@@ -57,19 +52,9 @@ function groupRoster(roster: RosterEntry[]) {
   return groups.filter((group) => group.players.length > 0);
 }
 
-type RosterPageProps = {
-  searchParams: Promise<{ type?: string }>;
-};
-
-export default async function RosterPage({ searchParams }: RosterPageProps) {
-  const { type } = await searchParams;
-  const activeTab = TABS.find((tab) => tab.slug === type) ?? TABS[0];
-
+export default async function RosterPage() {
   const year = new Date().getFullYear();
-  const [roster, searchRoster] = await Promise.all([
-    getCardinalsRoster(year, activeTab.rosterType),
-    getCardinalsRoster(year),
-  ]);
+  const roster = await getCardinalsRoster(year, "40Man");
   const groups = groupRoster(roster);
 
   return (
@@ -91,48 +76,12 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             maxWidth: "62ch",
           }}
         >
-          Switch between the active 26-man roster and the full 40-man roster.
-          Click a player for bio info, season stats, splits, and a game log.
+          The full 40-man roster, grouped by position. Click a player for bio info, season stats, splits, and a game log.
         </p>
-
-        <div
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            flexWrap: "wrap",
-            marginTop: "1.2rem",
-          }}
-        >
-          {TABS.map((tab) => {
-            const isActive = tab.slug === activeTab.slug;
-
-            return (
-              <a
-                key={tab.slug}
-                href={`/roster?type=${tab.slug}`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "0.6rem 1.1rem",
-                  borderRadius: "999px",
-                  border: `1px solid ${isActive ? "#8a1024" : "var(--line)"}`,
-                  background: isActive
-                    ? "rgba(196,30,58,0.18)"
-                    : "rgba(15,31,61,0.02)",
-                  color: "var(--text)",
-                  fontWeight: 700,
-                  textDecoration: "none",
-                }}
-              >
-                {tab.label}
-              </a>
-            );
-          })}
-        </div>
       </section>
 
-      <section className="container fade-up" style={{ animationDelay: "0.06s" }}>
-        <PlayerSearch roster={searchRoster} />
+      <section className="container fade-up" style={{ animationDelay: "0.04s" }}>
+        <PlayerSearch roster={roster} />
       </section>
 
       {groups.length === 0 ? (

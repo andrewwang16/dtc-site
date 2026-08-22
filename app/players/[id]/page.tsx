@@ -1,7 +1,9 @@
+import Link from "next/link";
 import {
   buildStatRow,
   computeAgeAsOf,
   determinePlayerRole,
+  getCardinalsRoster,
   getDraftOrSigningInfo,
   getLeagueAverages,
   getPlayerBio,
@@ -12,12 +14,14 @@ import {
   PITCHER_COLUMNS,
   playerHeadshotUrl,
   teamLogoUrl,
+  type RosterEntry,
   type StatRow,
 } from "@/lib/mlb";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
 import TeamSplitSelect from "@/components/players/TeamSplitSelect";
+import PlayerSearch from "@/components/players/PlayerSearch";
 
 type PlayerPageProps = {
   params: Promise<{ id: string }>;
@@ -73,6 +77,27 @@ function StatTable({
   );
 }
 
+function PlayerPageTopBar({ roster }: { roster: RosterEntry[] }) {
+  return (
+    <div style={{ display: "grid", gap: "0.75rem", marginBottom: "1.5rem" }}>
+      <Link
+        href="/roster"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.4rem",
+          fontWeight: 700,
+          color: "var(--accent-soft)",
+        }}
+      >
+        ← Back to Roster
+      </Link>
+
+      <PlayerSearch roster={roster} />
+    </div>
+  );
+}
+
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -89,11 +114,15 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   const { year: yearParam, view: viewParam, team: teamParam } = await searchParams;
   const playerId = Number.parseInt(id, 10);
 
-  const bio = await getPlayerBio(playerId);
+  const [bio, roster] = await Promise.all([
+    getPlayerBio(playerId),
+    getCardinalsRoster(new Date().getFullYear()),
+  ]);
 
   if (!bio) {
     return (
       <div className="container" style={{ paddingTop: "2.2rem", paddingBottom: "4rem" }}>
+        <PlayerPageTopBar roster={roster} />
         <p className="kicker">Player</p>
         <h1 className="section-title">Player not found</h1>
         <p style={{ color: "var(--muted)" }}>
@@ -190,6 +219,10 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         paddingTop: "2.2rem",
       }}
     >
+      <section className="container fade-up player-page-section player-page-topbar">
+        <PlayerPageTopBar roster={roster} />
+      </section>
+
       <section className="container fade-up player-page-section">
         <div
           className="player-header-row"
