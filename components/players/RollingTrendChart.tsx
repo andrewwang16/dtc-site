@@ -348,7 +348,7 @@ export default function RollingTrendChart({
                     width={boxWidth}
                     height={boxHeight}
                     rx={6}
-                    fill="#1c0d11"
+                    fill="var(--panel)"
                     stroke="var(--line)"
                   />
                   {lines.map((line, index) => (

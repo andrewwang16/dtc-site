@@ -85,40 +85,6 @@ export type PlayerBio = {
   }>;
 };
 
-export type DraftOrSigningInfo = {
-  kind: "drafted" | "signed";
-  team: string;
-  detail?: string;
-};
-
-export function getDraftOrSigningInfo(bio: PlayerBio): DraftOrSigningInfo | null {
-  const draftEntry = bio.drafts?.find((entry) => entry.isDrafted && entry.team);
-
-  if (draftEntry?.team) {
-    return {
-      kind: "drafted",
-      team: draftEntry.team.name,
-      detail: `Round ${draftEntry.pickRound}, Pick ${draftEntry.roundPickNumber} (No. ${draftEntry.pickNumber} overall, ${draftEntry.year})`,
-    };
-  }
-
-  const signingTransactions = (bio.transactions ?? [])
-    .filter((entry) => entry.toTeam && /sign/i.test(entry.typeDesc))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  const firstSigning = signingTransactions[0];
-
-  if (firstSigning?.toTeam) {
-    return {
-      kind: "signed",
-      team: firstSigning.toTeam.name,
-      detail: firstSigning.date,
-    };
-  }
-
-  return null;
-}
-
 export type StatLine = {
   gamesPlayed?: number;
   gamesPitched?: number;
@@ -146,6 +112,7 @@ export type StatLine = {
   inningsPitched?: string;
   wins?: number;
   losses?: number;
+  saves?: number;
   homeRunsPer9?: string;
   earnedRuns?: number;
   outs?: number;
@@ -646,6 +613,8 @@ export const HITTER_COLUMNS = [
 export const PITCHER_COLUMNS = [
   "G",
   "GS",
+  "W-L",
+  "SV",
   "IP",
   "ERA",
   "WHIP",
@@ -714,6 +683,8 @@ export function buildPitcherRow(stat: StatLine | null, league: LeagueAverages): 
   return {
     G: String(stat.gamesPitched ?? 0),
     GS: String(stat.gamesStarted ?? 0),
+    "W-L": `${stat.wins ?? 0}-${stat.losses ?? 0}`,
+    SV: String(stat.saves ?? 0),
     IP: stat.inningsPitched ?? "-",
     ERA: stat.era ?? "-",
     WHIP: stat.whip ?? "-",

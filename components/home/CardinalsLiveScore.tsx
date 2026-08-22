@@ -1419,17 +1419,19 @@ export default async function CardinalsLiveScore() {
             )}
           </div>
 
-          <BasesIcon
-            first={Boolean(
-              bases?.first
-            )}
-            second={Boolean(
-              bases?.second
-            )}
-            third={Boolean(
-              bases?.third
-            )}
-          />
+          {isLive && (
+            <BasesIcon
+              first={Boolean(
+                bases?.first
+              )}
+              second={Boolean(
+                bases?.second
+              )}
+              third={Boolean(
+                bases?.third
+              )}
+            />
+          )}
         </div>
 
         {/* PLAYER INFORMATION */}

@@ -4,7 +4,6 @@ import {
   computeAgeAsOf,
   determinePlayerRole,
   getCardinalsRoster,
-  getDraftOrSigningInfo,
   getLeagueAverages,
   getPlayerBio,
   getPlayerHandednessSplits,
@@ -207,8 +206,6 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     .filter(Boolean)
     .join(", ");
 
-  const draftInfo = getDraftOrSigningInfo(bio);
-
   return (
     <div
       className="player-page-root"
@@ -312,16 +309,6 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             <InfoTile
               label="Born"
               value={`${bio.birthDate ?? "-"}${born ? ` · ${born}` : ""}`}
-            />
-            <InfoTile
-              label={draftInfo?.kind === "signed" ? "Signed" : "Drafted"}
-              value={
-                draftInfo
-                  ? `${draftInfo.team}${draftInfo.detail ? ` — ${draftInfo.detail}` : ""}`
-                  : bio.draftYear
-                    ? String(bio.draftYear)
-                    : "-"
-              }
             />
           </article>
         </div>
