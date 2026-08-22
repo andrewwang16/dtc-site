@@ -1,14 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-
-// Single source of truth: email -> bcrypt hash of that admin's password,
-// set as env vars. Anyone whose email isn't a key here can never sign in,
-// regardless of what password they submit — there's no public signup.
-const ADMIN_ACCOUNTS: Record<string, string | undefined> = {
-  "aw.andrewwang16@gmail.com": process.env.ADMIN_PASSWORD_HASH_AW,
-  "joshua.p.jacobs98@gmail.com": process.env.ADMIN_PASSWORD_HASH_JOSHUA,
-};
+import { getUserByEmail } from "@/lib/users";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -29,28 +22,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const hash = ADMIN_ACCOUNTS[email];
+        const user = await getUserByEmail(email);
 
-        if (!hash) {
+        if (!user) {
           return null;
         }
 
-        const isValid = await bcrypt.compare(password, hash);
+        const isValid = await bcrypt.compare(password, user.passwordHash);
 
         if (!isValid) {
           return null;
         }
 
-        return { id: email, email, name: email.split("@")[0] };
+        return { id: email, email, name: email.split("@")[0], isAdmin: user.isAdmin };
       },
     }),
   ],
   session: { strategy: "jwt" },
   pages: { signIn: "/sign-in" },
   callbacks: {
-    async jwt({ token }) {
-      if (token.email) {
-        token.isAdmin = Boolean(ADMIN_ACCOUNTS[token.email.toLowerCase()]);
+    async jwt({ token, user }) {
+      if (user) {
+        token.isAdmin = Boolean((user as { isAdmin?: boolean }).isAdmin);
       }
 
       return token;

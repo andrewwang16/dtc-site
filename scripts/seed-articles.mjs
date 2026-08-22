@@ -44,6 +44,16 @@ async function main() {
     CREATE INDEX IF NOT EXISTS articles_date_idx ON articles (date DESC)
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      is_admin BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+
   const body = KYLE_LEAHY_BODY.map((text) => ({ type: "paragraph", text }));
 
   await sql`

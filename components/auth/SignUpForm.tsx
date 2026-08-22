@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { signUpAction } from "@/app/sign-up/actions";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -16,35 +17,40 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
-export default function SignInForm() {
+export default function SignUpForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
 
-  async function handleSubmit(event: React.FormEvent) {
+  function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
-    setSubmitting(true);
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-
-    setSubmitting(false);
-
-    if (!result || result.error) {
-      setError("Incorrect email or password.");
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.");
       return;
     }
 
-    router.push(searchParams.get("callbackUrl") ?? "/articles");
-    router.refresh();
+    startTransition(async () => {
+      const result = await signUpAction({ email, password });
+
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      setSigningIn(true);
+      await signIn("credentials", { email, password, redirect: false });
+      router.push("/articles");
+      router.refresh();
+    });
   }
+
+  const submitting = isPending || signingIn;
 
   return (
     <form
@@ -82,7 +88,26 @@ export default function SignInForm() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           required
-          autoComplete="current-password"
+          minLength={8}
+          autoComplete="new-password"
+          style={inputStyle}
+        />
+        <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.8rem" }}>
+          At least 8 characters.
+        </p>
+      </div>
+
+      <div>
+        <p className="kicker" style={{ marginBottom: "0.4rem" }}>
+          Confirm Password
+        </p>
+        <input
+          type="password"
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          required
+          minLength={8}
+          autoComplete="new-password"
           style={inputStyle}
         />
       </div>
@@ -106,13 +131,13 @@ export default function SignInForm() {
           fontSize: "1rem",
         }}
       >
-        {submitting ? "Signing in..." : "Sign in"}
+        {submitting ? "Creating account..." : "Create Account"}
       </button>
 
       <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
-        Don&apos;t have an account?{" "}
-        <Link href="/sign-up" style={{ color: "var(--accent-soft)", fontWeight: 700 }}>
-          Create one
+        Already have an account?{" "}
+        <Link href="/sign-in" style={{ color: "var(--accent-soft)", fontWeight: 700 }}>
+          Sign in
         </Link>
       </p>
     </form>
