@@ -65,6 +65,7 @@ export default function ScheduleCalendar({
   return (
     <div>
       <div
+        className="calendar-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
@@ -91,6 +92,7 @@ export default function ScheduleCalendar({
         {weeks.map((week, weekIndex) => (
           <div
             key={weekIndex}
+            className="calendar-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
@@ -119,7 +121,7 @@ export default function ScheduleCalendar({
                     alignContent: "start",
                   }}
                 >
-                  <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{cell.day}</span>
+                  <span className="calendar-day-number" style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{cell.day}</span>
 
                   {dayGames.map((game) => {
                     const theme = getGameCardTheme(game);
@@ -137,8 +139,12 @@ export default function ScheduleCalendar({
                       <button
                         key={game.gamePk}
                         type="button"
+                        className="calendar-game-chip"
                         onClick={() => setSelectedGame(game)}
                         style={{
+                          width: "100%",
+                          boxSizing: "border-box",
+                          overflow: "hidden",
                           textAlign: "left",
                           border: `1px solid ${theme.border}`,
                           borderRadius: "8px",
@@ -150,8 +156,8 @@ export default function ScheduleCalendar({
                           lineHeight: 1.3,
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontWeight: 800 }}>
-                          <span>{getHomeAwayLabel(game) === "Home" ? "vs" : "@"}</span>
+                        <div className="calendar-game-label" style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontWeight: 800, minWidth: 0 }}>
+                          <span className="calendar-game-vs">{getHomeAwayLabel(game) === "Home" ? "vs" : "@"}</span>
                           <img
                             src={getTeamLogoUrl(opponent.team.id)}
                             alt={opponent.team.name}
@@ -159,7 +165,7 @@ export default function ScheduleCalendar({
                             width={24}
                             height={24}
                             className="calendar-game-logo"
-                            style={{ display: "block" }}
+                            style={{ display: "block", flexShrink: 0 }}
                           />
                         </div>
                         <div
@@ -168,6 +174,9 @@ export default function ScheduleCalendar({
                             color: postponed ? theme.muted : isFinal ? resultColor : theme.muted,
                             fontWeight: isFinal ? 800 : 400,
                             fontSize: "0.85rem",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
                           }}
                         >
                           {postponed

@@ -282,8 +282,7 @@ a {
   }
 
   .stat-table-scroll {
-    max-height: 110px !important;
-    overflow-y: auto !important;
+    overflow-y: hidden !important;
   }
 
   .rolling-trend-card,
@@ -349,8 +348,9 @@ a {
 @media (max-width: 740px) {
   .stat-table th,
   .stat-table td {
-    padding: 0.4rem 0.5rem !important;
-    font-size: 0.8rem !important;
+    padding: 0.22rem 0.4rem !important;
+    font-size: 0.65rem !important;
+    line-height: 1.15 !important;
   }
 }
 
@@ -564,19 +564,40 @@ a {
  * gets clipped, without touching the desktop sizing.
  */
 @media (max-width: 480px) {
-  .calendar-day-cell {
-    padding: 0.25rem !important;
-    min-height: 84px !important;
+  .calendar-grid {
     gap: 0.2rem !important;
   }
 
+  .calendar-day-cell {
+    padding: 0.2rem !important;
+    min-height: 70px !important;
+    gap: 0.15rem !important;
+    border-radius: 8px !important;
+  }
+
+  .calendar-day-number {
+    font-size: 0.65rem !important;
+  }
+
+  .calendar-game-chip {
+    padding: 0.2rem 0.25rem !important;
+  }
+
+  .calendar-game-label {
+    gap: 0.15rem !important;
+  }
+
+  .calendar-game-vs {
+    display: none !important;
+  }
+
   .calendar-game-logo {
-    width: 16px !important;
-    height: 16px !important;
+    width: 14px !important;
+    height: 14px !important;
   }
 
   .calendar-game-result {
-    font-size: 0.7rem !important;
+    font-size: 0.62rem !important;
   }
 }
 
