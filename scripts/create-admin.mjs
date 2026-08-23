@@ -3,7 +3,7 @@
 // /sign-up form — those two emails are rejected there — so admin
 // status can only ever be granted by someone with real database
 // access running this script, never by self-signup.
-import { neon } from "@neondatabase/serverless";
+import pg from "pg";
 import bcrypt from "bcryptjs";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
@@ -14,9 +14,9 @@ const ADMIN_EMAILS = new Set([
 ]);
 
 const connectionString =
-  process.env.DATABASE_URL ??
   process.env.POSTGRES_URL ??
-  process.env.DATABASE_URL_UNPOOLED;
+  process.env.DATABASE_URL ??
+  process.env.POSTGRES_URL_NON_POOLING;
 
 if (!connectionString) {
   console.error(
@@ -25,7 +25,16 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const sql = neon(connectionString);
+const pool = new pg.Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+
+async function sql(strings, ...values) {
+  const text = strings.reduce(
+    (acc, chunk, i) => acc + chunk + (i < values.length ? `$${i + 1}` : ""),
+    ""
+  );
+  const result = await pool.query(text, values);
+  return result.rows;
+}
 
 const rl = createInterface({ input: stdin, output: stdout });
 
@@ -68,7 +77,9 @@ async function main() {
   console.log(`\nAdmin account ready for ${email}.`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => pool.end());

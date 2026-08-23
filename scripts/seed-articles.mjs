@@ -1,9 +1,9 @@
-import { neon } from "@neondatabase/serverless";
+import pg from "pg";
 
 const connectionString =
-  process.env.DATABASE_URL ??
   process.env.POSTGRES_URL ??
-  process.env.DATABASE_URL_UNPOOLED;
+  process.env.DATABASE_URL ??
+  process.env.POSTGRES_URL_NON_POOLING;
 
 if (!connectionString) {
   console.error(
@@ -12,7 +12,16 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const sql = neon(connectionString);
+const pool = new pg.Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+
+async function sql(strings, ...values) {
+  const text = strings.reduce(
+    (acc, chunk, i) => acc + chunk + (i < values.length ? `$${i + 1}` : ""),
+    ""
+  );
+  const result = await pool.query(text, values);
+  return result.rows;
+}
 
 const KYLE_LEAHY_BODY = [
   "Kyle Leahy's path to the major leagues was never a straight line. Drafted out of college in 2018, the right-hander spent parts of five seasons working through the Cardinals' minor league system before making his MLB debut in July 2023. For a lot of relievers, that kind of timeline ends the story before it really starts. For Leahy, it was just the beginning.",
@@ -76,7 +85,9 @@ async function main() {
   console.log("Seed complete: articles table ready, Kyle Leahy article present.");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => pool.end());
