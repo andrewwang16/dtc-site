@@ -25,6 +25,7 @@ type MlbTeam = {
   id: number;
   name: string;
   teamName?: string;
+  abbreviation?: string;
 };
 
 type MlbGame = {
@@ -168,6 +169,10 @@ function addDays(date: Date, days: number) {
   result.setDate(result.getDate() + days);
 
   return result;
+}
+
+function teamAbbreviation(team: MlbTeam) {
+  return team.abbreviation ?? team.teamName ?? team.name;
 }
 
 function teamLogoUrl(teamId: number) {
@@ -936,8 +941,9 @@ export default async function CardinalsLiveScore() {
    * LINESCORE DATA
    */
 
-  const innings =
-    linescore?.innings ?? [];
+  const innings = isPreview
+    ? [{ num: 1, away: { runs: 0 }, home: { runs: 0 } }]
+    : linescore?.innings ?? [];
 
   const bases =
     linescore?.offense;
@@ -1461,7 +1467,7 @@ export default async function CardinalsLiveScore() {
                   color: "inherit",
                 }}
               >
-                {away.team.name} Starter
+                {teamAbbreviation(away.team)} Starter
               </p>
 
               <PlayerLink playerId={awayProbablePitcher?.id}>
@@ -1568,7 +1574,7 @@ export default async function CardinalsLiveScore() {
                   color: "inherit",
                 }}
               >
-                {home.team.name} Starter
+                {teamAbbreviation(home.team)} Starter
               </p>
 
               <PlayerLink playerId={homeProbablePitcher?.id}>
@@ -2312,8 +2318,8 @@ export default async function CardinalsLiveScore() {
               gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             }}
           >
-            <NotablePlayersList teamName={away.team.name} players={awayNotablePlayers} />
-            <NotablePlayersList teamName={home.team.name} players={homeNotablePlayers} />
+            <NotablePlayersList teamName={teamAbbreviation(away.team)} players={awayNotablePlayers} />
+            <NotablePlayersList teamName={teamAbbreviation(home.team)} players={homeNotablePlayers} />
           </div>
         )}
       </article>
