@@ -23,9 +23,14 @@ export async function POST(request: Request) {
     return new Response("File too large", { status: 400 });
   }
 
-  const blob = await put(`article-covers/${crypto.randomUUID()}-${file.name}`, file, {
-    access: "public",
-  });
+  try {
+    const blob = await put(`article-covers/${crypto.randomUUID()}-${file.name}`, file, {
+      access: "public",
+    });
 
-  return Response.json({ url: blob.url });
+    return Response.json({ url: blob.url });
+  } catch (error) {
+    console.error("Blob upload failed", error);
+    return new Response("Upload failed — check server logs", { status: 500 });
+  }
 }

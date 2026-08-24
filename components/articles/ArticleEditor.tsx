@@ -2,8 +2,10 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { createArticleAction } from "@/app/articles/new/actions";
 import type { ArticleBlock } from "@/lib/articles";
+import ArticleBody from "@/components/articles/ArticleBody";
 
 type EditableBlock = ArticleBlock & { id: string };
 
@@ -189,11 +191,21 @@ function BlockCard({
   );
 }
 
+function formatPreviewDate() {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date());
+}
+
 export default function ArticleEditor() {
   const router = useRouter();
+  const { data: session } = useSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
 
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [title, setTitle] = useState("");
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
@@ -274,6 +286,19 @@ export default function ArticleEditor() {
     }
   }
 
+  function getCleanedBlocks(): ArticleBlock[] {
+    return blocks
+      .map((block) => {
+        const { id, ...rest } = block;
+        return rest;
+      })
+      .filter((block) => {
+        if (block.type === "paragraph") return block.text.trim().length > 0;
+        if (block.type === "youtube") return block.videoId.trim().length > 0;
+        return block.tweetId.trim().length > 0;
+      });
+  }
+
   function handlePublish() {
     setError(null);
 
@@ -287,16 +312,7 @@ export default function ArticleEditor() {
       return;
     }
 
-    const cleanedBlocks: ArticleBlock[] = blocks
-      .map((block) => {
-        const { id, ...rest } = block;
-        return rest;
-      })
-      .filter((block) => {
-        if (block.type === "paragraph") return block.text.trim().length > 0;
-        if (block.type === "youtube") return block.videoId.trim().length > 0;
-        return block.tweetId.trim().length > 0;
-      });
+    const cleanedBlocks = getCleanedBlocks();
 
     if (cleanedBlocks.length === 0) {
       setError("Add at least one paragraph or embed.");
@@ -320,90 +336,176 @@ export default function ArticleEditor() {
   }
 
   const canPublish = !isPending && !coverUploading;
+  const previewImage = coverPreviewUrl ?? coverImageUrl;
+  const previewBlocks = getCleanedBlocks();
+  const authorName = session?.user?.name ?? session?.user?.email ?? "You";
 
   return (
     <div style={{ display: "grid", gap: "1.25rem" }}>
-      <div>
-        <p className="kicker" style={{ marginBottom: "0.4rem" }}>
-          Title
-        </p>
-        <input
-          type="text"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Article title"
-          style={inputStyle}
-        />
+      <div style={{ display: "flex", gap: "0.5rem" }}>
+        <button
+          type="button"
+          onClick={() => setMode("edit")}
+          style={{
+            ...pillButtonStyle,
+            background: mode === "edit" ? "var(--accent)" : "rgba(15,31,61,0.02)",
+            color: mode === "edit" ? "white" : "var(--text)",
+            borderColor: mode === "edit" ? "#8a1024" : "var(--line)",
+          }}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("preview")}
+          style={{
+            ...pillButtonStyle,
+            background: mode === "preview" ? "var(--accent)" : "rgba(15,31,61,0.02)",
+            color: mode === "preview" ? "white" : "var(--text)",
+            borderColor: mode === "preview" ? "#8a1024" : "var(--line)",
+          }}
+        >
+          Preview
+        </button>
       </div>
 
-      <div>
-        <p className="kicker" style={{ marginBottom: "0.4rem" }}>
-          Cover Photo
-        </p>
-
-        {coverPreviewUrl && (
-          <div
-            style={{
-              marginBottom: "0.6rem",
-              borderRadius: "18px",
-              overflow: "hidden",
-              border: "1px solid var(--line)",
-              aspectRatio: "16 / 9",
-            }}
-          >
-            <img
-              src={coverPreviewUrl}
-              alt="Cover preview"
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+      {mode === "edit" ? (
+        <>
+          <div>
+            <p className="kicker" style={{ marginBottom: "0.4rem" }}>
+              Title
+            </p>
+            <input
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Article title"
+              style={inputStyle}
             />
           </div>
-        )}
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleCoverChange}
-          style={{ ...inputStyle, padding: "0.5rem" }}
-        />
+          <div>
+            <p className="kicker" style={{ marginBottom: "0.4rem" }}>
+              Cover Photo
+            </p>
 
-        {coverUploading && (
-          <p style={{ margin: "0.4rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
-            Uploading...
+            {coverPreviewUrl && (
+              <div
+                style={{
+                  marginBottom: "0.6rem",
+                  borderRadius: "18px",
+                  overflow: "hidden",
+                  border: "1px solid var(--line)",
+                  aspectRatio: "16 / 9",
+                }}
+              >
+                <img
+                  src={coverPreviewUrl}
+                  alt="Cover preview"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleCoverChange}
+              style={{ ...inputStyle, padding: "0.5rem" }}
+            />
+
+            {coverUploading && (
+              <p style={{ margin: "0.4rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
+                Uploading...
+              </p>
+            )}
+          </div>
+
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            <p className="kicker" style={{ margin: 0 }}>
+              Body
+            </p>
+
+            {blocks.map((block, index) => (
+              <BlockCard
+                key={block.id}
+                block={block}
+                onChange={(next) => updateBlock(block.id, next)}
+                onMoveUp={() => moveBlock(block.id, -1)}
+                onMoveDown={() => moveBlock(block.id, 1)}
+                onRemove={() => removeBlock(block.id)}
+                canMoveUp={index > 0}
+                canMoveDown={index < blocks.length - 1}
+              />
+            ))}
+
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button type="button" style={pillButtonStyle} onClick={() => addBlock("paragraph")}>
+                + Add Paragraph
+              </button>
+              <button type="button" style={pillButtonStyle} onClick={() => addBlock("youtube")}>
+                + Add YouTube
+              </button>
+              <button type="button" style={pillButtonStyle} onClick={() => addBlock("tweet")}>
+                + Add Tweet
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div style={{ maxWidth: "760px" }}>
+          <p className="kicker">Article</p>
+          <h1 className="section-title">{title.trim() || "Untitled article"}</h1>
+
+          <p style={{ marginTop: "0.75rem", color: "var(--muted)" }}>
+            By {authorName} · {formatPreviewDate()}
           </p>
-        )}
-      </div>
 
-      <div style={{ display: "grid", gap: "0.75rem" }}>
-        <p className="kicker" style={{ margin: 0 }}>
-          Body
-        </p>
+          {previewImage ? (
+            <div
+              style={{
+                marginTop: "1.5rem",
+                borderRadius: "18px",
+                overflow: "hidden",
+                border: "1px solid var(--line)",
+                aspectRatio: "16 / 9",
+              }}
+            >
+              <img
+                src={previewImage}
+                alt={title || "Cover preview"}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            </div>
+          ) : (
+            <div
+              style={{
+                marginTop: "1.5rem",
+                borderRadius: "18px",
+                border: "1px dashed var(--line)",
+                aspectRatio: "16 / 9",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--muted)",
+              }}
+            >
+              No cover image yet
+            </div>
+          )}
 
-        {blocks.map((block, index) => (
-          <BlockCard
-            key={block.id}
-            block={block}
-            onChange={(next) => updateBlock(block.id, next)}
-            onMoveUp={() => moveBlock(block.id, -1)}
-            onMoveDown={() => moveBlock(block.id, 1)}
-            onRemove={() => removeBlock(block.id)}
-            canMoveUp={index > 0}
-            canMoveDown={index < blocks.length - 1}
-          />
-        ))}
-
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <button type="button" style={pillButtonStyle} onClick={() => addBlock("paragraph")}>
-            + Add Paragraph
-          </button>
-          <button type="button" style={pillButtonStyle} onClick={() => addBlock("youtube")}>
-            + Add YouTube
-          </button>
-          <button type="button" style={pillButtonStyle} onClick={() => addBlock("tweet")}>
-            + Add Tweet
-          </button>
+          <div style={{ marginTop: "1.75rem" }}>
+            {previewBlocks.length > 0 ? (
+              <ArticleBody body={previewBlocks} />
+            ) : (
+              <p style={{ margin: 0, color: "var(--muted)" }}>
+                Nothing to preview yet — add a paragraph or embed.
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <p style={{ margin: 0, color: "#b42318", fontWeight: 700 }}>{error}</p>
