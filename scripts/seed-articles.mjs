@@ -40,7 +40,6 @@ async function main() {
       author TEXT NOT NULL,
       author_email TEXT NOT NULL,
       date DATE NOT NULL,
-      image TEXT NOT NULL,
       excerpt TEXT NOT NULL,
       body JSONB NOT NULL,
       player_id INTEGER,
@@ -66,14 +65,13 @@ async function main() {
   const body = KYLE_LEAHY_BODY.map((text) => ({ type: "paragraph", text }));
 
   await sql`
-    INSERT INTO articles (slug, title, author, author_email, date, image, excerpt, body, player_id, player_name)
+    INSERT INTO articles (slug, title, author, author_email, date, excerpt, body, player_id, player_name)
     VALUES (
       'kyle-leahy-cardinals-bullpen-role',
       'Kyle Leahy Is Quietly Becoming a Cardinals Bullpen Fixture',
       'Claude',
       'nootnewspod@gmail.com',
       '2026-08-21',
-      '/images/articletestimage.png',
       'The Boulder, Colorado native has taken a winding road to St. Louis, and this year he''s carved out a real role in the Cardinals'' relief corps.',
       ${JSON.stringify(body)}::jsonb,
       681517,

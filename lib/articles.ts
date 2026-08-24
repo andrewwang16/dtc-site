@@ -11,7 +11,6 @@ export type Article = {
   author: string;
   authorEmail: string;
   date: string;
-  image: string;
   excerpt: string;
   body: ArticleBlock[];
   playerId?: number;
@@ -24,7 +23,6 @@ type ArticleRow = {
   author: string;
   author_email: string;
   date: string;
-  image: string;
   excerpt: string;
   body: ArticleBlock[];
   player_id: number | null;
@@ -38,7 +36,6 @@ function rowToArticle(row: ArticleRow): Article {
     author: row.author,
     authorEmail: row.author_email,
     date: row.date,
-    image: row.image,
     excerpt: row.excerpt,
     body: row.body,
     playerId: row.player_id ?? undefined,
@@ -50,7 +47,7 @@ export async function getAllArticles(): Promise<Article[]> {
   try {
     const sql = getSql();
     const rows = (await sql`
-      SELECT slug, title, author, author_email, date, image, excerpt, body, player_id, player_name
+      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name
       FROM articles
       ORDER BY date DESC, id DESC
     `) as ArticleRow[];
@@ -66,7 +63,7 @@ export async function getRecentArticles(count: number): Promise<Article[]> {
   try {
     const sql = getSql();
     const rows = (await sql`
-      SELECT slug, title, author, author_email, date, image, excerpt, body, player_id, player_name
+      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name
       FROM articles
       ORDER BY date DESC, id DESC
       LIMIT ${count}
@@ -83,7 +80,7 @@ export async function getArticleBySlug(slug: string): Promise<Article | undefine
   try {
     const sql = getSql();
     const rows = (await sql`
-      SELECT slug, title, author, author_email, date, image, excerpt, body, player_id, player_name
+      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name
       FROM articles
       WHERE slug = ${slug}
       LIMIT 1
@@ -120,7 +117,6 @@ export async function createArticle(input: {
   title: string;
   author: string;
   authorEmail: string;
-  image: string;
   body: ArticleBlock[];
   playerId?: number;
   playerName?: string;
@@ -139,20 +135,19 @@ export async function createArticle(input: {
   const sql = getSql();
 
   const rows = (await sql`
-    INSERT INTO articles (slug, title, author, author_email, date, image, excerpt, body, player_id, player_name)
+    INSERT INTO articles (slug, title, author, author_email, date, excerpt, body, player_id, player_name)
     VALUES (
       ${slug},
       ${input.title},
       ${input.author},
       ${input.authorEmail},
       ${today},
-      ${input.image},
       ${excerpt},
       ${JSON.stringify(input.body)}::jsonb,
       ${input.playerId ?? null},
       ${input.playerName ?? null}
     )
-    RETURNING slug, title, author, author_email, date, image, excerpt, body, player_id, player_name
+    RETURNING slug, title, author, author_email, date, excerpt, body, player_id, player_name
   `) as ArticleRow[];
 
   return rowToArticle(rows[0]);

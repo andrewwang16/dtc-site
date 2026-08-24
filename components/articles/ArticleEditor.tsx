@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { createArticleAction } from "@/app/articles/new/actions";
@@ -202,14 +202,10 @@ function formatPreviewDate() {
 export default function ArticleEditor() {
   const router = useRouter();
   const { data: session } = useSession();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [title, setTitle] = useState("");
-  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
-  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
-  const [coverUploading, setCoverUploading] = useState(false);
   const [blocks, setBlocks] = useState<EditableBlock[]>([
     { id: makeId(), type: "paragraph", text: "" },
   ]);
@@ -251,41 +247,6 @@ export default function ArticleEditor() {
     }
   }
 
-  async function handleCoverChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    setCoverPreviewUrl(URL.createObjectURL(file));
-    setCoverImageUrl(null);
-    setCoverUploading(true);
-    setError(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/admin/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Upload failed");
-      }
-
-      const data: { url: string } = await response.json();
-      setCoverImageUrl(data.url);
-    } catch {
-      setError("Cover image upload failed. Try again.");
-      setCoverPreviewUrl(null);
-    } finally {
-      setCoverUploading(false);
-    }
-  }
-
   function getCleanedBlocks(): ArticleBlock[] {
     return blocks
       .map((block) => {
@@ -307,11 +268,6 @@ export default function ArticleEditor() {
       return;
     }
 
-    if (!coverImageUrl) {
-      setError("Add a cover image before publishing.");
-      return;
-    }
-
     const cleanedBlocks = getCleanedBlocks();
 
     if (cleanedBlocks.length === 0) {
@@ -322,7 +278,6 @@ export default function ArticleEditor() {
     startTransition(async () => {
       const result = await createArticleAction({
         title: title.trim(),
-        image: coverImageUrl,
         blocks: cleanedBlocks,
       });
 
@@ -335,8 +290,7 @@ export default function ArticleEditor() {
     });
   }
 
-  const canPublish = !isPending && !coverUploading;
-  const previewImage = coverPreviewUrl ?? coverImageUrl;
+  const canPublish = !isPending;
   const previewBlocks = getCleanedBlocks();
   const authorName = session?.user?.name ?? session?.user?.email ?? "You";
 
@@ -384,44 +338,6 @@ export default function ArticleEditor() {
             />
           </div>
 
-          <div>
-            <p className="kicker" style={{ marginBottom: "0.4rem" }}>
-              Cover Photo
-            </p>
-
-            {coverPreviewUrl && (
-              <div
-                style={{
-                  marginBottom: "0.6rem",
-                  borderRadius: "18px",
-                  overflow: "hidden",
-                  border: "1px solid var(--line)",
-                  aspectRatio: "16 / 9",
-                }}
-              >
-                <img
-                  src={coverPreviewUrl}
-                  alt="Cover preview"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              </div>
-            )}
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleCoverChange}
-              style={{ ...inputStyle, padding: "0.5rem" }}
-            />
-
-            {coverUploading && (
-              <p style={{ margin: "0.4rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
-                Uploading...
-              </p>
-            )}
-          </div>
-
           <div style={{ display: "grid", gap: "0.75rem" }}>
             <p className="kicker" style={{ margin: 0 }}>
               Body
@@ -461,39 +377,6 @@ export default function ArticleEditor() {
           <p style={{ marginTop: "0.75rem", color: "var(--muted)" }}>
             By {authorName} · {formatPreviewDate()}
           </p>
-
-          {previewImage ? (
-            <div
-              style={{
-                marginTop: "1.5rem",
-                borderRadius: "18px",
-                overflow: "hidden",
-                border: "1px solid var(--line)",
-                aspectRatio: "16 / 9",
-              }}
-            >
-              <img
-                src={previewImage}
-                alt={title || "Cover preview"}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            </div>
-          ) : (
-            <div
-              style={{
-                marginTop: "1.5rem",
-                borderRadius: "18px",
-                border: "1px dashed var(--line)",
-                aspectRatio: "16 / 9",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--muted)",
-              }}
-            >
-              No cover image yet
-            </div>
-          )}
 
           <div style={{ marginTop: "1.75rem" }}>
             {previewBlocks.length > 0 ? (

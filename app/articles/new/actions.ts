@@ -6,7 +6,6 @@ import { createArticle, type ArticleBlock } from "@/lib/articles";
 
 export type CreateArticleInput = {
   title: string;
-  image: string;
   blocks: ArticleBlock[];
   playerId?: number;
   playerName?: string;
@@ -47,10 +46,6 @@ export async function createArticleAction(
     return { ok: false, error: "Title is required." };
   }
 
-  if (!isNonEmptyString(input.image)) {
-    return { ok: false, error: "A cover image is required." };
-  }
-
   const blocks = sanitizeBlocks(input.blocks ?? []);
 
   if (blocks.length === 0) {
@@ -62,7 +57,6 @@ export async function createArticleAction(
       title: input.title.trim(),
       author: session.user.name ?? session.user.email,
       authorEmail: session.user.email,
-      image: input.image,
       body: blocks,
       playerId: input.playerId,
       playerName: input.playerName,

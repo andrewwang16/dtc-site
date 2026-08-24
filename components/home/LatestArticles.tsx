@@ -49,14 +49,6 @@ export default async function LatestArticles() {
               color: "inherit",
             }}
           >
-            <div style={{ aspectRatio: "16 / 9", overflow: "hidden" }}>
-              <img
-                src={article.image}
-                alt={article.title}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            </div>
-
             <div style={{ padding: "1.15rem", display: "grid", gap: "0.5rem" }}>
               <p className="kicker" style={{ margin: 0 }}>
                 {formatArticleDate(article.date)} · {article.author}

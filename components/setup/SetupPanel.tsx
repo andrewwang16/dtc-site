@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { runSeedAction, createAdminSetupAction } from "@/app/setup/actions";
+import { runSeedAction, createAdminSetupAction, dropImageColumnAction } from "@/app/setup/actions";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -48,6 +48,9 @@ export default function SetupPanel({ setupKey }: { setupKey: string }) {
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
 
+  const [migrateMessage, setMigrateMessage] = useState<string | null>(null);
+  const [migrateError, setMigrateError] = useState<string | null>(null);
+
   function handleSeed() {
     setSeedMessage(null);
     setSeedError(null);
@@ -80,8 +83,43 @@ export default function SetupPanel({ setupKey }: { setupKey: string }) {
     });
   }
 
+  function handleDropImageColumn() {
+    setMigrateMessage(null);
+    setMigrateError(null);
+
+    startTransition(async () => {
+      const result = await dropImageColumnAction(setupKey);
+
+      if (result.ok) {
+        setMigrateMessage(result.message);
+      } else {
+        setMigrateError(result.error);
+      }
+    });
+  }
+
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
+      <div style={cardStyle}>
+        <p className="kicker" style={{ margin: 0 }}>
+          One-time migration
+        </p>
+        <h2 style={{ margin: 0 }}>Drop Cover Image Column</h2>
+        <p style={{ margin: 0, color: "var(--muted)" }}>
+          Removes the now-unused image column from the articles table. Safe to run more than
+          once.
+        </p>
+
+        <button type="button" onClick={handleDropImageColumn} disabled={isPending} style={buttonStyle}>
+          {isPending ? "Working..." : "Drop Column"}
+        </button>
+
+        {migrateMessage && (
+          <p style={{ margin: 0, color: "#1a7a3c", fontWeight: 700 }}>{migrateMessage}</p>
+        )}
+        {migrateError && <p style={{ margin: 0, color: "#b42318", fontWeight: 700 }}>{migrateError}</p>}
+      </div>
+
       <div style={cardStyle}>
         <p className="kicker" style={{ margin: 0 }}>
           Step 1

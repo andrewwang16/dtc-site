@@ -33,22 +33,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           By {article.author} · {formatArticleDate(article.date)}
         </p>
 
-        <div
-          style={{
-            marginTop: "1.5rem",
-            borderRadius: "18px",
-            overflow: "hidden",
-            border: "1px solid var(--line)",
-            aspectRatio: "16 / 9",
-          }}
-        >
-          <img
-            src={article.image}
-            alt={article.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        </div>
-
         <div style={{ marginTop: "1.75rem" }}>
           <ArticleBody body={article.body} />
         </div>

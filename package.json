@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@vercel/blob": "^2.8.0",
     "bcryptjs": "^3.0.3",
     "next": "^14.2.5",
     "next-auth": "5.0.0-beta.32",

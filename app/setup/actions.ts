@@ -35,7 +35,6 @@ export async function runSeedAction(key: string): Promise<SetupResult> {
         author TEXT NOT NULL,
         author_email TEXT NOT NULL,
         date DATE NOT NULL,
-        image TEXT NOT NULL,
         excerpt TEXT NOT NULL,
         body JSONB NOT NULL,
         player_id INTEGER,
@@ -59,14 +58,13 @@ export async function runSeedAction(key: string): Promise<SetupResult> {
     const body = KYLE_LEAHY_BODY.map((text) => ({ type: "paragraph", text }));
 
     await sql`
-      INSERT INTO articles (slug, title, author, author_email, date, image, excerpt, body, player_id, player_name)
+      INSERT INTO articles (slug, title, author, author_email, date, excerpt, body, player_id, player_name)
       VALUES (
         'kyle-leahy-cardinals-bullpen-role',
         'Kyle Leahy Is Quietly Becoming a Cardinals Bullpen Fixture',
         'Claude',
         'nootnewspod@gmail.com',
         '2026-08-21',
-        '/images/articletestimage.png',
         'The Boulder, Colorado native has taken a winding road to St. Louis, and this year he''s carved out a real role in the Cardinals'' relief corps.',
         ${JSON.stringify(body)}::jsonb,
         681517,
@@ -79,6 +77,21 @@ export async function runSeedAction(key: string): Promise<SetupResult> {
   } catch (error) {
     console.error("Seed failed", error);
     return { ok: false, error: "Seed failed — check server logs." };
+  }
+}
+
+export async function dropImageColumnAction(key: string): Promise<SetupResult> {
+  if (!checkKey(key)) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  try {
+    const sql = getSql();
+    await sql`ALTER TABLE articles DROP COLUMN IF EXISTS image`;
+    return { ok: true, message: "Dropped the image column from articles." };
+  } catch (error) {
+    console.error("Drop image column failed", error);
+    return { ok: false, error: "Migration failed — check server logs." };
   }
 }
 
