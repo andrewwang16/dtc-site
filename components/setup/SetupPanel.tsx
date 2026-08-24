@@ -1,0 +1,158 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { runSeedAction, createAdminSetupAction } from "@/app/setup/actions";
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "0.75rem 1rem",
+  borderRadius: "12px",
+  border: "1px solid var(--line)",
+  background: "var(--bg-soft)",
+  color: "var(--text)",
+  fontSize: "1rem",
+  fontFamily: "inherit",
+};
+
+const cardStyle: React.CSSProperties = {
+  border: "1px solid var(--line)",
+  borderRadius: "18px",
+  background: "var(--panel)",
+  padding: "1.5rem",
+  display: "grid",
+  gap: "1rem",
+  maxWidth: "420px",
+};
+
+const buttonStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "0.75rem 1.5rem",
+  borderRadius: "999px",
+  border: "1px solid #8a1024",
+  background: "var(--accent)",
+  color: "white",
+  fontWeight: 800,
+  cursor: "pointer",
+  fontSize: "1rem",
+};
+
+export default function SetupPanel({ setupKey }: { setupKey: string }) {
+  const [isPending, startTransition] = useTransition();
+  const [seedMessage, setSeedMessage] = useState<string | null>(null);
+  const [seedError, setSeedError] = useState<string | null>(null);
+
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
+
+  function handleSeed() {
+    setSeedMessage(null);
+    setSeedError(null);
+
+    startTransition(async () => {
+      const result = await runSeedAction(setupKey);
+
+      if (result.ok) {
+        setSeedMessage(result.message);
+      } else {
+        setSeedError(result.error);
+      }
+    });
+  }
+
+  function handleCreateAdmin(event: React.FormEvent) {
+    event.preventDefault();
+    setAdminMessage(null);
+    setAdminError(null);
+
+    startTransition(async () => {
+      const result = await createAdminSetupAction(setupKey, adminEmail, adminPassword);
+
+      if (result.ok) {
+        setAdminMessage(result.message);
+        setAdminPassword("");
+      } else {
+        setAdminError(result.error);
+      }
+    });
+  }
+
+  return (
+    <div style={{ display: "grid", gap: "1.5rem" }}>
+      <div style={cardStyle}>
+        <p className="kicker" style={{ margin: 0 }}>
+          Step 1
+        </p>
+        <h2 style={{ margin: 0 }}>Seed Database</h2>
+        <p style={{ margin: 0, color: "var(--muted)" }}>
+          Creates the articles/users tables and restores the Kyle Leahy article. Safe to run more
+          than once.
+        </p>
+
+        <button type="button" onClick={handleSeed} disabled={isPending} style={buttonStyle}>
+          {isPending ? "Working..." : "Run Seed"}
+        </button>
+
+        {seedMessage && <p style={{ margin: 0, color: "#1a7a3c", fontWeight: 700 }}>{seedMessage}</p>}
+        {seedError && <p style={{ margin: 0, color: "#b42318", fontWeight: 700 }}>{seedError}</p>}
+      </div>
+
+      <form onSubmit={handleCreateAdmin} style={cardStyle}>
+        <p className="kicker" style={{ margin: 0 }}>
+          Step 2
+        </p>
+        <h2 style={{ margin: 0 }}>Create Admin Account</h2>
+        <p style={{ margin: 0, color: "var(--muted)" }}>
+          Type the password here yourself — it's sent straight to the server and never shown to
+          anyone else.
+        </p>
+
+        <div>
+          <p className="kicker" style={{ marginBottom: "0.4rem" }}>
+            Admin Email
+          </p>
+          <input
+            type="email"
+            value={adminEmail}
+            onChange={(event) => setAdminEmail(event.target.value)}
+            placeholder="aw.andrewwang16@gmail.com"
+            required
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <p className="kicker" style={{ marginBottom: "0.4rem" }}>
+            Password
+          </p>
+          <input
+            type="password"
+            value={adminPassword}
+            onChange={(event) => setAdminPassword(event.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+            style={inputStyle}
+          />
+        </div>
+
+        <button type="submit" disabled={isPending} style={buttonStyle}>
+          {isPending ? "Working..." : "Create / Update Admin"}
+        </button>
+
+        {adminMessage && (
+          <p style={{ margin: 0, color: "#1a7a3c", fontWeight: 700 }}>{adminMessage}</p>
+        )}
+        {adminError && <p style={{ margin: 0, color: "#b42318", fontWeight: 700 }}>{adminError}</p>}
+      </form>
+
+      <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
+        When you're done setting up both admins, tell Claude to remove this /setup page and the
+        SETUP_SECRET env var — it shouldn't stay live once it's served its purpose.
+      </p>
+    </div>
+  );
+}
