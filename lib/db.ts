@@ -1,4 +1,13 @@
-import { Pool } from "pg";
+import { Pool, types } from "pg";
+
+// pg's default type parsers turn DATE (OID 1082) and TIMESTAMP/TIMESTAMPTZ
+// (OID 1114 / 1184) columns into JS Date objects. The Neon driver this
+// replaced returned them as plain strings, which is what the rest of the
+// app (e.g. formatting article dates) assumes — return raw strings instead
+// of switching every call site to handle both.
+types.setTypeParser(1082, (value) => value);
+types.setTypeParser(1114, (value) => value);
+types.setTypeParser(1184, (value) => value);
 
 let pool: Pool | null = null;
 
