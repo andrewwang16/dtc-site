@@ -30,13 +30,13 @@ export async function signUpAction(input: {
     };
   }
 
-  const existing = await getUserByEmail(email);
-
-  if (existing) {
-    return { ok: false, error: "An account with that email already exists." };
-  }
-
   try {
+    const existing = await getUserByEmail(email);
+
+    if (existing) {
+      return { ok: false, error: "An account with that email already exists." };
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
     await createViewerAccount(email, passwordHash);
 

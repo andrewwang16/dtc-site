@@ -22,19 +22,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const user = await getUserByEmail(email);
+        try {
+          const user = await getUserByEmail(email);
 
-        if (!user) {
+          if (!user) {
+            return null;
+          }
+
+          const isValid = await bcrypt.compare(password, user.passwordHash);
+
+          if (!isValid) {
+            return null;
+          }
+
+          return { id: email, email, name: email.split("@")[0], isAdmin: user.isAdmin };
+        } catch (error) {
+          console.error("Sign-in lookup failed", error);
           return null;
         }
-
-        const isValid = await bcrypt.compare(password, user.passwordHash);
-
-        if (!isValid) {
-          return null;
-        }
-
-        return { id: email, email, name: email.split("@")[0], isAdmin: user.isAdmin };
       },
     }),
   ],
