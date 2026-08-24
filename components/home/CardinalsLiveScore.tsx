@@ -1193,8 +1193,7 @@ export default async function CardinalsLiveScore() {
                         height={20}
                         alt=""
                       />
-                      <span className="team-name-full">{away.team.name}</span>
-                      <span className="team-name-short">{away.team.teamName ?? away.team.name}</span>
+                      <span>{away.team.teamName ?? away.team.name}</span>
                       {away.leagueRecord && (
                         <span style={{ fontWeight: 400, color: "rgba(253,250,243,0.72)" }}>
                           ({away.leagueRecord.wins}-{away.leagueRecord.losses})
@@ -1296,8 +1295,7 @@ export default async function CardinalsLiveScore() {
                         height={20}
                         alt=""
                       />
-                      <span className="team-name-full">{home.team.name}</span>
-                      <span className="team-name-short">{home.team.teamName ?? home.team.name}</span>
+                      <span>{home.team.teamName ?? home.team.name}</span>
                       {home.leagueRecord && (
                         <span style={{ fontWeight: 400, color: "rgba(253,250,243,0.72)" }}>
                           ({home.leagueRecord.wins}-{home.leagueRecord.losses})

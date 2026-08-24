@@ -439,25 +439,6 @@ a {
   }
 }
 
-/*
- * Team names in the scoreboard's linescore ("St. Louis Cardinals") only
- * need shortening once the screen is genuinely tight, not at the full
- * 740px mobile breakpoint.
- */
-.team-name-short {
-  display: none;
-}
-
-@media (max-width: 480px) {
-  .team-name-full {
-    display: none;
-  }
-
-  .team-name-short {
-    display: inline;
-  }
-}
-
 .home-top-grid {
   display: grid;
   gap: 1.5rem;
