@@ -322,26 +322,6 @@ export default async function PodcastPage({
                 >
                   <div
                     style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      justifyContent: "space-between",
-                      gap: "1rem",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div>
-                      <h3 style={{ margin: 0 }}>{episode.title}</h3>
-                    </div>
-
-                    {episode.duration ? (
-                      <span style={{ color: "var(--muted)" }}>
-                        {episode.duration}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div
-                    style={{
                       aspectRatio: "16 / 9",
                       overflow: "hidden",
                       borderRadius: "14px",
@@ -359,6 +339,32 @@ export default async function PodcastPage({
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                       allowFullScreen
                     />
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      justifyContent: "space-between",
+                      gap: "1rem",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <h3
+                      style={{
+                        margin: 0,
+                        fontSize: "0.9rem",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {episode.title}
+                    </h3>
+
+                    {episode.duration ? (
+                      <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                        {episode.duration}
+                      </span>
+                    ) : null}
                   </div>
                 </article>
               ))}
