@@ -24,6 +24,14 @@ function getPool(): Pool {
     max: 5,
   });
 
+  // Without this, a network hiccup on an idle pooled connection (common
+  // in serverless, where containers freeze/thaw between invocations)
+  // emits an unhandled 'error' event and crashes the whole function
+  // instead of just that one query failing.
+  pool.on("error", (error) => {
+    console.error("Postgres pool error", error);
+  });
+
   return pool;
 }
 
