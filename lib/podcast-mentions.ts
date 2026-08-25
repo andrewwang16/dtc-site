@@ -13,6 +13,13 @@ export type PodcastMention = {
   showLabel: string;
 };
 
+// Podcast titles/descriptions are plain text and rarely include accent
+// marks, while MLB's bio data does (e.g. "Iván Herrera", "Joshua Báez") —
+// strip diacritics from both sides before comparing so those still match.
+function stripDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
 // A numbered/suffixed name ("Victor Scott II") is often referenced without
 // the suffix in casual commentary, so match on both forms.
 function buildNameVariants(fullName: string): string[] {
@@ -23,7 +30,7 @@ function buildNameVariants(fullName: string): string[] {
     variants.push(withoutSuffix);
   }
 
-  return variants.map((name) => name.toLowerCase());
+  return variants.map((name) => stripDiacritics(name).toLowerCase());
 }
 
 export async function getPodcastMentionsForPlayer(fullName: string): Promise<PodcastMention[]> {
@@ -40,7 +47,7 @@ export async function getPodcastMentionsForPlayer(fullName: string): Promise<Pod
 
   for (const { show, videos } of showResults) {
     for (const video of videos) {
-      const haystack = `${video.title} ${video.description}`.toLowerCase();
+      const haystack = stripDiacritics(`${video.title} ${video.description}`).toLowerCase();
       const isMentioned = nameVariants.some((name) => haystack.includes(name));
 
       if (isMentioned) {
