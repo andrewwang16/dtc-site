@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSeasonTransactions } from "@/lib/transactions";
+import { getSeasonTransactions, type TransactionPlayer } from "@/lib/transactions";
 
 const TRANSACTIONS_PER_PAGE = 20;
 
@@ -11,33 +11,46 @@ function formatTransactionDate(date: string) {
   }).format(new Date(`${date}T12:00:00Z`));
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function TransactionDescription({
   description,
-  personId,
-  personName,
+  people,
 }: {
   description: string;
-  personId?: number;
-  personName?: string;
+  people: TransactionPlayer[];
 }) {
-  if (!personId || !personName || !description.includes(personName)) {
+  const linkable = people.filter((person) => description.includes(person.fullName));
+
+  if (linkable.length === 0) {
     return <p style={{ margin: 0, lineHeight: 1.5 }}>{description}</p>;
   }
 
-  const parts = description.split(personName);
+  // Longest name first, so a name that's a substring of another (rare, but
+  // possible with short nicknames) doesn't get split on incorrectly.
+  const sorted = [...linkable].sort((a, b) => b.fullName.length - a.fullName.length);
+  const nameToId = new Map(sorted.map((person) => [person.fullName, person.id]));
+  const pattern = new RegExp(`(${sorted.map((person) => escapeRegExp(person.fullName)).join("|")})`, "g");
+
+  const parts = description.split(pattern);
 
   return (
     <p style={{ margin: 0, lineHeight: 1.5 }}>
-      {parts.map((part, index) => (
-        <span key={index}>
-          {part}
-          {index < parts.length - 1 && (
-            <Link href={`/players/${personId}`} style={{ color: "var(--accent-soft)", fontWeight: 700 }}>
-              {personName}
+      {parts.map((part, index) => {
+        const playerId = nameToId.get(part);
+
+        if (playerId) {
+          return (
+            <Link key={index} href={`/players/${playerId}`} style={{ color: "var(--accent-soft)", fontWeight: 700 }}>
+              {part}
             </Link>
-          )}
-        </span>
-      ))}
+          );
+        }
+
+        return <span key={index}>{part}</span>;
+      })}
     </p>
   );
 }
@@ -115,8 +128,7 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
 
                   <TransactionDescription
                     description={transaction.description}
-                    personId={transaction.personId}
-                    personName={transaction.personName}
+                    people={transaction.people}
                   />
                 </article>
               ))}
