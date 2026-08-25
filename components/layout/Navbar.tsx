@@ -27,6 +27,8 @@ const navItems: NavItem[] = [
       { label: "Roster", href: "/roster" },
       { label: "Leaders", href: "/stats" },
       { label: "Trends", href: "/hot-cold" },
+      { label: "Depth Chart", href: "/depth-chart" },
+      { label: "Transactions", href: "/transactions" },
     ],
   },
   { label: "Prospects", href: "/prospects" },
