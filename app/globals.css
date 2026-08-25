@@ -227,6 +227,22 @@ a {
 }
 
 /*
+ * .player-page-root is a single-column CSS grid, so every section is a
+ * grid item sharing one column track sized to fit the widest row's
+ * content. The stat tables set an explicit min-width wider than a
+ * phone screen so they can scroll horizontally within their own box —
+ * but a grid item's automatic minimum size still grows to fit that
+ * content unless told otherwise, stretching the shared column (and
+ * therefore every other section — header, chart, game log — and the
+ * page itself) past the viewport instead of letting the table's own
+ * overflow-x: auto contain the scroll. min-width: 0 opts every section
+ * out of that automatic floor.
+ */
+.player-page-section {
+  min-width: 0;
+}
+
+/*
  * Player profile page on mobile: the page itself scrolls vertically
  * like any normal page. Only the wide stat tables scroll internally,
  * and only horizontally (left/right) — nothing scrolls up/down inside
