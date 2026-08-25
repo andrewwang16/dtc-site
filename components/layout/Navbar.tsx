@@ -163,34 +163,8 @@ export default function Navbar() {
             <span className="navbar-logo-text">DEALIN&apos; THE CARDS</span>
           </Link>
 
-          <div className="navbar-controls" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <div className="social-icons-row" style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
-              {socialLinks.map((item) => (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={item.label}
-                  title={item.label}
-                  style={{
-                    width: "1.95rem",
-                    height: "1.95rem",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: "999px",
-                    border: "1px solid rgba(253,250,243, 0.45)",
-                    background: "rgba(253,250,243, 0.16)",
-                    color: "#fdfaf3",
-                  }}
-                >
-                  {item.icon}
-                </a>
-              ))}
-            </div>
-
-            <div className="navbar-account">
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <div className="navbar-account">
             {status === "authenticated" && session?.user ? (
               <div
                 style={{ position: "relative" }}
@@ -301,6 +275,33 @@ export default function Navbar() {
                 Sign in
               </Link>
             ) : null}
+          </div>
+
+          <div className="navbar-controls" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <div className="social-icons-row" style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+              {socialLinks.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={item.label}
+                  title={item.label}
+                  style={{
+                    width: "1.95rem",
+                    height: "1.95rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(253,250,243, 0.45)",
+                    background: "rgba(253,250,243, 0.16)",
+                    color: "#fdfaf3",
+                  }}
+                >
+                  {item.icon}
+                </a>
+              ))}
             </div>
 
             <button
@@ -339,6 +340,7 @@ export default function Navbar() {
                 )}
               </svg>
             </button>
+          </div>
           </div>
         </div>
 
