@@ -1,10 +1,13 @@
 import Link from "next/link";
 import PlayerSearch from "@/components/players/PlayerSearch";
+import DepthChartView from "@/components/roster/DepthChartView";
 import { getCardinalsRoster, playerHeadshotUrl, type RosterEntry, type RosterType } from "@/lib/mlb";
+import { getDepthChart } from "@/lib/depth-chart";
 
-const TABS: Array<{ slug: string; label: string; rosterType: RosterType }> = [
+const TABS: Array<{ slug: string; label: string; rosterType?: RosterType }> = [
   { slug: "26man", label: "26-Man Roster", rosterType: "active" },
   { slug: "40man", label: "40-Man Roster", rosterType: "40Man" },
+  { slug: "depth", label: "Depth Chart" },
 ];
 
 const POSITION_GROUPS = [
@@ -66,9 +69,12 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const activeTab = TABS.find((tab) => tab.slug === type) ?? TABS[0];
 
   const year = new Date().getFullYear();
-  const [roster, searchRoster] = await Promise.all([
-    getCardinalsRoster(year, activeTab.rosterType),
+  const isDepthTab = activeTab.slug === "depth";
+
+  const [roster, searchRoster, depthChart] = await Promise.all([
+    isDepthTab ? Promise.resolve([]) : getCardinalsRoster(year, activeTab.rosterType),
     getCardinalsRoster(year),
+    isDepthTab ? getDepthChart(year) : Promise.resolve(null),
   ]);
   const groups = groupRoster(roster);
 
@@ -126,7 +132,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         </div>
       </section>
 
-      {groups.length === 0 ? (
+      {isDepthTab && depthChart ? (
+        <DepthChartView {...depthChart} />
+      ) : groups.length === 0 ? (
         <section className="container fade-up" style={{ animationDelay: "0.08s" }}>
           <p style={{ color: "var(--muted)" }}>No roster data available for {year}.</p>
         </section>

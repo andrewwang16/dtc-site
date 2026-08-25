@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { playerHeadshotUrl } from "@/lib/mlb";
-import { getDepthChart, type DepthChartGroup, type DepthChartPlayer } from "@/lib/depth-chart";
+import type { DepthChart, DepthChartGroup, DepthChartPlayer } from "@/lib/depth-chart";
 
 function StatusTag({ status }: { status?: string }) {
   if (!status || status === "Active") {
@@ -113,18 +113,32 @@ function PitcherGroup({ title, players }: { title: string; players: DepthChartPl
   );
 }
 
-export default async function DepthChartPage() {
-  const year = new Date().getFullYear();
-  const { positionGroups, starters, bullpen } = await getDepthChart(year);
-
+export default function DepthChartView({ positionGroups, starters, bullpen }: DepthChart) {
   return (
-    <div style={{ display: "grid", gap: "3rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
-      <section className="container fade-up">
-        <p className="kicker">Players</p>
-        <h1 className="section-title">Depth Chart</h1>
+    <>
+      <section className="container fade-up" style={{ animationDelay: "0.08s" }}>
+        <h2 style={{ margin: "0 0 1rem" }}>Pitching Staff</h2>
+
+        {starters.length === 0 && bullpen.length === 0 ? (
+          <p style={{ color: "var(--muted)" }}>Roster data isn&apos;t available right now.</p>
+        ) : (
+          <div
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: "18px",
+              background: "var(--panel)",
+              padding: "1.15rem",
+              display: "grid",
+              gap: "1.15rem",
+            }}
+          >
+            <PitcherGroup title="Starters" players={starters} />
+            <PitcherGroup title="Bullpen" players={bullpen} />
+          </div>
+        )}
       </section>
 
-      <section className="container fade-up" style={{ animationDelay: "0.06s" }}>
+      <section className="container fade-up" style={{ animationDelay: "0.12s" }}>
         <h2 style={{ margin: "0 0 1rem" }}>Position Players</h2>
 
         {positionGroups.length === 0 ? (
@@ -148,28 +162,6 @@ export default async function DepthChartPage() {
           </div>
         )}
       </section>
-
-      <section className="container fade-up" style={{ animationDelay: "0.1s" }}>
-        <h2 style={{ margin: "0 0 1rem" }}>Pitching Staff</h2>
-
-        {starters.length === 0 && bullpen.length === 0 ? (
-          <p style={{ color: "var(--muted)" }}>Roster data isn&apos;t available right now.</p>
-        ) : (
-          <div
-            style={{
-              border: "1px solid var(--line)",
-              borderRadius: "18px",
-              background: "var(--panel)",
-              padding: "1.15rem",
-              display: "grid",
-              gap: "1.15rem",
-            }}
-          >
-            <PitcherGroup title="Starters" players={starters} />
-            <PitcherGroup title="Bullpen" players={bullpen} />
-          </div>
-        )}
-      </section>
-    </div>
+    </>
   );
 }
