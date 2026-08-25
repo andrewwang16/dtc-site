@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { PodcastMention } from "@/lib/podcast-mentions";
 
+// Keep in sync with the 3-column .podcast-mentions-grid rule in globals.css.
 const PAGE_SIZE = 3;
 
 const pillButtonStyle: React.CSSProperties = {
@@ -46,13 +47,7 @@ export default function PodcastMentions({ mentions }: { mentions: PodcastMention
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
-      <div
-        style={{
-          display: "grid",
-          gap: "1rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-        }}
-      >
+      <div className="podcast-mentions-grid" style={{ gap: "1rem" }}>
         {visible.map((mention) => (
           <a
             key={mention.videoId}

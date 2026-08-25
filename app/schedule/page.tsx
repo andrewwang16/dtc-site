@@ -1,4 +1,5 @@
 import ScheduleCalendar from "@/components/schedule/ScheduleCalendar";
+import MonthYearPicker from "@/components/schedule/MonthYearPicker";
 import { CARDINALS_TEAM_ID, type MlbGame } from "@/components/schedule/scheduleUtils";
 
 type MlbScheduleResponse = {
@@ -85,7 +86,8 @@ export default async function SchedulePage({ searchParams }: SchedulePageProps) 
       <section className="container fade-up" style={{ animationDelay: "0.08s" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
           <h2 style={{ margin: 0 }}>{monthLabel}</h2>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+            <MonthYearPicker year={year} month={month} />
             <a
               href={`?month=${monthParam(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1)}`}
               style={{

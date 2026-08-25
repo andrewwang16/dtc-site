@@ -13,7 +13,7 @@ const SHOWS = {
 
 type ShowSlug = keyof typeof SHOWS;
 
-const EPISODES_PER_PAGE = 12;
+const EPISODES_PER_PAGE = 10;
 
 type PlaylistEpisode = {
   videoId: string;
@@ -287,65 +287,53 @@ export default async function PodcastPage({
               }}
             >
               {currentEpisodes.map((episode) => (
-                <article
+                <a
                   key={episode.videoId}
+                  href={`https://www.youtube.com/watch?v=${episode.videoId}`}
+                  target="_blank"
+                  rel="noreferrer"
                   style={{
+                    display: "grid",
                     border: "1px solid var(--line)",
                     borderRadius: "18px",
                     background: "var(--panel)",
-                    padding: "1rem",
-                    display: "grid",
-                    gap: "0.5rem",
-                    alignContent: "start",
+                    overflow: "hidden",
+                    color: "inherit",
+                    textDecoration: "none",
                   }}
                 >
                   <div
                     style={{
                       aspectRatio: "16 / 9",
                       overflow: "hidden",
-                      borderRadius: "14px",
+                      background: "rgba(15,31,61,.08)",
                     }}
                   >
-                    <iframe
-                      title={episode.title}
-                      src={`https://www.youtube.com/embed/${episode.videoId}`}
-                      loading="lazy"
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        border: 0,
-                      }}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
+                    <img
+                      src={episode.thumbnailUrl}
+                      alt={episode.title}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
                     />
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      justifyContent: "space-between",
-                      gap: "1rem",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <h3
+                  <div style={{ padding: "1rem", display: "grid", gap: "0.4rem" }}>
+                    <p className="kicker" style={{ margin: 0 }}>
+                      {show.label}
+                      {episode.duration ? ` · ${episode.duration}` : ""}
+                    </p>
+
+                    <p
                       style={{
                         margin: 0,
-                        fontSize: "0.9rem",
                         fontWeight: 700,
+                        fontSize: "0.95rem",
+                        lineHeight: 1.35,
                       }}
                     >
                       {episode.title}
-                    </h3>
-
-                    {episode.duration ? (
-                      <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                        {episode.duration}
-                      </span>
-                    ) : null}
+                    </p>
                   </div>
-                </article>
+                </a>
               ))}
             </div>
 

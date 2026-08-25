@@ -552,6 +552,28 @@ a {
 }
 
 /*
+ * Fixed at 3 columns (matching PodcastMentions' PAGE_SIZE) instead of
+ * auto-fit, so a page with 1 or 2 mentions still sizes cards as if there
+ * were 3 — auto-fit would otherwise stretch fewer cards to fill the row.
+ */
+.podcast-mentions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 820px) {
+  .podcast-mentions-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .podcast-mentions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/*
  * Two videos side by side gets too cramped on small phones (each card
  * shrinks below a legible width). Stack to one column below 560px.
  */
