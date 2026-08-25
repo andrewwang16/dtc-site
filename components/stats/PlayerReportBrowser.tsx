@@ -219,7 +219,7 @@ export default function PlayerReportBrowser({ data }: Props) {
         style={{
           display: "grid",
           gap: "0.5rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
         }}
       >
         {active.categories.map((category) => (
