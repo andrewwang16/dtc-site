@@ -36,12 +36,20 @@ function StatTable({
   rows: Array<{ label: string; row: StatRow; team?: string }>;
   teamColumn?: boolean;
 }) {
+  const stickyFirstColStyle: React.CSSProperties = {
+    position: "sticky",
+    left: 0,
+    background: "var(--bg)",
+    borderRight: "1px solid var(--line)",
+    zIndex: 1,
+  };
+
   return (
     <div className="stat-table-scroll" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table className="stat-table" style={{ width: "100%", borderCollapse: "collapse", minWidth: "640px" }}>
         <thead>
           <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.85rem" }}>
-            <th style={{ padding: "0.5rem 0.75rem" }}></th>
+            <th style={{ padding: "0.5rem 0.75rem", ...stickyFirstColStyle }}></th>
             {teamColumn && (
               <th style={{ padding: "0.5rem 0.75rem", whiteSpace: "nowrap" }}>Team</th>
             )}
@@ -55,7 +63,14 @@ function StatTable({
         <tbody>
           {rows.map((entry) => (
             <tr key={entry.label} style={{ borderTop: "1px solid var(--line)" }}>
-              <td style={{ padding: "0.6rem 0.75rem", fontWeight: 700, whiteSpace: "nowrap" }}>
+              <td
+                style={{
+                  padding: "0.6rem 0.75rem",
+                  fontWeight: 700,
+                  whiteSpace: "nowrap",
+                  ...stickyFirstColStyle,
+                }}
+              >
                 {entry.label}
               </td>
               {teamColumn && (

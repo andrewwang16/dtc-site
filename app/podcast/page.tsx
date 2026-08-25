@@ -229,17 +229,6 @@ export default async function PodcastPage({
         <p className="kicker">Podcast</p>
 
         <h1 className="section-title">{show.label}</h1>
-
-        <p
-          style={{
-            marginTop: "0.9rem",
-            color: "var(--muted)",
-            maxWidth: "62ch",
-          }}
-        >
-          Every episode from the featured playlist, with thumbnails, titles,
-          and embedded players in one easy-to-browse feed.
-        </p>
       </section>
 
       <section
@@ -250,21 +239,11 @@ export default async function PodcastPage({
           style={{
             display: "flex",
             alignItems: "baseline",
-            justifyContent: "space-between",
+            justifyContent: "flex-end",
             gap: "1rem",
             flexWrap: "wrap",
           }}
         >
-          <div>
-            <p className="kicker" style={{ marginBottom: "0.35rem" }}>
-              Featured Playlist
-            </p>
-
-            <h2 style={{ margin: 0 }}>
-              {show.label} on YouTube
-            </h2>
-          </div>
-
           <a
             href={`https://www.youtube.com/playlist?list=${show.playlistId}`}
             target="_blank"
