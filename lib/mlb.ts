@@ -204,6 +204,34 @@ export async function getCardinalsRoster(
   }));
 }
 
+export type ExternalPlayer = {
+  id: number;
+  fullName: string;
+  position: string;
+  teamId?: number;
+};
+
+// Every active MLB player league-wide, for the roster builder's "external
+// player" search (adding someone from outside the organization). Cached
+// for hours since this list barely changes day to day.
+export async function getAllMlbPlayers(year: number): Promise<ExternalPlayer[]> {
+  const data = await fetchJson<{
+    people?: Array<{
+      id: number;
+      fullName: string;
+      primaryPosition?: { abbreviation?: string };
+      currentTeam?: { id?: number };
+    }>;
+  }>(`https://statsapi.mlb.com/api/v1/sports/1/players?season=${year}`, 21_600);
+
+  return (data?.people ?? []).map((person) => ({
+    id: person.id,
+    fullName: person.fullName,
+    position: person.primaryPosition?.abbreviation ?? "",
+    teamId: person.currentTeam?.id,
+  }));
+}
+
 export type NotablePlayer = {
   id: number;
   fullName: string;
