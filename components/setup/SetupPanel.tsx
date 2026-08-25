@@ -6,6 +6,7 @@ import {
   createAdminSetupAction,
   dropImageColumnAction,
   createCommentsTableAction,
+  addPaywallColumnsAction,
 } from "@/app/setup/actions";
 
 const inputStyle: React.CSSProperties = {
@@ -58,6 +59,9 @@ export default function SetupPanel({ setupKey }: { setupKey: string }) {
 
   const [commentsMessage, setCommentsMessage] = useState<string | null>(null);
   const [commentsError, setCommentsError] = useState<string | null>(null);
+
+  const [paywallMessage, setPaywallMessage] = useState<string | null>(null);
+  const [paywallError, setPaywallError] = useState<string | null>(null);
 
   function handleSeed() {
     setSeedMessage(null);
@@ -121,8 +125,42 @@ export default function SetupPanel({ setupKey }: { setupKey: string }) {
     });
   }
 
+  function handleAddPaywallColumns() {
+    setPaywallMessage(null);
+    setPaywallError(null);
+
+    startTransition(async () => {
+      const result = await addPaywallColumnsAction(setupKey);
+
+      if (result.ok) {
+        setPaywallMessage(result.message);
+      } else {
+        setPaywallError(result.error);
+      }
+    });
+  }
+
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
+      <div style={cardStyle}>
+        <p className="kicker" style={{ margin: 0 }}>
+          One-time migration
+        </p>
+        <h2 style={{ margin: 0 }}>Add Paywall Columns</h2>
+        <p style={{ margin: 0, color: "var(--muted)" }}>
+          Adds users.is_subscriber and articles.is_premium. Safe to run more than once.
+        </p>
+
+        <button type="button" onClick={handleAddPaywallColumns} disabled={isPending} style={buttonStyle}>
+          {isPending ? "Working..." : "Add Columns"}
+        </button>
+
+        {paywallMessage && (
+          <p style={{ margin: 0, color: "#1a7a3c", fontWeight: 700 }}>{paywallMessage}</p>
+        )}
+        {paywallError && <p style={{ margin: 0, color: "#b42318", fontWeight: 700 }}>{paywallError}</p>}
+      </div>
+
       <div style={cardStyle}>
         <p className="kicker" style={{ margin: 0 }}>
           One-time migration

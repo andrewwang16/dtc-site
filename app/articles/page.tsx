@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getAllArticles } from "@/lib/articles";
+import { hasPremiumAccess } from "@/lib/access";
+import { PremiumBadge } from "@/components/shared/PremiumLock";
 
 function formatArticleDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -13,6 +15,7 @@ function formatArticleDate(date: string) {
 export default async function ArticlesPage() {
   const [articles, session] = await Promise.all([getAllArticles(), auth()]);
   const isAdmin = Boolean(session?.user?.isAdmin);
+  const hasAccess = hasPremiumAccess(session?.user);
 
   return (
     <div style={{ display: "grid", gap: "5.5rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
@@ -73,9 +76,12 @@ export default async function ArticlesPage() {
                 }}
               >
                 <div style={{ padding: "1.15rem", display: "grid", gap: "0.5rem" }}>
-                  <p className="kicker" style={{ margin: 0 }}>
-                    {formatArticleDate(article.date)} · {article.author}
-                  </p>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
+                    <p className="kicker" style={{ margin: 0 }}>
+                      {formatArticleDate(article.date)} · {article.author}
+                    </p>
+                    {article.isPremium && !hasAccess && <PremiumBadge />}
+                  </div>
                   <h2 style={{ margin: 0, fontSize: "1.15rem" }}>{article.title}</h2>
                   <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.55 }}>
                     {article.excerpt}

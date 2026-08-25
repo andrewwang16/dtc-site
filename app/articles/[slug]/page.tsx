@@ -3,9 +3,11 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { getArticleBySlug } from "@/lib/articles";
 import { getCommentsForArticle } from "@/lib/comments";
+import { hasPremiumAccess } from "@/lib/access";
 import ArticleBody from "@/components/articles/ArticleBody";
 import CommentSection from "@/components/articles/CommentSection";
 import DeleteArticleButton from "@/components/articles/DeleteArticleButton";
+import { PremiumBadge, PremiumLockCard } from "@/components/shared/PremiumLock";
 
 function formatArticleDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -32,11 +34,15 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   }
 
   const isAdmin = Boolean(session?.user?.isAdmin);
+  const isLocked = article.isPremium && !hasPremiumAccess(session?.user);
 
   return (
     <div style={{ display: "grid", gap: "2.5rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up" style={{ maxWidth: "760px", margin: "0 auto" }}>
-        <p className="kicker">Article</p>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
+          <p className="kicker" style={{ margin: 0 }}>Article</p>
+          {isLocked && <PremiumBadge />}
+        </div>
         <h1 className="section-title">{article.title}</h1>
 
         <p style={{ marginTop: "0.75rem", color: "var(--muted)" }}>
@@ -45,8 +51,17 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
         {isAdmin && <DeleteArticleButton articleSlug={article.slug} />}
 
-        <div style={{ marginTop: "1.75rem" }}>
-          <ArticleBody body={article.body} />
+        <div style={{ marginTop: "1.75rem", display: "grid", gap: "1.5rem" }}>
+          {isLocked ? (
+            <>
+              {article.excerpt && (
+                <p style={{ margin: 0, lineHeight: 1.7, fontSize: "1.05rem" }}>{article.excerpt}</p>
+              )}
+              <PremiumLockCard message="Subscribe to read the rest of this article." />
+            </>
+          ) : (
+            <ArticleBody body={article.body} />
+          )}
         </div>
 
         {article.playerId && article.playerName && (

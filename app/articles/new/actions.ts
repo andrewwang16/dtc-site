@@ -9,6 +9,7 @@ export type CreateArticleInput = {
   blocks: ArticleBlock[];
   playerId?: number;
   playerName?: string;
+  isPremium?: boolean;
 };
 
 export type CreateArticleResult =
@@ -60,6 +61,7 @@ export async function createArticleAction(
       body: blocks,
       playerId: input.playerId,
       playerName: input.playerName,
+      isPremium: input.isPremium ?? true,
     });
 
     revalidatePath("/articles");

@@ -123,6 +123,24 @@ export async function createCommentsTableAction(key: string): Promise<SetupResul
   }
 }
 
+export async function addPaywallColumnsAction(key: string): Promise<SetupResult> {
+  if (!checkKey(key)) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  try {
+    const sql = getSql();
+
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_subscriber BOOLEAN NOT NULL DEFAULT false`;
+    await sql`ALTER TABLE articles ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT true`;
+
+    return { ok: true, message: "Paywall columns ready (users.is_subscriber, articles.is_premium)." };
+  } catch (error) {
+    console.error("Add paywall columns failed", error);
+    return { ok: false, error: "Migration failed — check server logs." };
+  }
+}
+
 export async function createAdminSetupAction(
   key: string,
   email: string,

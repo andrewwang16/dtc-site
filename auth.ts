@@ -35,7 +35,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return null;
           }
 
-          return { id: email, email, name: email.split("@")[0], isAdmin: user.isAdmin };
+          return {
+            id: email,
+            email,
+            name: email.split("@")[0],
+            isAdmin: user.isAdmin,
+            isSubscriber: user.isSubscriber,
+          };
         } catch (error) {
           console.error("Sign-in lookup failed", error);
           return null;
@@ -48,13 +54,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.isAdmin = Boolean((user as { isAdmin?: boolean }).isAdmin);
+        const typedUser = user as { isAdmin?: boolean; isSubscriber?: boolean };
+        token.isAdmin = Boolean(typedUser.isAdmin);
+        token.isSubscriber = Boolean(typedUser.isSubscriber);
       }
 
       return token;
     },
     async session({ session, token }) {
       session.user.isAdmin = Boolean(token.isAdmin);
+      session.user.isSubscriber = Boolean(token.isSubscriber);
 
       return session;
     },

@@ -15,6 +15,7 @@ export type Article = {
   body: ArticleBlock[];
   playerId?: number;
   playerName?: string;
+  isPremium: boolean;
 };
 
 type ArticleRow = {
@@ -27,6 +28,7 @@ type ArticleRow = {
   body: ArticleBlock[];
   player_id: number | null;
   player_name: string | null;
+  is_premium: boolean;
 };
 
 function rowToArticle(row: ArticleRow): Article {
@@ -40,6 +42,7 @@ function rowToArticle(row: ArticleRow): Article {
     body: row.body,
     playerId: row.player_id ?? undefined,
     playerName: row.player_name ?? undefined,
+    isPremium: row.is_premium,
   };
 }
 
@@ -47,7 +50,7 @@ export async function getAllArticles(): Promise<Article[]> {
   try {
     const sql = getSql();
     const rows = (await sql`
-      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name
+      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name, is_premium
       FROM articles
       ORDER BY date DESC, id DESC
     `) as ArticleRow[];
@@ -63,7 +66,7 @@ export async function getRecentArticles(count: number): Promise<Article[]> {
   try {
     const sql = getSql();
     const rows = (await sql`
-      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name
+      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name, is_premium
       FROM articles
       ORDER BY date DESC, id DESC
       LIMIT ${count}
@@ -80,7 +83,7 @@ export async function getArticleBySlug(slug: string): Promise<Article | undefine
   try {
     const sql = getSql();
     const rows = (await sql`
-      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name
+      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name, is_premium
       FROM articles
       WHERE slug = ${slug}
       LIMIT 1
@@ -97,7 +100,7 @@ export async function getArticlesForPlayer(playerId: number): Promise<Article[]>
   try {
     const sql = getSql();
     const rows = (await sql`
-      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name
+      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name, is_premium
       FROM articles
       WHERE player_id = ${playerId}
       ORDER BY date DESC, id DESC
@@ -142,6 +145,7 @@ export async function createArticle(input: {
   body: ArticleBlock[];
   playerId?: number;
   playerName?: string;
+  isPremium?: boolean;
 }): Promise<Article> {
   const baseSlug = slugify(input.title) || "article";
   let slug = baseSlug;
@@ -157,7 +161,7 @@ export async function createArticle(input: {
   const sql = getSql();
 
   const rows = (await sql`
-    INSERT INTO articles (slug, title, author, author_email, date, excerpt, body, player_id, player_name)
+    INSERT INTO articles (slug, title, author, author_email, date, excerpt, body, player_id, player_name, is_premium)
     VALUES (
       ${slug},
       ${input.title},
@@ -167,9 +171,10 @@ export async function createArticle(input: {
       ${excerpt},
       ${JSON.stringify(input.body)}::jsonb,
       ${input.playerId ?? null},
-      ${input.playerName ?? null}
+      ${input.playerName ?? null},
+      ${input.isPremium ?? true}
     )
-    RETURNING slug, title, author, author_email, date, excerpt, body, player_id, player_name
+    RETURNING slug, title, author, author_email, date, excerpt, body, player_id, player_name, is_premium
   `) as ArticleRow[];
 
   return rowToArticle(rows[0]);

@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { auth } from "@/auth";
 import { getRecentArticles } from "@/lib/articles";
+import { hasPremiumAccess } from "@/lib/access";
+import { PremiumBadge } from "@/components/shared/PremiumLock";
 
 function formatArticleDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -9,11 +12,13 @@ function formatArticleDate(date: string) {
 }
 
 export default async function LatestArticles() {
-  const articles = await getRecentArticles(3);
+  const [articles, session] = await Promise.all([getRecentArticles(3), auth()]);
 
   if (articles.length === 0) {
     return null;
   }
+
+  const hasAccess = hasPremiumAccess(session?.user);
 
   return (
     <section className="container fade-up" style={{ animationDelay: "0.04s" }}>
@@ -50,9 +55,12 @@ export default async function LatestArticles() {
             }}
           >
             <div style={{ padding: "1.15rem", display: "grid", gap: "0.5rem" }}>
-              <p className="kicker" style={{ margin: 0 }}>
-                {formatArticleDate(article.date)} · {article.author}
-              </p>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
+                <p className="kicker" style={{ margin: 0 }}>
+                  {formatArticleDate(article.date)} · {article.author}
+                </p>
+                {article.isPremium && !hasAccess && <PremiumBadge />}
+              </div>
               <h3 style={{ margin: 0, fontSize: "1.1rem" }}>{article.title}</h3>
               <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.55 }}>
                 {article.excerpt}

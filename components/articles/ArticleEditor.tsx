@@ -9,6 +9,7 @@ import type { ArticleBlock } from "@/lib/articles";
 import type { RosterEntry } from "@/lib/mlb";
 import ArticleBody from "@/components/articles/ArticleBody";
 import PlayerPicker from "@/components/articles/PlayerPicker";
+import { PremiumBadge } from "@/components/shared/PremiumLock";
 
 type EditableBlock = ArticleBlock & { id: string };
 
@@ -213,6 +214,7 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
     { id: makeId(), type: "paragraph", text: "" },
   ]);
   const [selectedPlayer, setSelectedPlayer] = useState<RosterEntry | null>(null);
+  const [isFree, setIsFree] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function updateBlock(id: string, next: EditableBlock) {
@@ -285,6 +287,7 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
         blocks: cleanedBlocks,
         playerId: selectedPlayer?.id,
         playerName: selectedPlayer?.fullName,
+        isPremium: !isFree,
       });
 
       if (!result.ok) {
@@ -356,6 +359,32 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
             />
           </div>
 
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.6rem",
+              border: "1px solid var(--line)",
+              borderRadius: "18px",
+              background: "var(--panel)",
+              padding: "0.9rem 1.15rem",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={isFree}
+              onChange={(event) => setIsFree(event.target.checked)}
+              style={{ width: "1.1rem", height: "1.1rem" }}
+            />
+            <span>
+              <span style={{ fontWeight: 700 }}>Free article</span>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: "0.85rem" }}>
+                Articles are subscriber-only by default. Check this to make it free for everyone.
+              </span>
+            </span>
+          </label>
+
           <div style={{ display: "grid", gap: "0.75rem" }}>
             <p className="kicker" style={{ margin: 0 }}>
               Body
@@ -389,7 +418,10 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
         </>
       ) : (
         <div style={{ maxWidth: "760px" }}>
-          <p className="kicker">Article</p>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
+            <p className="kicker" style={{ margin: 0 }}>Article</p>
+            {!isFree && <PremiumBadge />}
+          </div>
           <h1 className="section-title">{title.trim() || "Untitled article"}</h1>
 
           <p style={{ marginTop: "0.75rem", color: "var(--muted)" }}>

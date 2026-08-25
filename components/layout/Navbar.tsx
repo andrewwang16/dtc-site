@@ -136,19 +136,35 @@ export default function Navbar() {
                     }}
                   >
                     {session.user.isAdmin && (
-                      <p
-                        style={{
-                          margin: 0,
-                          padding: "0.4rem 0.7rem",
-                          color: "var(--muted)",
-                          fontSize: "0.75rem",
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                        }}
-                      >
-                        Admin
-                      </p>
+                      <>
+                        <p
+                          style={{
+                            margin: 0,
+                            padding: "0.4rem 0.7rem",
+                            color: "var(--muted)",
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                          }}
+                        >
+                          Admin
+                        </p>
+                        <Link
+                          href="/admin/subscribers"
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "0.55rem 0.7rem",
+                            borderRadius: "10px",
+                            color: "var(--text)",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Manage Subscribers
+                        </Link>
+                      </>
                     )}
                     <button
                       type="button"

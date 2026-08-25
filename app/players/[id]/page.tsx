@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { auth } from "@/auth";
+import { hasPremiumAccess } from "@/lib/access";
+import { PremiumBadge, PremiumLockCard } from "@/components/shared/PremiumLock";
 import {
   buildStatRow,
   computeAgeAsOf,
@@ -140,11 +143,14 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   const { year: yearParam, view: viewParam, team: teamParam } = await searchParams;
   const playerId = Number.parseInt(id, 10);
 
-  const [bio, roster, playerArticles] = await Promise.all([
+  const [bio, roster, playerArticles, session] = await Promise.all([
     getPlayerBio(playerId),
     getCardinalsRoster(new Date().getFullYear()),
     getArticlesForPlayer(playerId),
+    auth(),
   ]);
+
+  const hasAccess = hasPremiumAccess(session?.user);
 
   if (!bio) {
     return (
@@ -457,18 +463,25 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         className="container fade-up player-page-section"
         style={{ animationDelay: "0.17s" }}
       >
-        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Rolling Trend</h2>
-        <article
-          className="rolling-trend-card"
-          style={{
-            border: "1px solid var(--line)",
-            borderRadius: "18px",
-            background: "var(--panel)",
-            padding: "1.15rem",
-          }}
-        >
-          <RollingTrendChart gameLog={yearStats.gameLog} role={role} league={league} />
-        </article>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "1rem" }}>
+          <h2 className="player-section-title" style={{ margin: 0 }}>Rolling Trend</h2>
+          {!hasAccess && <PremiumBadge />}
+        </div>
+        {hasAccess ? (
+          <article
+            className="rolling-trend-card"
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: "18px",
+              background: "var(--panel)",
+              padding: "1.15rem",
+            }}
+          >
+            <RollingTrendChart gameLog={yearStats.gameLog} role={role} league={league} />
+          </article>
+        ) : (
+          <PremiumLockCard message="Subscribe to see rolling trend charts." />
+        )}
       </section>
 
       <section
@@ -526,9 +539,12 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
                 }}
               >
                 <div style={{ padding: "1.15rem", display: "grid", gap: "0.5rem" }}>
-                  <p className="kicker" style={{ margin: 0 }}>
-                    {formatArticleDate(article.date)} · {article.author}
-                  </p>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
+                    <p className="kicker" style={{ margin: 0 }}>
+                      {formatArticleDate(article.date)} · {article.author}
+                    </p>
+                    {article.isPremium && !hasAccess && <PremiumBadge />}
+                  </div>
                   <h3 style={{ margin: 0, fontSize: "1.1rem" }}>{article.title}</h3>
                   <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.55 }}>
                     {article.excerpt}
