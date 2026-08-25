@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { playerHeadshotUrl, type RosterEntry } from "@/lib/mlb";
-import { getDepthChart, type DepthChartGroup } from "@/lib/depth-chart";
+import { playerHeadshotUrl } from "@/lib/mlb";
+import { getDepthChart, type DepthChartGroup, type DepthChartPlayer } from "@/lib/depth-chart";
 
-function PlayerChip({ player }: { player: RosterEntry }) {
+function PlayerChip({ player, gamesLabel }: { player: DepthChartPlayer; gamesLabel: string }) {
   return (
     <Link
       href={`/players/${player.id}`}
@@ -36,6 +36,12 @@ function PlayerChip({ player }: { player: RosterEntry }) {
         />
       </div>
       <span style={{ fontWeight: 700, fontSize: "0.88rem" }}>{player.fullName}</span>
+      {player.gamesAtPosition > 0 && (
+        <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>
+          {player.gamesAtPosition}
+          {gamesLabel}
+        </span>
+      )}
     </Link>
   );
 }
@@ -58,16 +64,35 @@ function PositionRow({ group, isLast }: { group: DepthChartGroup; isLast: boolea
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
         {group.players.map((player) => (
-          <PlayerChip key={player.id} player={player} />
+          <PlayerChip key={player.id} player={player} gamesLabel="G" />
         ))}
       </div>
     </div>
   );
 }
 
+function PitcherGroup({ title, players }: { title: string; players: DepthChartPlayer[] }) {
+  return (
+    <div>
+      <p className="kicker" style={{ marginBottom: "0.6rem" }}>
+        {title}
+      </p>
+      {players.length === 0 ? (
+        <p style={{ margin: 0, color: "var(--muted)" }}>No {title.toLowerCase()} data available.</p>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
+          {players.map((player) => (
+            <PlayerChip key={player.id} player={player} gamesLabel="G" />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default async function DepthChartPage() {
   const year = new Date().getFullYear();
-  const { positionGroups, pitchers } = await getDepthChart(year);
+  const { positionGroups, starters, bullpen } = await getDepthChart(year);
 
   return (
     <div style={{ display: "grid", gap: "3rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
@@ -75,8 +100,10 @@ export default async function DepthChartPage() {
         <p className="kicker">Players</p>
         <h1 className="section-title">Depth Chart</h1>
         <p style={{ marginTop: "0.9rem", color: "var(--muted)", maxWidth: "62ch" }}>
-          The 40-man roster grouped by position. Players within each spot are listed
-          alphabetically for now — true depth order is a planned improvement.
+          The 40-man roster grouped by every position each player has actually appeared at this
+          season, ranked by games played there — a super-utility player can show up under
+          several positions at once. Pitchers are split into Starters and Bullpen by their
+          starts this season.
         </p>
       </section>
 
@@ -108,7 +135,7 @@ export default async function DepthChartPage() {
       <section className="container fade-up" style={{ animationDelay: "0.1s" }}>
         <h2 style={{ margin: "0 0 1rem" }}>Pitching Staff</h2>
 
-        {pitchers.length === 0 ? (
+        {starters.length === 0 && bullpen.length === 0 ? (
           <p style={{ color: "var(--muted)" }}>Roster data isn&apos;t available right now.</p>
         ) : (
           <div
@@ -117,14 +144,12 @@ export default async function DepthChartPage() {
               borderRadius: "18px",
               background: "var(--panel)",
               padding: "1.15rem",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "0.6rem",
+              display: "grid",
+              gap: "1.15rem",
             }}
           >
-            {pitchers.map((player) => (
-              <PlayerChip key={player.id} player={player} />
-            ))}
+            <PitcherGroup title="Starters" players={starters} />
+            <PitcherGroup title="Bullpen" players={bullpen} />
           </div>
         )}
       </section>
