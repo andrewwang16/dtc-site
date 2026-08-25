@@ -226,7 +226,7 @@ export default async function HotColdPage() {
         paddingTop: "2.2rem",
       }}
     >
-      <section className="container fade-up">
+      <section className="container fade-up" style={{ minWidth: 0 }}>
         <p className="kicker">Players · Trends</p>
         <h1 className="section-title">Trends</h1>
       </section>
@@ -237,7 +237,8 @@ export default async function HotColdPage() {
           animationDelay: "0.08s",
           display: "grid",
           gap: "1rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          minWidth: 0,
         }}
       >
         <MoverList

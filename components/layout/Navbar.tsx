@@ -22,7 +22,7 @@ const navItems: NavItem[] = [
   { label: "Schedule", href: "/schedule" },
   {
     label: "Players",
-    href: "/stats",
+    href: "/roster",
     children: [
       { label: "Roster", href: "/roster" },
       { label: "Leaders", href: "/stats" },
