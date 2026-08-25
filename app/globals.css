@@ -107,10 +107,6 @@ a {
   display: none;
 }
 
-.mobile-drawer-socials {
-  display: none;
-}
-
 @media (max-width: 740px) {
   .nav-hamburger-toggle {
     display: inline-flex;
@@ -129,10 +125,6 @@ a {
     right: 0;
     top: 50%;
     transform: translateY(-50%);
-  }
-
-  .social-icons-row {
-    display: none !important;
   }
 
   /* Sign in / account menu moves to the opposite edge from the
@@ -214,15 +206,6 @@ a {
     display: flex;
     width: 100%;
     justify-content: space-between;
-  }
-
-  .mobile-drawer-socials {
-    display: flex;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-    margin-top: 1.2rem;
-    padding-top: 1.2rem;
-    border-top: 1px solid rgba(253, 250, 243, 0.15);
   }
 }
 

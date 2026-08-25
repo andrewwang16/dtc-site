@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { postCommentAction } from "@/app/articles/[slug]/actions";
+import { postCommentAction, deleteCommentAction } from "@/app/articles/[slug]/actions";
 import type { Comment } from "@/lib/comments";
 
 const cardStyle: React.CSSProperties = {
@@ -43,10 +43,16 @@ export default function CommentSection({
   initialComments: Comment[];
 }) {
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeletePending, startDeleteTransition] = useTransition();
+
+  const isAdmin = Boolean(session?.user?.isAdmin);
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -65,6 +71,27 @@ export default function CommentSection({
     });
   }
 
+  function handleDelete(commentId: number) {
+    if (!window.confirm("Delete this comment? This can't be undone.")) {
+      return;
+    }
+
+    setDeleteError(null);
+    setDeletingId(commentId);
+
+    startDeleteTransition(async () => {
+      const result = await deleteCommentAction(articleSlug, commentId);
+
+      if (!result.ok) {
+        setDeleteError(result.error);
+        setDeletingId(null);
+        return;
+      }
+
+      router.refresh();
+    });
+  }
+
   return (
     <section style={{ marginTop: "2.5rem" }}>
       <p className="kicker" style={{ marginBottom: "0.9rem" }}>
@@ -77,17 +104,49 @@ export default function CommentSection({
             No comments yet — be the first to share your thoughts.
           </p>
         ) : (
-          initialComments.map((comment) => (
-            <div key={comment.id} style={cardStyle}>
-              <p style={{ margin: 0, fontWeight: 700 }}>{comment.authorName}</p>
-              <p style={{ margin: "0.2rem 0 0.6rem", color: "var(--muted)", fontSize: "0.8rem" }}>
-                {formatCommentDate(comment.createdAt)}
-              </p>
-              <p style={{ margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{comment.body}</p>
-            </div>
-          ))
+          initialComments.map((comment) => {
+            const canDelete = isAdmin || comment.authorEmail === session?.user?.email;
+
+            return (
+              <div key={comment.id} style={cardStyle}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700 }}>{comment.authorName}</p>
+                    <p style={{ margin: "0.2rem 0 0.6rem", color: "var(--muted)", fontSize: "0.8rem" }}>
+                      {formatCommentDate(comment.createdAt)}
+                    </p>
+                  </div>
+
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(comment.id)}
+                      disabled={isDeletePending && deletingId === comment.id}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#b42318",
+                        fontWeight: 700,
+                        fontSize: "0.8rem",
+                        cursor: "pointer",
+                        padding: 0,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isDeletePending && deletingId === comment.id ? "Deleting..." : "Delete"}
+                    </button>
+                  )}
+                </div>
+                <p style={{ margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{comment.body}</p>
+              </div>
+            );
+          })
         )}
       </div>
+
+      {deleteError && (
+        <p style={{ margin: "0 0 1rem", color: "#b42318", fontWeight: 700 }}>{deleteError}</p>
+      )}
 
       {status === "authenticated" ? (
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: "0.6rem" }}>

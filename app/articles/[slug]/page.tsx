@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/auth";
 import { getArticleBySlug } from "@/lib/articles";
 import { getCommentsForArticle } from "@/lib/comments";
 import ArticleBody from "@/components/articles/ArticleBody";
 import CommentSection from "@/components/articles/CommentSection";
+import DeleteArticleButton from "@/components/articles/DeleteArticleButton";
 
 function formatArticleDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -19,14 +21,17 @@ type ArticlePageProps = {
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params;
-  const [article, comments] = await Promise.all([
+  const [article, comments, session] = await Promise.all([
     getArticleBySlug(slug),
     getCommentsForArticle(slug),
+    auth(),
   ]);
 
   if (!article) {
     notFound();
   }
+
+  const isAdmin = Boolean(session?.user?.isAdmin);
 
   return (
     <div style={{ display: "grid", gap: "2.5rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
@@ -37,6 +42,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         <p style={{ marginTop: "0.75rem", color: "var(--muted)" }}>
           By {article.author} · {formatArticleDate(article.date)}
         </p>
+
+        {isAdmin && <DeleteArticleButton articleSlug={article.slug} />}
 
         <div style={{ marginTop: "1.75rem" }}>
           <ArticleBody body={article.body} />

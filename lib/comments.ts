@@ -46,6 +46,23 @@ export async function getCommentsForArticle(slug: string): Promise<Comment[]> {
   }
 }
 
+export async function deleteComment(
+  id: number,
+  options: { authorEmail?: string } = {}
+): Promise<boolean> {
+  const sql = getSql();
+
+  const rows = options.authorEmail
+    ? ((await sql`
+        DELETE FROM comments WHERE id = ${id} AND author_email = ${options.authorEmail} RETURNING id
+      `) as { id: number }[])
+    : ((await sql`
+        DELETE FROM comments WHERE id = ${id} RETURNING id
+      `) as { id: number }[]);
+
+  return rows.length > 0;
+}
+
 export async function createComment(input: {
   articleSlug: string;
   authorEmail: string;

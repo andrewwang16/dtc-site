@@ -110,6 +110,11 @@ export async function getArticlesForPlayer(playerId: number): Promise<Article[]>
   }
 }
 
+export async function deleteArticle(slug: string): Promise<void> {
+  const sql = getSql();
+  await sql`DELETE FROM articles WHERE slug = ${slug}`;
+}
+
 function slugify(title: string) {
   return title
     .toLowerCase()
