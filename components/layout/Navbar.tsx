@@ -137,10 +137,11 @@ export default function Navbar() {
         background: "linear-gradient(135deg, #c41e3a 0%, #a8172f 100%)",
       }}
     >
-      <nav className="container" style={{ minHeight: "4.2rem", padding: "0.8rem 0" }}>
+      <nav className="navbar-shell container" style={{ minHeight: "4.2rem", padding: "0.8rem 0" }}>
         <div className="navbar-top-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
           <Link
             href="/"
+            className="navbar-logo"
             style={{
               display: "flex",
               alignItems: "center",
@@ -156,9 +157,10 @@ export default function Navbar() {
               alt=""
               width={40}
               height={40}
+              className="navbar-logo-mark"
               style={{ display: "block" }}
             />
-            DEALIN&apos; THE CARDS
+            <span className="navbar-logo-text">DEALIN&apos; THE CARDS</span>
           </Link>
 
           <div className="navbar-controls" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
@@ -188,6 +190,7 @@ export default function Navbar() {
               ))}
             </div>
 
+            <div className="navbar-account">
             {status === "authenticated" && session?.user ? (
               <div
                 style={{ position: "relative" }}
@@ -199,6 +202,7 @@ export default function Navbar() {
                   aria-label="Account menu"
                   aria-expanded={accountMenuOpen}
                   onClick={() => setAccountMenuOpen((open) => !open)}
+                  className="navbar-avatar-button"
                   style={{
                     width: "2.2rem",
                     height: "2.2rem",
@@ -281,6 +285,7 @@ export default function Navbar() {
               <Link
                 href="/sign-in"
                 onClick={() => setMobileMenuOpen(false)}
+                className="navbar-signin-link"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -296,6 +301,7 @@ export default function Navbar() {
                 Sign in
               </Link>
             ) : null}
+            </div>
 
             <button
               type="button"
@@ -313,6 +319,7 @@ export default function Navbar() {
                 background: "rgba(253,250,243, 0.16)",
                 color: "#fdfaf3",
                 cursor: "pointer",
+                flexShrink: 0,
               }}
             >
               <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">

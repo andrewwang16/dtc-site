@@ -135,6 +135,48 @@ a {
     display: none !important;
   }
 
+  /* Sign in / account menu moves to the opposite edge from the
+     hamburger so neither one collides with the centered logo. */
+  .navbar-account {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  /* Shrink the whole bar — logo, sign-in, and hamburger all get
+     smaller — so all three fit side by side without overlapping on
+     narrow phones. */
+  .navbar-shell {
+    min-height: 3.4rem !important;
+    padding: 0.5rem 0 !important;
+  }
+
+  .navbar-logo {
+    font-size: 0.8rem !important;
+    gap: 0.35rem !important;
+  }
+
+  .navbar-logo-mark {
+    width: 26px !important;
+    height: 26px !important;
+  }
+
+  .navbar-signin-link {
+    padding: 0.35rem 0.6rem !important;
+    font-size: 0.7rem !important;
+  }
+
+  .navbar-avatar-button {
+    width: 1.9rem !important;
+    height: 1.9rem !important;
+  }
+
+  .nav-hamburger-toggle {
+    width: 1.9rem !important;
+    height: 1.9rem !important;
+  }
+
   .nav-links-row-collapsed {
     display: none !important;
   }
@@ -204,7 +246,7 @@ a {
   }
 
   .player-section-title {
-    font-size: 0.9rem !important;
+    font-size: 0.82rem !important;
     margin: 0 0 0.3rem !important;
   }
 
@@ -217,21 +259,21 @@ a {
   }
 
   .player-page-topbar a {
-    font-size: 0.8rem !important;
+    font-size: 0.72rem !important;
   }
 
   .player-page-topbar > div > div {
-    padding: 0.6rem !important;
+    padding: 0.5rem !important;
   }
 
   .player-page-topbar .kicker {
-    font-size: 0.6rem !important;
+    font-size: 0.56rem !important;
     margin-bottom: 0.3rem !important;
   }
 
   .player-page-topbar input {
-    padding: 0.45rem 0.7rem !important;
-    font-size: 0.85rem !important;
+    padding: 0.4rem 0.6rem !important;
+    font-size: 0.78rem !important;
   }
 
   .player-header-row {
@@ -245,17 +287,17 @@ a {
   }
 
   .player-header-name .kicker {
-    font-size: 0.62rem !important;
+    font-size: 0.58rem !important;
     margin-bottom: 0.1rem !important;
   }
 
   .player-header-name h1 {
-    font-size: 1.05rem !important;
+    font-size: 0.98rem !important;
   }
 
   .player-header-team {
     margin-top: 0.2rem !important;
-    font-size: 0.75rem !important;
+    font-size: 0.7rem !important;
   }
 
   .player-header-team img {
@@ -273,12 +315,12 @@ a {
   }
 
   .player-header-info .kicker {
-    font-size: 0.55rem !important;
+    font-size: 0.52rem !important;
     margin-bottom: 0.1rem !important;
   }
 
   .player-header-info p {
-    font-size: 0.68rem !important;
+    font-size: 0.62rem !important;
   }
 
   .stat-table-scroll {
@@ -300,8 +342,8 @@ a {
 
   .rolling-trend-controls button,
   .rolling-trend-controls select {
-    padding: 0.22rem 0.45rem !important;
-    font-size: 0.62rem !important;
+    padding: 0.2rem 0.4rem !important;
+    font-size: 0.58rem !important;
   }
 
   .rolling-trend-scroll {
@@ -314,8 +356,8 @@ a {
   }
 
   .game-log-tabs button {
-    padding: 0.3rem 0.6rem !important;
-    font-size: 0.72rem !important;
+    padding: 0.26rem 0.5rem !important;
+    font-size: 0.66rem !important;
   }
 
   .game-log-scroll {
@@ -333,8 +375,8 @@ a {
 @media (max-width: 740px) {
   .player-header-controls select,
   .player-header-controls a {
-    padding: 0.4rem 0.7rem !important;
-    font-size: 0.8rem !important;
+    padding: 0.35rem 0.6rem !important;
+    font-size: 0.72rem !important;
   }
 }
 
@@ -348,8 +390,8 @@ a {
 @media (max-width: 740px) {
   .stat-table th,
   .stat-table td {
-    padding: 0.22rem 0.4rem !important;
-    font-size: 0.65rem !important;
+    padding: 0.2rem 0.32rem !important;
+    font-size: 0.6rem !important;
     line-height: 1.15 !important;
   }
 }
@@ -582,5 +624,58 @@ a {
   .modal-dialog {
     padding: 1rem !important;
     border-radius: 14px !important;
+  }
+}
+
+/*
+ * The box score's two team panels sit side by side by default. Below
+ * 600px that gets too cramped to read even with the smaller fonts, so
+ * switch to tabs showing one team at a time instead.
+ */
+.box-score-tabs {
+  display: none;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.box-score-tab {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.box-score-tab.active {
+  background: var(--accent);
+  border-color: #8a1024;
+  color: white;
+}
+
+.box-score-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+@media (max-width: 600px) {
+  .box-score-tabs {
+    display: flex;
+  }
+
+  .box-score-split {
+    display: block;
+  }
+
+  .box-score-team-panel {
+    display: none;
+  }
+
+  .box-score-team-panel.active {
+    display: block;
   }
 }

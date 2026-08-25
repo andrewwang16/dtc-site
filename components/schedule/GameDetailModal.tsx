@@ -93,6 +93,10 @@ function getBattingSlot(battingOrder: string) {
   return Math.floor(Number(battingOrder) / 100);
 }
 
+function teamAbbreviation(team: { name: string; teamName?: string; abbreviation?: string }) {
+  return team.abbreviation ?? team.teamName ?? team.name;
+}
+
 function parseDecisionCode(note?: string) {
   if (!note) {
     return null;
@@ -165,7 +169,7 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
         : `In for ${getLastName(previous.person.fullName)}`;
     }
 
-    return { player, slot, isPinchHitter, subNote };
+    return { player, slot, isStarter, subNote };
   });
 
   const pitchers = team.pitchers
@@ -210,9 +214,9 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
             </tr>
           </thead>
           <tbody>
-            {batters.map(({ player, slot, isPinchHitter, subNote }) => (
+            {batters.map(({ player, slot, isStarter, subNote }) => (
               <tr key={player.person.id} style={{ borderTop: "1px solid var(--line)" }}>
-                <td style={{ ...cellStyle, color: "var(--muted)" }}>{isPinchHitter ? "-" : slot}</td>
+                <td style={{ ...cellStyle, color: "var(--muted)" }}>{isStarter ? slot : "-"}</td>
                 <td style={{ ...cellStyle, textAlign: "left", wordBreak: "break-word" }}>
                   <PlayerNameLink id={player.person.id} name={player.person.fullName} />
                   {subNote && (
@@ -295,6 +299,7 @@ export default function GameDetailModal({
   const [feed, setFeed] = useState<FeedLiveResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [activeTeam, setActiveTeam] = useState<"away" | "home">("away");
 
   const postponed = isPostponed(game);
   const isPreview = game.status.abstractGameState === "Preview";
@@ -344,6 +349,19 @@ export default function GameDetailModal({
   const statColWidth = 8;
   const inningColWidth =
     innings.length > 0 ? (100 - teamColWidth - statColWidth * 3) / innings.length : 0;
+
+  const hasWideScore = [
+    lineTeams?.away.runs,
+    lineTeams?.home.runs,
+    lineTeams?.away.hits,
+    lineTeams?.home.hits,
+    lineTeams?.away.errors,
+    lineTeams?.home.errors,
+  ].some((value) => (value ?? 0) >= 10);
+
+  const scoreCellStyle: React.CSSProperties = hasWideScore
+    ? { ...cellStyle, fontSize: "0.62rem" }
+    : cellStyle;
 
   return createPortal(
     <div
@@ -499,9 +517,9 @@ export default function GameDetailModal({
                         {inning.away?.runs ?? "-"}
                       </td>
                     ))}
-                    <td style={{ ...cellStyle, fontWeight: 800 }}>{lineTeams?.away.runs ?? 0}</td>
-                    <td style={cellStyle}>{lineTeams?.away.hits ?? 0}</td>
-                    <td style={cellStyle}>{lineTeams?.away.errors ?? 0}</td>
+                    <td style={{ ...scoreCellStyle, fontWeight: 800 }}>{lineTeams?.away.runs ?? 0}</td>
+                    <td style={scoreCellStyle}>{lineTeams?.away.hits ?? 0}</td>
+                    <td style={scoreCellStyle}>{lineTeams?.away.errors ?? 0}</td>
                   </tr>
                   <tr style={{ borderTop: "1px solid var(--line)" }}>
                     <td style={{ ...cellStyle, textAlign: "left" }}>
@@ -528,57 +546,45 @@ export default function GameDetailModal({
                         {inning.home?.runs ?? "-"}
                       </td>
                     ))}
-                    <td style={{ ...cellStyle, fontWeight: 800 }}>{lineTeams?.home.runs ?? 0}</td>
-                    <td style={cellStyle}>{lineTeams?.home.hits ?? 0}</td>
-                    <td style={cellStyle}>{lineTeams?.home.errors ?? 0}</td>
+                    <td style={{ ...scoreCellStyle, fontWeight: 800 }}>{lineTeams?.home.runs ?? 0}</td>
+                    <td style={scoreCellStyle}>{lineTeams?.home.hits ?? 0}</td>
+                    <td style={scoreCellStyle}>{lineTeams?.home.errors ?? 0}</td>
                   </tr>
                 </tbody>
               </table>
             )}
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "0.85rem",
-              }}
-            >
-              <TeamBoxScore
-                label={game.teams.away.team.teamName ?? game.teams.away.team.name}
-                team={feed.liveData.boxscore.teams.away}
-              />
-              <TeamBoxScore
-                label={game.teams.home.team.teamName ?? game.teams.home.team.name}
-                team={feed.liveData.boxscore.teams.home}
-              />
+            <div className="box-score-tabs">
+              <button
+                type="button"
+                className={`box-score-tab${activeTeam === "away" ? " active" : ""}`}
+                onClick={() => setActiveTeam("away")}
+              >
+                {teamAbbreviation(game.teams.away.team)}
+              </button>
+              <button
+                type="button"
+                className={`box-score-tab${activeTeam === "home" ? " active" : ""}`}
+                onClick={() => setActiveTeam("home")}
+              >
+                {teamAbbreviation(game.teams.home.team)}
+              </button>
             </div>
 
-            {game.decisions && (
-              <div>
-                <p className="kicker" style={{ marginBottom: "0.35rem" }}>
-                  Decisions
-                </p>
-                <p style={{ margin: 0, color: "var(--muted)" }}>
-                  {game.decisions.winner?.fullName && (
-                    <>
-                      W: <PlayerNameLink id={game.decisions.winner.id} name={game.decisions.winner.fullName} />
-                      {"  "}
-                    </>
-                  )}
-                  {game.decisions.loser?.fullName && (
-                    <>
-                      L: <PlayerNameLink id={game.decisions.loser.id} name={game.decisions.loser.fullName} />
-                      {"  "}
-                    </>
-                  )}
-                  {game.decisions.save?.fullName && (
-                    <>
-                      SV: <PlayerNameLink id={game.decisions.save.id} name={game.decisions.save.fullName} />
-                    </>
-                  )}
-                </p>
+            <div className="box-score-split">
+              <div className={`box-score-team-panel${activeTeam === "away" ? " active" : ""}`}>
+                <TeamBoxScore
+                  label={game.teams.away.team.teamName ?? game.teams.away.team.name}
+                  team={feed.liveData.boxscore.teams.away}
+                />
               </div>
-            )}
+              <div className={`box-score-team-panel${activeTeam === "home" ? " active" : ""}`}>
+                <TeamBoxScore
+                  label={game.teams.home.team.teamName ?? game.teams.home.team.name}
+                  team={feed.liveData.boxscore.teams.home}
+                />
+              </div>
+            </div>
           </div>
         )}
       </div>
