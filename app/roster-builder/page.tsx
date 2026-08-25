@@ -1,14 +1,15 @@
-import { getCardinalsRoster, getAllMlbPlayers } from "@/lib/mlb";
+import { getCardinalsRoster, getAllMlbPlayers, getSixtyDayIL } from "@/lib/mlb";
 import { getCardinalsProspects } from "@/lib/prospects";
 import RosterBuilder from "@/components/roster-builder/RosterBuilder";
 
 export default async function RosterBuilderPage() {
   const year = new Date().getFullYear();
 
-  const [roster, prospects, externalPlayers] = await Promise.all([
+  const [roster, prospects, externalPlayers, sixtyDayIL] = await Promise.all([
     getCardinalsRoster(year, "40Man"),
     getCardinalsProspects(year),
     getAllMlbPlayers(year),
+    getSixtyDayIL(year),
   ]);
 
   return (
@@ -24,7 +25,12 @@ export default async function RosterBuilderPage() {
       </section>
 
       <section className="container fade-up" style={{ animationDelay: "0.06s" }}>
-        <RosterBuilder roster={roster} prospects={prospects} externalPlayers={externalPlayers} />
+        <RosterBuilder
+          roster={roster}
+          prospects={prospects}
+          externalPlayers={externalPlayers}
+          sixtyDayIL={sixtyDayIL}
+        />
       </section>
     </div>
   );

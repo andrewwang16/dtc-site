@@ -33,9 +33,10 @@ const BULLPEN_SLOTS: SlotDef[] = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ id: `RP$
 const ALL_SLOTS: SlotDef[] = [DH_SLOT, ...DIAMOND_SLOTS, ...BENCH_SLOTS, ...ROTATION_SLOTS, ...BULLPEN_SLOTS];
 const TOTAL_SLOTS = ALL_SLOTS.length;
 const FORTY_MAN_LIMIT = 40;
+const PLAYER_ID_DRAG_TYPE = "text/plain";
 
-type SimplePlayer = { id: number; fullName: string; position: string };
-type PickerTab = "fortyMan" | "prospects" | "external";
+type SimplePlayer = { id: number; fullName: string; position: string; level?: string };
+type AddTab = "prospects" | "external";
 
 function lastName(fullName: string) {
   const parts = fullName.trim().split(/\s+/);
@@ -63,13 +64,15 @@ const slotButtonBase: React.CSSProperties = {
 function SlotButton({
   slot,
   player,
-  isActive,
-  onClick,
+  onDrop,
+  onDragStart,
+  onClear,
 }: {
   slot: SlotDef;
   player: SimplePlayer | null;
-  isActive: boolean;
-  onClick: () => void;
+  onDrop: (slot: SlotDef, event: React.DragEvent) => void;
+  onDragStart: (event: React.DragEvent, playerId: number) => void;
+  onClear: (slot: SlotDef) => void;
 }) {
   const isDiamond = slot.group === "diamond";
 
@@ -91,12 +94,20 @@ function SlotButton({
           minHeight: "56px",
           borderRadius: "12px",
         }),
-    border: isActive ? "2px solid var(--accent)" : "1px solid var(--line)",
     background: player ? "rgba(196,30,58,0.08)" : "var(--panel)",
   };
 
   return (
-    <button type="button" onClick={onClick} style={style}>
+    <button
+      type="button"
+      draggable={!!player}
+      onDragStart={(event) => player && onDragStart(event, player.id)}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => onDrop(slot, event)}
+      onClick={() => player && onClear(slot)}
+      title={player ? "Drag to move, click to clear" : "Drag a player here"}
+      style={style}
+    >
       <span style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
         {slot.label}
       </span>
@@ -107,42 +118,25 @@ function SlotButton({
   );
 }
 
-function DiamondOutline() {
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
-      aria-hidden="true"
-    >
-      <polygon points="50,90 83,62 50,24 17,62" fill="none" stroke="var(--line)" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
 export default function RosterBuilder({
   roster,
   prospects,
   externalPlayers,
+  sixtyDayIL,
 }: {
   roster: RosterEntry[];
   prospects: ProspectPlayer[];
   externalPlayers: ExternalPlayer[];
+  sixtyDayIL: RosterEntry[];
 }) {
   const [fortyMan, setFortyMan] = useState<SimplePlayer[]>(roster);
+  const [reserveIL, setReserveIL] = useState<SimplePlayer[]>(sixtyDayIL);
   const [assignments, setAssignments] = useState<Record<string, number | null>>({});
-  const [activeSlot, setActiveSlot] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<PickerTab>("fortyMan");
-  const [query, setQuery] = useState("");
+  const [addTab, setAddTab] = useState<AddTab>("prospects");
+  const [addQuery, setAddQuery] = useState("");
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
-
-  const playersById = useMemo(() => {
-    const map = new Map<number, SimplePlayer>();
-    for (const player of fortyMan) map.set(player.id, player);
-    for (const player of prospects) if (!map.has(player.id)) map.set(player.id, player);
-    for (const player of externalPlayers) if (!map.has(player.id)) map.set(player.id, player);
-    return map;
-  }, [fortyMan, prospects, externalPlayers]);
+  const fortyManById = useMemo(() => new Map(fortyMan.map((player) => [player.id, player])), [fortyMan]);
 
   const assignedIds = useMemo(
     () => new Set(Object.values(assignments).filter((id): id is number => id !== null && id !== undefined)),
@@ -150,70 +144,17 @@ export default function RosterBuilder({
   );
   const filledCount = assignedIds.size;
 
-  const activeSlotDef = ALL_SLOTS.find((slot) => slot.id === activeSlot) ?? null;
-  const activeSlotPlayer = activeSlotDef ? playersById.get(assignments[activeSlotDef.id] ?? -1) ?? null : null;
-
-  const eligiblePool = useMemo((): Array<SimplePlayer & { level?: string }> => {
-    if (!activeSlotDef) {
-      return [];
-    }
-
-    const wantsPitcher = isPitcherSlot(activeSlotDef.group);
-    const trimmed = query.trim().toLowerCase();
-
-    const base: Array<SimplePlayer & { level?: string }> =
-      activeTab === "fortyMan" ? fortyMan : activeTab === "prospects" ? prospects : externalPlayers;
+  const addPool = useMemo(() => {
+    const trimmed = addQuery.trim().toLowerCase();
+    const base: SimplePlayer[] = addTab === "prospects" ? prospects : externalPlayers;
 
     return base
-      .filter((player) => activeTab === "fortyMan" || !fortyManIds.has(player.id))
-      .filter((player) => (player.position === "P") === wantsPitcher)
-      .filter((player) => !assignedIds.has(player.id) || player.id === assignments[activeSlotDef.id])
+      .filter((player) => !fortyManIds.has(player.id))
       .filter((player) => !trimmed || player.fullName.toLowerCase().includes(trimmed))
-      .slice(0, activeTab === "external" && !trimmed ? 0 : 8);
-  }, [activeSlotDef, activeTab, assignedIds, assignments, fortyMan, fortyManIds, prospects, externalPlayers, query]);
+      .slice(0, addTab === "external" && !trimmed ? 0 : 8);
+  }, [addTab, addQuery, prospects, externalPlayers, fortyManIds]);
 
-  function openSlot(slotId: string) {
-    setQuery("");
-    setActiveTab("fortyMan");
-    setActiveSlot((current) => (current === slotId ? null : slotId));
-  }
-
-  function assign(player: SimplePlayer) {
-    if (!activeSlotDef) {
-      return;
-    }
-
-    if (!fortyManIds.has(player.id)) {
-      const projected = fortyMan.length + 1;
-
-      if (projected > FORTY_MAN_LIMIT) {
-        const confirmed = window.confirm(
-          `Adding ${player.fullName} would put the 40-man roster at ${projected}, over the ${FORTY_MAN_LIMIT}-man limit. Add anyway?`
-        );
-
-        if (!confirmed) {
-          return;
-        }
-      }
-
-      setFortyMan((current) => [...current, { id: player.id, fullName: player.fullName, position: player.position }]);
-    }
-
-    setAssignments((current) => ({ ...current, [activeSlotDef.id]: player.id }));
-    setActiveSlot(null);
-    setQuery("");
-  }
-
-  function clearActiveSlot() {
-    if (!activeSlotDef) {
-      return;
-    }
-
-    setAssignments((current) => ({ ...current, [activeSlotDef.id]: null }));
-  }
-
-  function removeFromFortyMan(playerId: number) {
-    setFortyMan((current) => current.filter((player) => player.id !== playerId));
+  function unassignPlayer(playerId: number) {
     setAssignments((current) => {
       const next = { ...current };
       for (const slotId of Object.keys(next)) {
@@ -225,7 +166,73 @@ export default function RosterBuilder({
     });
   }
 
-  const tabButtonStyle = (isActive: boolean): React.CSSProperties => ({
+  function handleDragStart(event: React.DragEvent, playerId: number) {
+    event.dataTransfer.setData(PLAYER_ID_DRAG_TYPE, String(playerId));
+    event.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDropOnSlot(slot: SlotDef, event: React.DragEvent) {
+    event.preventDefault();
+    const playerId = Number(event.dataTransfer.getData(PLAYER_ID_DRAG_TYPE));
+    const player = fortyManById.get(playerId);
+
+    if (!player || (player.position === "P") !== isPitcherSlot(slot.group)) {
+      return;
+    }
+
+    setAssignments((current) => {
+      const next = { ...current };
+      for (const slotId of Object.keys(next)) {
+        if (next[slotId] === playerId) {
+          next[slotId] = null;
+        }
+      }
+      next[slot.id] = playerId;
+      return next;
+    });
+  }
+
+  function handleDropOnRosterList(event: React.DragEvent) {
+    event.preventDefault();
+    const playerId = Number(event.dataTransfer.getData(PLAYER_ID_DRAG_TYPE));
+    if (!Number.isNaN(playerId)) {
+      unassignPlayer(playerId);
+    }
+  }
+
+  function addToFortyMan(player: SimplePlayer): boolean {
+    if (fortyManIds.has(player.id)) {
+      return true;
+    }
+
+    const projected = fortyMan.length + 1;
+
+    if (projected > FORTY_MAN_LIMIT) {
+      const confirmed = window.confirm(
+        `Adding ${player.fullName} would put the 40-man roster at ${projected}, over the ${FORTY_MAN_LIMIT}-man limit. Add anyway?`
+      );
+
+      if (!confirmed) {
+        return false;
+      }
+    }
+
+    setFortyMan((current) => [...current, { id: player.id, fullName: player.fullName, position: player.position }]);
+    return true;
+  }
+
+  function activateFromIL(player: SimplePlayer) {
+    if (addToFortyMan(player)) {
+      setReserveIL((current) => current.filter((p) => p.id !== player.id));
+    }
+  }
+
+  function removeFromFortyMan(playerId: number) {
+    setFortyMan((current) => current.filter((player) => player.id !== playerId));
+    unassignPlayer(playerId);
+  }
+
+  const addTabButtonStyle = (isActive: boolean): React.CSSProperties => ({
     display: "inline-flex",
     alignItems: "center",
     padding: "0.45rem 0.9rem",
@@ -260,14 +267,14 @@ export default function RosterBuilder({
                 background: "var(--panel)",
               }}
             >
-              <DiamondOutline />
               {DIAMOND_SLOTS.map((slot) => (
                 <SlotButton
                   key={slot.id}
                   slot={slot}
-                  player={playersById.get(assignments[slot.id] ?? -1) ?? null}
-                  isActive={activeSlot === slot.id}
-                  onClick={() => openSlot(slot.id)}
+                  player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                  onDrop={handleDropOnSlot}
+                  onDragStart={handleDragStart}
+                  onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
                 />
               ))}
             </div>
@@ -275,9 +282,10 @@ export default function RosterBuilder({
             <div style={{ width: "72px", flexShrink: 0 }}>
               <SlotButton
                 slot={DH_SLOT}
-                player={playersById.get(assignments[DH_SLOT.id] ?? -1) ?? null}
-                isActive={activeSlot === DH_SLOT.id}
-                onClick={() => openSlot(DH_SLOT.id)}
+                player={fortyManById.get(assignments[DH_SLOT.id] ?? -1) ?? null}
+                onDrop={handleDropOnSlot}
+                onDragStart={handleDragStart}
+                onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
               />
             </div>
           </div>
@@ -292,9 +300,10 @@ export default function RosterBuilder({
               <SlotButton
                 key={slot.id}
                 slot={slot}
-                player={playersById.get(assignments[slot.id] ?? -1) ?? null}
-                isActive={activeSlot === slot.id}
-                onClick={() => openSlot(slot.id)}
+                player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                onDrop={handleDropOnSlot}
+                onDragStart={handleDragStart}
+                onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
               />
             ))}
           </div>
@@ -307,9 +316,10 @@ export default function RosterBuilder({
               <SlotButton
                 key={slot.id}
                 slot={slot}
-                player={playersById.get(assignments[slot.id] ?? -1) ?? null}
-                isActive={activeSlot === slot.id}
-                onClick={() => openSlot(slot.id)}
+                player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                onDrop={handleDropOnSlot}
+                onDragStart={handleDragStart}
+                onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
               />
             ))}
           </div>
@@ -322,16 +332,20 @@ export default function RosterBuilder({
               <SlotButton
                 key={slot.id}
                 slot={slot}
-                player={playersById.get(assignments[slot.id] ?? -1) ?? null}
-                isActive={activeSlot === slot.id}
-                onClick={() => openSlot(slot.id)}
+                player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                onDrop={handleDropOnSlot}
+                onDragStart={handleDragStart}
+                onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
               />
             ))}
           </div>
         </div>
       </div>
 
-      {activeSlotDef && (
+      <div>
+        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
+          Add to 40-Man Roster
+        </p>
         <div
           style={{
             border: "1px solid var(--line)",
@@ -342,68 +356,29 @@ export default function RosterBuilder({
             gap: "0.75rem",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-            <p style={{ margin: 0, fontWeight: 800 }}>Assigning: {activeSlotDef.label}</p>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              {activeSlotPlayer && (
-                <button
-                  type="button"
-                  onClick={clearActiveSlot}
-                  style={{
-                    border: "1px solid var(--line)",
-                    background: "none",
-                    color: "#b42318",
-                    fontWeight: 700,
-                    borderRadius: "999px",
-                    padding: "0.35rem 0.8rem",
-                    cursor: "pointer",
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  Clear
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setActiveSlot(null)}
-                style={{
-                  border: "1px solid var(--line)",
-                  background: "none",
-                  color: "var(--text)",
-                  fontWeight: 700,
-                  borderRadius: "999px",
-                  padding: "0.35rem 0.8rem",
-                  cursor: "pointer",
-                  fontSize: "0.85rem",
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button type="button" style={tabButtonStyle(activeTab === "fortyMan")} onClick={() => { setActiveTab("fortyMan"); setQuery(""); }}>
-              40-Man Roster
-            </button>
-            <button type="button" style={tabButtonStyle(activeTab === "prospects")} onClick={() => { setActiveTab("prospects"); setQuery(""); }}>
+            <button
+              type="button"
+              style={addTabButtonStyle(addTab === "prospects")}
+              onClick={() => { setAddTab("prospects"); setAddQuery(""); }}
+            >
               Prospects
             </button>
-            <button type="button" style={tabButtonStyle(activeTab === "external")} onClick={() => { setActiveTab("external"); setQuery(""); }}>
+            <button
+              type="button"
+              style={addTabButtonStyle(addTab === "external")}
+              onClick={() => { setAddTab("external"); setAddQuery(""); }}
+            >
               External Players
             </button>
           </div>
 
           <input
             type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={addQuery}
+            onChange={(event) => setAddQuery(event.target.value)}
             placeholder={
-              activeTab === "external"
-                ? "Search any MLB player by name..."
-                : isPitcherSlot(activeSlotDef.group)
-                  ? "Search pitchers..."
-                  : "Search position players..."
+              addTab === "external" ? "Search any MLB player by name..." : "Search Cardinals prospects..."
             }
             style={{
               width: "100%",
@@ -417,16 +392,14 @@ export default function RosterBuilder({
           />
 
           <div style={{ display: "grid", gap: "0.5rem" }}>
-            {activeTab === "external" && !query.trim() ? (
+            {addTab === "external" && !addQuery.trim() ? (
               <p style={{ margin: 0, color: "var(--muted)" }}>Type a name to search all of MLB.</p>
-            ) : eligiblePool.length === 0 ? (
-              <p style={{ margin: 0, color: "var(--muted)" }}>No eligible players found.</p>
+            ) : addPool.length === 0 ? (
+              <p style={{ margin: 0, color: "var(--muted)" }}>No matching players found.</p>
             ) : (
-              eligiblePool.map((player) => (
-                <button
+              addPool.map((player) => (
+                <div
                   key={player.id}
-                  type="button"
-                  onClick={() => assign(player)}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -434,12 +407,7 @@ export default function RosterBuilder({
                     padding: "0.5rem 0.7rem",
                     borderRadius: "12px",
                     border: "1px solid var(--line)",
-                    background:
-                      player.id === assignments[activeSlotDef.id] ? "rgba(196,30,58,0.1)" : "rgba(15,31,61,0.02)",
-                    color: "inherit",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    width: "100%",
+                    background: "rgba(15,31,61,0.02)",
                   }}
                 >
                   <div
@@ -460,24 +428,101 @@ export default function RosterBuilder({
                     />
                   </div>
                   <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>{player.fullName}</span>
-                  {player.level && (
-                    <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>{player.level}</span>
-                  )}
-                  <span style={{ color: "var(--muted)", marginLeft: "auto", fontSize: "0.85rem" }}>
-                    {player.position}
-                  </span>
-                </button>
+                  {player.level && <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>{player.level}</span>}
+                  <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{player.position}</span>
+                  <button
+                    type="button"
+                    onClick={() => addToFortyMan(player)}
+                    style={{
+                      marginLeft: "auto",
+                      border: "1px solid var(--line)",
+                      background: "var(--panel)",
+                      color: "var(--text)",
+                      fontWeight: 700,
+                      borderRadius: "999px",
+                      padding: "0.35rem 0.8rem",
+                      cursor: "pointer",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
               ))
             )}
           </div>
         </div>
-      )}
+      </div>
+
+      <div>
+        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
+          60-Day IL (Outside 40-Man)
+        </p>
+        <div
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            background: "var(--panel)",
+            padding: "1.15rem",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.5rem",
+          }}
+        >
+          {reserveIL.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--muted)" }}>
+              No players currently on the 60-day IL outside the 40-man.
+            </p>
+          ) : (
+            reserveIL.map((player) => (
+              <span
+                key={player.id}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.3rem 0.3rem 0.3rem 0.7rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--line)",
+                  background: "rgba(15,31,61,0.02)",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                }}
+              >
+                {player.fullName}
+                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                <button
+                  type="button"
+                  onClick={() => activateFromIL(player)}
+                  aria-label={`Activate ${player.fullName} onto the 40-man roster`}
+                  title="Activate onto 40-man"
+                  style={{
+                    width: "1.3rem",
+                    height: "1.3rem",
+                    borderRadius: "50%",
+                    border: "none",
+                    background: "rgba(15,122,56,0.15)",
+                    color: "#0f7a38",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  +
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+      </div>
 
       <div>
         <p className="kicker" style={{ marginBottom: "0.6rem" }}>
           40-Man Roster ({fortyMan.length} / {FORTY_MAN_LIMIT})
         </p>
         <div
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={handleDropOnRosterList}
           style={{
             border: "1px solid var(--line)",
             borderRadius: "18px",
@@ -494,6 +539,8 @@ export default function RosterBuilder({
             fortyMan.map((player) => (
               <span
                 key={player.id}
+                draggable
+                onDragStart={(event) => handleDragStart(event, player.id)}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -501,9 +548,10 @@ export default function RosterBuilder({
                   padding: "0.3rem 0.3rem 0.3rem 0.7rem",
                   borderRadius: "999px",
                   border: "1px solid var(--line)",
-                  background: "rgba(15,31,61,0.02)",
+                  background: assignedIds.has(player.id) ? "rgba(196,30,58,0.08)" : "rgba(15,31,61,0.02)",
                   fontSize: "0.85rem",
                   fontWeight: 700,
+                  cursor: "grab",
                 }}
               >
                 {player.fullName}

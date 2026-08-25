@@ -204,6 +204,24 @@ export async function getCardinalsRoster(
   }));
 }
 
+// Players on the 60-day injured list who aren't occupying a 40-man spot —
+// a 60-day IL stint normally opens one. Sourced by diffing the full-season
+// roster (which includes IL players) against the 40-man roster, so the
+// roster builder can offer them separately with a button to activate them
+// back onto the 40-man.
+export async function getSixtyDayIL(year: number): Promise<RosterEntry[]> {
+  const [fortyMan, fullSeason] = await Promise.all([
+    getCardinalsRoster(year, "40Man"),
+    getCardinalsRoster(year, "fullSeason"),
+  ]);
+
+  const fortyManIds = new Set(fortyMan.map((player) => player.id));
+
+  return fullSeason.filter(
+    (player) => player.status?.includes("60-Day") && !fortyManIds.has(player.id)
+  );
+}
+
 export type ExternalPlayer = {
   id: number;
   fullName: string;
