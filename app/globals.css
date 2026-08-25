@@ -227,12 +227,12 @@ a {
 }
 
 /*
- * Player profile page on mobile: the whole page (header, season stats,
- * both splits tables, rolling trend, game log) needs to fit on one
- * screen without scrolling the page — only each section's own rows/
- * chart scroll internally, within a capped height. That means the
- * header has to stay compact (photo + name on one row, not stacked),
- * and every data area gets a short max-height + overflow-y: auto.
+ * Player profile page on mobile: the page itself scrolls vertically
+ * like any normal page. Only the wide stat tables scroll internally,
+ * and only horizontally (left/right) — nothing scrolls up/down inside
+ * its own box. The rolling trend chart and game log render in full,
+ * top to bottom, with no internal height cap. The header still stays
+ * compact (photo + name on one row, not stacked).
  */
 @media (max-width: 740px) {
   .player-page-root {
@@ -346,11 +346,6 @@ a {
     font-size: 0.58rem !important;
   }
 
-  .rolling-trend-scroll {
-    max-height: 150px !important;
-    overflow-y: auto !important;
-  }
-
   .game-log-root {
     gap: 0.4rem !important;
   }
@@ -360,10 +355,6 @@ a {
     font-size: 0.66rem !important;
   }
 
-  .game-log-scroll {
-    max-height: 110px !important;
-    overflow-y: auto !important;
-  }
 }
 
 /*
