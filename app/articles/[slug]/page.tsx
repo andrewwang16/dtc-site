@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getArticleBySlug } from "@/lib/articles";
+import { getCommentsForArticle } from "@/lib/comments";
 import ArticleBody from "@/components/articles/ArticleBody";
+import CommentSection from "@/components/articles/CommentSection";
 
 function formatArticleDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -17,7 +19,10 @@ type ArticlePageProps = {
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params;
-  const article = await getArticleBySlug(slug);
+  const [article, comments] = await Promise.all([
+    getArticleBySlug(slug),
+    getCommentsForArticle(slug),
+  ]);
 
   if (!article) {
     notFound();
@@ -64,6 +69,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             <span style={{ fontSize: "1.3rem" }}>→</span>
           </Link>
         )}
+
+        <CommentSection articleSlug={article.slug} initialComments={comments} />
       </section>
     </div>
   );

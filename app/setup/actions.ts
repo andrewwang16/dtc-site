@@ -95,6 +95,34 @@ export async function dropImageColumnAction(key: string): Promise<SetupResult> {
   }
 }
 
+export async function createCommentsTableAction(key: string): Promise<SetupResult> {
+  if (!checkKey(key)) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  try {
+    const sql = getSql();
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS comments (
+        id SERIAL PRIMARY KEY,
+        article_slug TEXT NOT NULL REFERENCES articles(slug) ON DELETE CASCADE,
+        author_email TEXT NOT NULL,
+        author_name TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+
+    await sql`CREATE INDEX IF NOT EXISTS comments_article_slug_idx ON comments (article_slug, created_at)`;
+
+    return { ok: true, message: "Comments table ready." };
+  } catch (error) {
+    console.error("Create comments table failed", error);
+    return { ok: false, error: "Migration failed — check server logs." };
+  }
+}
+
 export async function createAdminSetupAction(
   key: string,
   email: string,

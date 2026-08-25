@@ -2,10 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { createArticleAction } from "@/app/articles/new/actions";
 import type { ArticleBlock } from "@/lib/articles";
+import type { RosterEntry } from "@/lib/mlb";
 import ArticleBody from "@/components/articles/ArticleBody";
+import PlayerPicker from "@/components/articles/PlayerPicker";
 
 type EditableBlock = ArticleBlock & { id: string };
 
@@ -199,7 +202,7 @@ function formatPreviewDate() {
   }).format(new Date());
 }
 
-export default function ArticleEditor() {
+export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
   const router = useRouter();
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
@@ -209,6 +212,7 @@ export default function ArticleEditor() {
   const [blocks, setBlocks] = useState<EditableBlock[]>([
     { id: makeId(), type: "paragraph", text: "" },
   ]);
+  const [selectedPlayer, setSelectedPlayer] = useState<RosterEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function updateBlock(id: string, next: EditableBlock) {
@@ -279,6 +283,8 @@ export default function ArticleEditor() {
       const result = await createArticleAction({
         title: title.trim(),
         blocks: cleanedBlocks,
+        playerId: selectedPlayer?.id,
+        playerName: selectedPlayer?.fullName,
       });
 
       if (!result.ok) {
@@ -338,6 +344,18 @@ export default function ArticleEditor() {
             />
           </div>
 
+          <div>
+            <p className="kicker" style={{ marginBottom: "0.4rem" }}>
+              Attached Player (optional)
+            </p>
+            <PlayerPicker
+              roster={roster}
+              selected={selectedPlayer}
+              onSelect={setSelectedPlayer}
+              onClear={() => setSelectedPlayer(null)}
+            />
+          </div>
+
           <div style={{ display: "grid", gap: "0.75rem" }}>
             <p className="kicker" style={{ margin: 0 }}>
               Body
@@ -387,6 +405,34 @@ export default function ArticleEditor() {
               </p>
             )}
           </div>
+
+          {selectedPlayer && (
+            <Link
+              href={`/players/${selectedPlayer.id}`}
+              style={{
+                marginTop: "2rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "1rem",
+                border: "1px solid var(--line)",
+                borderRadius: "18px",
+                background: "var(--panel)",
+                padding: "1.15rem",
+                color: "inherit",
+              }}
+            >
+              <div>
+                <p className="kicker" style={{ marginBottom: "0.3rem" }}>
+                  Player Profile
+                </p>
+                <p style={{ margin: 0, fontWeight: 800 }}>
+                  View {selectedPlayer.fullName}&apos;s full stats & bio
+                </p>
+              </div>
+              <span style={{ fontSize: "1.3rem" }}>→</span>
+            </Link>
+          )}
         </div>
       )}
 

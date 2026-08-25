@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { runSeedAction, createAdminSetupAction, dropImageColumnAction } from "@/app/setup/actions";
+import {
+  runSeedAction,
+  createAdminSetupAction,
+  dropImageColumnAction,
+  createCommentsTableAction,
+} from "@/app/setup/actions";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -51,6 +56,9 @@ export default function SetupPanel({ setupKey }: { setupKey: string }) {
   const [migrateMessage, setMigrateMessage] = useState<string | null>(null);
   const [migrateError, setMigrateError] = useState<string | null>(null);
 
+  const [commentsMessage, setCommentsMessage] = useState<string | null>(null);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
+
   function handleSeed() {
     setSeedMessage(null);
     setSeedError(null);
@@ -98,8 +106,42 @@ export default function SetupPanel({ setupKey }: { setupKey: string }) {
     });
   }
 
+  function handleCreateCommentsTable() {
+    setCommentsMessage(null);
+    setCommentsError(null);
+
+    startTransition(async () => {
+      const result = await createCommentsTableAction(setupKey);
+
+      if (result.ok) {
+        setCommentsMessage(result.message);
+      } else {
+        setCommentsError(result.error);
+      }
+    });
+  }
+
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
+      <div style={cardStyle}>
+        <p className="kicker" style={{ margin: 0 }}>
+          One-time migration
+        </p>
+        <h2 style={{ margin: 0 }}>Create Comments Table</h2>
+        <p style={{ margin: 0, color: "var(--muted)" }}>
+          Creates the comments table used by article comments. Safe to run more than once.
+        </p>
+
+        <button type="button" onClick={handleCreateCommentsTable} disabled={isPending} style={buttonStyle}>
+          {isPending ? "Working..." : "Create Table"}
+        </button>
+
+        {commentsMessage && (
+          <p style={{ margin: 0, color: "#1a7a3c", fontWeight: 700 }}>{commentsMessage}</p>
+        )}
+        {commentsError && <p style={{ margin: 0, color: "#b42318", fontWeight: 700 }}>{commentsError}</p>}
+      </div>
+
       <div style={cardStyle}>
         <p className="kicker" style={{ margin: 0 }}>
           One-time migration

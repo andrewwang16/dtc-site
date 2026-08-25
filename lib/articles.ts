@@ -93,6 +93,23 @@ export async function getArticleBySlug(slug: string): Promise<Article | undefine
   }
 }
 
+export async function getArticlesForPlayer(playerId: number): Promise<Article[]> {
+  try {
+    const sql = getSql();
+    const rows = (await sql`
+      SELECT slug, title, author, author_email, date, excerpt, body, player_id, player_name
+      FROM articles
+      WHERE player_id = ${playerId}
+      ORDER BY date DESC, id DESC
+    `) as ArticleRow[];
+
+    return rows.map(rowToArticle);
+  } catch (error) {
+    console.error("getArticlesForPlayer failed", error);
+    return [];
+  }
+}
+
 function slugify(title: string) {
   return title
     .toLowerCase()

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/require-admin";
+import { getCardinalsRoster } from "@/lib/mlb";
 import ArticleEditor from "@/components/articles/ArticleEditor";
 
 export default async function NewArticlePage() {
@@ -9,6 +10,8 @@ export default async function NewArticlePage() {
     redirect("/articles");
   }
 
+  const roster = await getCardinalsRoster(new Date().getFullYear());
+
   return (
     <div style={{ display: "grid", gap: "2rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up" style={{ maxWidth: "760px", margin: "0 auto", width: "100%" }}>
@@ -16,7 +19,7 @@ export default async function NewArticlePage() {
         <h1 className="section-title">Write Article</h1>
 
         <div style={{ marginTop: "1.5rem" }}>
-          <ArticleEditor />
+          <ArticleEditor roster={roster} />
         </div>
       </section>
     </div>

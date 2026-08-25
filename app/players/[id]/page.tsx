@@ -16,6 +16,7 @@ import {
   type RosterEntry,
   type StatRow,
 } from "@/lib/mlb";
+import { getArticlesForPlayer } from "@/lib/articles";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
@@ -123,14 +124,22 @@ function InfoTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatArticleDate(date: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
 export default async function PlayerPage({ params, searchParams }: PlayerPageProps) {
   const { id } = await params;
   const { year: yearParam, view: viewParam, team: teamParam } = await searchParams;
   const playerId = Number.parseInt(id, 10);
 
-  const [bio, roster] = await Promise.all([
+  const [bio, roster, playerArticles] = await Promise.all([
     getPlayerBio(playerId),
     getCardinalsRoster(new Date().getFullYear()),
+    getArticlesForPlayer(playerId),
   ]);
 
   if (!bio) {
@@ -473,6 +482,47 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           <GameLogTable gameLog={yearStats.gameLog} />
         </article>
       </section>
+
+      {playerArticles.length > 0 && (
+        <section
+          className="container fade-up player-page-section"
+          style={{ animationDelay: "0.23s", minWidth: 0 }}
+        >
+          <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Related Articles</h2>
+          <div
+            style={{
+              display: "grid",
+              gap: "1rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            }}
+          >
+            {playerArticles.map((article) => (
+              <Link
+                key={article.slug}
+                href={`/articles/${article.slug}`}
+                style={{
+                  display: "grid",
+                  border: "1px solid var(--line)",
+                  borderRadius: "18px",
+                  background: "var(--panel)",
+                  overflow: "hidden",
+                  color: "inherit",
+                }}
+              >
+                <div style={{ padding: "1.15rem", display: "grid", gap: "0.5rem" }}>
+                  <p className="kicker" style={{ margin: 0 }}>
+                    {formatArticleDate(article.date)} · {article.author}
+                  </p>
+                  <h3 style={{ margin: 0, fontSize: "1.1rem" }}>{article.title}</h3>
+                  <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.55 }}>
+                    {article.excerpt}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
