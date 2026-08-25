@@ -20,8 +20,8 @@ export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
   }, [gameLog, mode]);
 
   return (
-    <div className="game-log-root" style={{ display: "grid", gap: "0.75rem" }}>
-      <div className="game-log-tabs" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+    <div className="game-log-root" style={{ display: "grid", gap: "0.6rem" }}>
+      <div className="game-log-tabs" style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
         {(
           [
             { key: "last15" as const, label: "Last 15" },
@@ -42,7 +42,8 @@ export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
                   : "rgba(15,31,61,0.02)",
                 color: "var(--text)",
                 borderRadius: "999px",
-                padding: "0.55rem 1rem",
+                padding: "0.45rem 0.8rem",
+                fontSize: "0.8rem",
                 fontWeight: 800,
                 cursor: "pointer",
               }}
@@ -57,13 +58,13 @@ export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
         <p style={{ color: "var(--muted)" }}>No games found for this season.</p>
       ) : (
         <div className="game-log-scroll" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px", fontSize: "0.8rem" }}>
             <thead>
-              <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.85rem" }}>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Date</th>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Opponent</th>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Result</th>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Line</th>
+              <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.72rem" }}>
+                <th style={{ padding: "0.4rem 0.6rem" }}>Date</th>
+                <th style={{ padding: "0.4rem 0.6rem" }}>Opponent</th>
+                <th style={{ padding: "0.4rem 0.6rem" }}>Result</th>
+                <th style={{ padding: "0.4rem 0.6rem" }}>Line</th>
               </tr>
             </thead>
             <tbody>
@@ -72,13 +73,13 @@ export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
                   key={`${game.gamePk}-${index}`}
                   style={{ borderTop: "1px solid var(--line)" }}
                 >
-                  <td style={{ padding: "0.6rem 0.75rem", whiteSpace: "nowrap" }}>
+                  <td style={{ padding: "0.45rem 0.6rem", whiteSpace: "nowrap" }}>
                     {formatLogDate(game.date)}
                   </td>
-                  <td style={{ padding: "0.6rem 0.75rem" }}>
+                  <td style={{ padding: "0.45rem 0.6rem" }}>
                     {game.isHome ? "vs" : "@"} {game.opponentName}
                   </td>
-                  <td style={{ padding: "0.6rem 0.75rem" }}>
+                  <td style={{ padding: "0.45rem 0.6rem" }}>
                     {game.isWin === undefined ? (
                       "-"
                     ) : (
@@ -92,7 +93,7 @@ export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
                       </span>
                     )}
                   </td>
-                  <td style={{ padding: "0.6rem 0.75rem", color: "var(--muted)" }}>
+                  <td style={{ padding: "0.45rem 0.6rem", color: "var(--muted)" }}>
                     {game.summary ?? "-"}
                   </td>
                 </tr>

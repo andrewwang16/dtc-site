@@ -18,9 +18,9 @@ function LeaderCard({ category }: { category: LeaderboardCategory }) {
         border: "1px solid var(--line)",
         borderRadius: "18px",
         background: "var(--panel)",
-        padding: "1rem",
+        padding: "0.85rem",
         display: "grid",
-        gap: "0.9rem",
+        gap: "0.75rem",
       }}
     >
       <div
@@ -33,10 +33,10 @@ function LeaderCard({ category }: { category: LeaderboardCategory }) {
         }}
       >
         <div>
-          <p className="kicker" style={{ marginBottom: "0.35rem" }}>
+          <p className="kicker" style={{ marginBottom: "0.3rem", fontSize: "0.72rem" }}>
             {category.description}
           </p>
-          <h3 style={{ margin: 0 }}>{category.label}</h3>
+          <h3 style={{ margin: 0, fontSize: "1rem" }}>{category.label}</h3>
         </div>
       </div>
 
@@ -45,19 +45,19 @@ function LeaderCard({ category }: { category: LeaderboardCategory }) {
           No players available for this leaderboard.
         </p>
       ) : (
-        <div style={{ display: "grid", gap: "0.75rem" }}>
+        <div style={{ display: "grid", gap: "0.55rem" }}>
           {category.players.map((player, index) => (
             <Link
               key={`${category.key}-${player.id}`}
               href={`/players/${player.id}`}
               style={{
                 display: "grid",
-                gap: "1.1rem",
-                gridTemplateColumns: "84px minmax(0, 1fr) auto",
+                gap: "0.85rem",
+                gridTemplateColumns: "60px minmax(0, 1fr) auto",
                 alignItems: "center",
                 border: "1px solid var(--line)",
-                borderRadius: "16px",
-                padding: "0.8rem",
+                borderRadius: "14px",
+                padding: "0.6rem",
                 background: "rgba(15,31,61,0.02)",
                 color: "inherit",
                 textDecoration: "none",
@@ -66,8 +66,8 @@ function LeaderCard({ category }: { category: LeaderboardCategory }) {
               {/* Player Headshot */}
               <div
                 style={{
-                  width: "84px",
-                  height: "104px",
+                  width: "60px",
+                  height: "74px",
                   position: "relative",
                   flexShrink: 0,
                 }}
@@ -77,9 +77,9 @@ function LeaderCard({ category }: { category: LeaderboardCategory }) {
                   alt={`Headshot of ${player.name}`}
                   loading="lazy"
                   style={{
-                    width: "84px",
-                    height: "104px",
-                    borderRadius: "16px",
+                    width: "60px",
+                    height: "74px",
+                    borderRadius: "12px",
                     objectFit: "cover",
                     objectPosition: "center top",
                     border: "1px solid var(--line)",
@@ -91,16 +91,16 @@ function LeaderCard({ category }: { category: LeaderboardCategory }) {
                 <span
                   style={{
                     position: "absolute",
-                    top: "-8px",
-                    left: "-8px",
-                    width: "24px",
-                    height: "24px",
+                    top: "-6px",
+                    left: "-6px",
+                    width: "18px",
+                    height: "18px",
                     borderRadius: "999px",
                     background: "#111827",
                     color: "#fff",
                     display: "grid",
                     placeItems: "center",
-                    fontSize: "0.8rem",
+                    fontSize: "0.62rem",
                     fontWeight: 800,
                     border: "2px solid var(--panel)",
                   }}
@@ -120,6 +120,7 @@ function LeaderCard({ category }: { category: LeaderboardCategory }) {
                   style={{
                     margin: 0,
                     fontWeight: 800,
+                    fontSize: "0.88rem",
                     lineHeight: 1.25,
                   }}
                 >
@@ -128,9 +129,9 @@ function LeaderCard({ category }: { category: LeaderboardCategory }) {
 
                 <p
                   style={{
-                    margin: "0.35rem 0 0",
+                    margin: "0.3rem 0 0",
                     color: "var(--muted)",
-                    fontSize: "0.9rem",
+                    fontSize: "0.76rem",
                   }}
                 >
                   {player.position}
@@ -141,7 +142,7 @@ function LeaderCard({ category }: { category: LeaderboardCategory }) {
               <div
                 style={{
                   fontWeight: 900,
-                  fontSize: "1.25rem",
+                  fontSize: "1.05rem",
                   whiteSpace: "nowrap",
                 }}
               >

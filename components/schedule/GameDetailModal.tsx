@@ -554,33 +554,6 @@ export default function GameDetailModal({
               </table>
             )}
 
-            {game.decisions && (
-              <div>
-                <p className="kicker" style={{ marginBottom: "0.35rem" }}>
-                  Decisions
-                </p>
-                <p style={{ margin: 0, color: "var(--muted)" }}>
-                  {game.decisions.winner?.fullName && (
-                    <>
-                      W: <PlayerNameLink id={game.decisions.winner.id} name={game.decisions.winner.fullName} />
-                      {"  "}
-                    </>
-                  )}
-                  {game.decisions.loser?.fullName && (
-                    <>
-                      L: <PlayerNameLink id={game.decisions.loser.id} name={game.decisions.loser.fullName} />
-                      {"  "}
-                    </>
-                  )}
-                  {game.decisions.save?.fullName && (
-                    <>
-                      SV: <PlayerNameLink id={game.decisions.save.id} name={game.decisions.save.fullName} />
-                    </>
-                  )}
-                </p>
-              </div>
-            )}
-
             <div className="box-score-tabs">
               <button
                 type="button"
