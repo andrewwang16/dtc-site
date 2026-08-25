@@ -204,22 +204,31 @@ export async function getCardinalsRoster(
   }));
 }
 
-// Players on the 60-day injured list who aren't occupying a 40-man spot —
-// a 60-day IL stint normally opens one. Sourced by diffing the full-season
-// roster (which includes IL players) against the 40-man roster, so the
-// roster builder can offer them separately with a button to activate them
-// back onto the 40-man.
-export async function getSixtyDayIL(year: number): Promise<RosterEntry[]> {
-  const [fortyMan, fullSeason] = await Promise.all([
+export type FortyManSplit = {
+  active: RosterEntry[];
+  sixtyDayIL: RosterEntry[];
+};
+
+// A 60-day IL stint actually opens a 40-man spot, but the Stats API's
+// "40Man" roster type still lists those players (with a 60-Day status) —
+// so we split them back out here rather than trusting the raw list, and
+// also check the full-season roster in case a 60-day IL player has fallen
+// off the 40Man listing entirely.
+export async function getFortyManSplit(year: number): Promise<FortyManSplit> {
+  const [rawFortyMan, fullSeason] = await Promise.all([
     getCardinalsRoster(year, "40Man"),
     getCardinalsRoster(year, "fullSeason"),
   ]);
 
-  const fortyManIds = new Set(fortyMan.map((player) => player.id));
+  const isSixtyDayIL = (player: RosterEntry) => player.status?.includes("60-Day") ?? false;
 
-  return fullSeason.filter(
-    (player) => player.status?.includes("60-Day") && !fortyManIds.has(player.id)
-  );
+  const active = rawFortyMan.filter((player) => !isSixtyDayIL(player));
+
+  const sixtyDayIL = new Map<number, RosterEntry>();
+  for (const player of rawFortyMan) if (isSixtyDayIL(player)) sixtyDayIL.set(player.id, player);
+  for (const player of fullSeason) if (isSixtyDayIL(player)) sixtyDayIL.set(player.id, player);
+
+  return { active, sixtyDayIL: [...sixtyDayIL.values()] };
 }
 
 export type ExternalPlayer = {

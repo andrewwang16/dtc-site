@@ -344,6 +344,132 @@ export default function RosterBuilder({
 
       <div>
         <p className="kicker" style={{ marginBottom: "0.6rem" }}>
+          40-Man Roster ({fortyMan.length} / {FORTY_MAN_LIMIT})
+        </p>
+        <div
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={handleDropOnRosterList}
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            background: "var(--panel)",
+            padding: "1.15rem",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.5rem",
+          }}
+        >
+          {fortyMan.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--muted)" }}>No players on the 40-man roster.</p>
+          ) : (
+            fortyMan.map((player) => (
+              <span
+                key={player.id}
+                draggable
+                onDragStart={(event) => handleDragStart(event, player.id)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.3rem 0.3rem 0.3rem 0.7rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--line)",
+                  background: assignedIds.has(player.id) ? "rgba(196,30,58,0.08)" : "rgba(15,31,61,0.02)",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  cursor: "grab",
+                }}
+              >
+                {player.fullName}
+                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFromFortyMan(player.id)}
+                  aria-label={`Remove ${player.fullName} from the 40-man roster`}
+                  style={{
+                    width: "1.3rem",
+                    height: "1.3rem",
+                    borderRadius: "50%",
+                    border: "none",
+                    background: "rgba(180,35,24,0.12)",
+                    color: "#b42318",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div>
+        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
+          60-Day IL (Outside 40-Man)
+        </p>
+        <div
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            background: "var(--panel)",
+            padding: "1.15rem",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.5rem",
+          }}
+        >
+          {reserveIL.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--muted)" }}>
+              No players currently on the 60-day IL outside the 40-man.
+            </p>
+          ) : (
+            reserveIL.map((player) => (
+              <span
+                key={player.id}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.3rem 0.3rem 0.3rem 0.7rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--line)",
+                  background: "rgba(15,31,61,0.02)",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                }}
+              >
+                {player.fullName}
+                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                <button
+                  type="button"
+                  onClick={() => activateFromIL(player)}
+                  aria-label={`Activate ${player.fullName} onto the 40-man roster`}
+                  title="Activate onto 40-man"
+                  style={{
+                    width: "1.3rem",
+                    height: "1.3rem",
+                    borderRadius: "50%",
+                    border: "none",
+                    background: "rgba(15,122,56,0.15)",
+                    color: "#0f7a38",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  +
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div>
+        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
           Add to 40-Man Roster
         </p>
         <div
@@ -451,132 +577,6 @@ export default function RosterBuilder({
               ))
             )}
           </div>
-        </div>
-      </div>
-
-      <div>
-        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
-          60-Day IL (Outside 40-Man)
-        </p>
-        <div
-          style={{
-            border: "1px solid var(--line)",
-            borderRadius: "18px",
-            background: "var(--panel)",
-            padding: "1.15rem",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.5rem",
-          }}
-        >
-          {reserveIL.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--muted)" }}>
-              No players currently on the 60-day IL outside the 40-man.
-            </p>
-          ) : (
-            reserveIL.map((player) => (
-              <span
-                key={player.id}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.4rem",
-                  padding: "0.3rem 0.3rem 0.3rem 0.7rem",
-                  borderRadius: "999px",
-                  border: "1px solid var(--line)",
-                  background: "rgba(15,31,61,0.02)",
-                  fontSize: "0.85rem",
-                  fontWeight: 700,
-                }}
-              >
-                {player.fullName}
-                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
-                <button
-                  type="button"
-                  onClick={() => activateFromIL(player)}
-                  aria-label={`Activate ${player.fullName} onto the 40-man roster`}
-                  title="Activate onto 40-man"
-                  style={{
-                    width: "1.3rem",
-                    height: "1.3rem",
-                    borderRadius: "50%",
-                    border: "none",
-                    background: "rgba(15,122,56,0.15)",
-                    color: "#0f7a38",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    lineHeight: 1,
-                  }}
-                >
-                  +
-                </button>
-              </span>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div>
-        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
-          40-Man Roster ({fortyMan.length} / {FORTY_MAN_LIMIT})
-        </p>
-        <div
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={handleDropOnRosterList}
-          style={{
-            border: "1px solid var(--line)",
-            borderRadius: "18px",
-            background: "var(--panel)",
-            padding: "1.15rem",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.5rem",
-          }}
-        >
-          {fortyMan.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--muted)" }}>No players on the 40-man roster.</p>
-          ) : (
-            fortyMan.map((player) => (
-              <span
-                key={player.id}
-                draggable
-                onDragStart={(event) => handleDragStart(event, player.id)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.4rem",
-                  padding: "0.3rem 0.3rem 0.3rem 0.7rem",
-                  borderRadius: "999px",
-                  border: "1px solid var(--line)",
-                  background: assignedIds.has(player.id) ? "rgba(196,30,58,0.08)" : "rgba(15,31,61,0.02)",
-                  fontSize: "0.85rem",
-                  fontWeight: 700,
-                  cursor: "grab",
-                }}
-              >
-                {player.fullName}
-                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
-                <button
-                  type="button"
-                  onClick={() => removeFromFortyMan(player.id)}
-                  aria-label={`Remove ${player.fullName} from the 40-man roster`}
-                  style={{
-                    width: "1.3rem",
-                    height: "1.3rem",
-                    borderRadius: "50%",
-                    border: "none",
-                    background: "rgba(180,35,24,0.12)",
-                    color: "#b42318",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    lineHeight: 1,
-                  }}
-                >
-                  ×
-                </button>
-              </span>
-            ))
-          )}
         </div>
       </div>
     </div>
