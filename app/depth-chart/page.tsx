@@ -2,7 +2,35 @@ import Link from "next/link";
 import { playerHeadshotUrl } from "@/lib/mlb";
 import { getDepthChart, type DepthChartGroup, type DepthChartPlayer } from "@/lib/depth-chart";
 
-function PlayerChip({ player, gamesLabel }: { player: DepthChartPlayer; gamesLabel: string }) {
+function StatusTag({ status }: { status?: string }) {
+  if (!status || status === "Active") {
+    return null;
+  }
+
+  const isInjured = status.startsWith("Injured");
+  const label = isInjured ? "IL" : status === "Reassigned to Minors" ? "Minors" : status;
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "0.1rem 0.45rem",
+        borderRadius: "999px",
+        fontSize: "0.65rem",
+        fontWeight: 800,
+        textTransform: "uppercase",
+        letterSpacing: "0.03em",
+        background: isInjured ? "rgba(180,35,24,0.12)" : "rgba(15,31,61,0.08)",
+        color: isInjured ? "#b42318" : "var(--muted)",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PlayerChip({ player }: { player: DepthChartPlayer }) {
   return (
     <Link
       href={`/players/${player.id}`}
@@ -36,12 +64,7 @@ function PlayerChip({ player, gamesLabel }: { player: DepthChartPlayer; gamesLab
         />
       </div>
       <span style={{ fontWeight: 700, fontSize: "0.88rem" }}>{player.fullName}</span>
-      {player.gamesAtPosition > 0 && (
-        <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>
-          {player.gamesAtPosition}
-          {gamesLabel}
-        </span>
-      )}
+      <StatusTag status={player.status} />
     </Link>
   );
 }
@@ -64,7 +87,7 @@ function PositionRow({ group, isLast }: { group: DepthChartGroup; isLast: boolea
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
         {group.players.map((player) => (
-          <PlayerChip key={player.id} player={player} gamesLabel="G" />
+          <PlayerChip key={player.id} player={player} />
         ))}
       </div>
     </div>
@@ -82,7 +105,7 @@ function PitcherGroup({ title, players }: { title: string; players: DepthChartPl
       ) : (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
           {players.map((player) => (
-            <PlayerChip key={player.id} player={player} gamesLabel="G" />
+            <PlayerChip key={player.id} player={player} />
           ))}
         </div>
       )}
@@ -99,12 +122,6 @@ export default async function DepthChartPage() {
       <section className="container fade-up">
         <p className="kicker">Players</p>
         <h1 className="section-title">Depth Chart</h1>
-        <p style={{ marginTop: "0.9rem", color: "var(--muted)", maxWidth: "62ch" }}>
-          The 40-man roster grouped by every position each player has actually appeared at this
-          season, ranked by games played there — a super-utility player can show up under
-          several positions at once. Pitchers are split into Starters and Bullpen by their
-          starts this season.
-        </p>
       </section>
 
       <section className="container fade-up" style={{ animationDelay: "0.06s" }}>
