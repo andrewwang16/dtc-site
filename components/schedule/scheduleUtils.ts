@@ -10,6 +10,8 @@ export type MlbPersonRef = {
 export type MlbTeamRef = {
   id: number;
   name: string;
+  teamName?: string;
+  abbreviation?: string;
 };
 
 export type MlbGame = {
@@ -33,11 +35,13 @@ export type MlbGame = {
       score?: number;
       team: MlbTeamRef;
       probablePitcher?: MlbPersonRef;
+      leagueRecord?: { wins: number; losses: number };
     };
     home: {
       score?: number;
       team: MlbTeamRef;
       probablePitcher?: MlbPersonRef;
+      leagueRecord?: { wins: number; losses: number };
     };
   };
 };

@@ -941,9 +941,8 @@ export default async function CardinalsLiveScore() {
    * LINESCORE DATA
    */
 
-  const innings = isPreview
-    ? [{ num: 1, away: { runs: 0 }, home: { runs: 0 } }]
-    : linescore?.innings ?? [];
+  const innings = isPreview ? [] : linescore?.innings ?? [];
+  const showLinescore = innings.length > 0 || isPreview;
 
   const bases =
     linescore?.offense;
@@ -1073,7 +1072,7 @@ export default async function CardinalsLiveScore() {
 
         {/* LINESCORE */}
 
-        {innings.length > 0 && (
+        {showLinescore && (
           <div
             style={{
               borderTop:

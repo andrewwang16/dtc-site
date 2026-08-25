@@ -6,7 +6,6 @@ import Link from "next/link";
 import {
   formatGameDate,
   formatGameTime,
-  getCardinalsResult,
   getHomeAwayLabel,
   getStatusLabel,
   getTeamLogoUrl,
@@ -68,6 +67,16 @@ type FeedLiveResponse = {
   };
 };
 
+function getLastName(fullName?: string) {
+  if (!fullName) {
+    return "-";
+  }
+
+  const parts = fullName.trim().split(/\s+/);
+
+  return parts[parts.length - 1];
+}
+
 function PlayerNameLink({ id, name }: { id?: number; name?: string }) {
   if (!id || !name) {
     return <span>{name ?? "-"}</span>;
@@ -115,10 +124,10 @@ function DecisionBadge({ note }: { note?: string }) {
     <span
       title={DECISION_LABELS[code] ?? code}
       style={{
-        marginLeft: "0.4rem",
-        fontSize: "0.72rem",
+        marginLeft: "0.3rem",
+        fontSize: "0.6rem",
         fontWeight: 800,
-        padding: "0.1rem 0.4rem",
+        padding: "0.05rem 0.3rem",
         borderRadius: "999px",
         color: isPositive ? "#0f7a38" : "#b42318",
         background: isPositive ? "rgba(15,122,56,0.12)" : "rgba(180,35,24,0.12)",
@@ -128,6 +137,11 @@ function DecisionBadge({ note }: { note?: string }) {
     </span>
   );
 }
+
+const cellStyle: React.CSSProperties = {
+  padding: "0.22rem 0.25rem",
+  textAlign: "center",
+};
 
 function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
   const battersSorted = team.batters
@@ -147,11 +161,11 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
     let subNote: string | null = null;
     if (!isStarter && previous) {
       subNote = isPinchHitter
-        ? `Pinch hit for ${previous.person.fullName}`
-        : `In for ${previous.person.fullName}`;
+        ? `PH for ${getLastName(previous.person.fullName)}`
+        : `In for ${getLastName(previous.person.fullName)}`;
     }
 
-    return { player, subNote };
+    return { player, slot, isPinchHitter, subNote };
   });
 
   const pitchers = team.pitchers
@@ -159,81 +173,113 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
     .filter((player): player is BoxPlayer => Boolean(player));
 
   return (
-    <div style={{ display: "grid", gap: "0.75rem" }}>
-      <h3 style={{ margin: 0 }}>{label}</h3>
+    <div style={{ display: "grid", gap: "0.6rem", minWidth: 0 }}>
+      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>{label}</h3>
 
       {batters.length > 0 && (
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "440px" }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.85rem" }}>
-                <th style={{ padding: "0.4rem 0.5rem" }}>Batting</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>Pos</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>AB</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>R</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>H</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>RBI</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>BB</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>SO</th>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+            fontSize: "0.66rem",
+          }}
+        >
+          <colgroup>
+            <col style={{ width: "6%" }} />
+            <col style={{ width: "27%" }} />
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+          </colgroup>
+          <thead>
+            <tr style={{ textAlign: "center", color: "var(--muted)" }}>
+              <th style={cellStyle} aria-label="Batting order" />
+              <th style={{ ...cellStyle, textAlign: "left" }}>Batting</th>
+              <th style={cellStyle}>Pos</th>
+              <th style={cellStyle}>AB</th>
+              <th style={cellStyle}>R</th>
+              <th style={cellStyle}>H</th>
+              <th style={cellStyle}>RBI</th>
+              <th style={cellStyle}>BB</th>
+              <th style={cellStyle}>SO</th>
+            </tr>
+          </thead>
+          <tbody>
+            {batters.map(({ player, slot, isPinchHitter, subNote }) => (
+              <tr key={player.person.id} style={{ borderTop: "1px solid var(--line)" }}>
+                <td style={{ ...cellStyle, color: "var(--muted)" }}>{isPinchHitter ? "-" : slot}</td>
+                <td style={{ ...cellStyle, textAlign: "left", wordBreak: "break-word" }}>
+                  <PlayerNameLink id={player.person.id} name={player.person.fullName} />
+                  {subNote && (
+                    <div style={{ color: "var(--muted)", fontSize: "0.58rem", fontWeight: 400 }}>
+                      {subNote}
+                    </div>
+                  )}
+                </td>
+                <td style={cellStyle}>{player.position?.abbreviation ?? "-"}</td>
+                <td style={cellStyle}>{player.stats.batting?.atBats ?? 0}</td>
+                <td style={cellStyle}>{player.stats.batting?.runs ?? 0}</td>
+                <td style={cellStyle}>{player.stats.batting?.hits ?? 0}</td>
+                <td style={cellStyle}>{player.stats.batting?.rbi ?? 0}</td>
+                <td style={cellStyle}>{player.stats.batting?.baseOnBalls ?? 0}</td>
+                <td style={cellStyle}>{player.stats.batting?.strikeOuts ?? 0}</td>
               </tr>
-            </thead>
-            <tbody>
-              {batters.map(({ player, subNote }) => (
-                <tr key={player.person.id} style={{ borderTop: "1px solid var(--line)" }}>
-                  <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>
-                    <PlayerNameLink id={player.person.id} name={player.person.fullName} />
-                    {subNote && (
-                      <div style={{ color: "var(--muted)", fontSize: "0.75rem", fontWeight: 400 }}>
-                        {subNote}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.position?.abbreviation ?? "-"}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.batting?.atBats ?? 0}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.batting?.runs ?? 0}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.batting?.hits ?? 0}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.batting?.rbi ?? 0}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.batting?.baseOnBalls ?? 0}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.batting?.strikeOuts ?? 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
 
       {pitchers.length > 0 && (
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "440px" }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.85rem" }}>
-                <th style={{ padding: "0.4rem 0.5rem" }}>Pitching</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>IP</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>H</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>R</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>ER</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>BB</th>
-                <th style={{ padding: "0.4rem 0.5rem" }}>K</th>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+            fontSize: "0.66rem",
+          }}
+        >
+          <colgroup>
+            <col style={{ width: "38%" }} />
+            <col style={{ width: "10.33%" }} />
+            <col style={{ width: "10.33%" }} />
+            <col style={{ width: "10.33%" }} />
+            <col style={{ width: "10.33%" }} />
+            <col style={{ width: "10.33%" }} />
+            <col style={{ width: "10.33%" }} />
+          </colgroup>
+          <thead>
+            <tr style={{ textAlign: "center", color: "var(--muted)" }}>
+              <th style={{ ...cellStyle, textAlign: "left" }}>Pitching</th>
+              <th style={cellStyle}>IP</th>
+              <th style={cellStyle}>H</th>
+              <th style={cellStyle}>R</th>
+              <th style={cellStyle}>ER</th>
+              <th style={cellStyle}>BB</th>
+              <th style={cellStyle}>K</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pitchers.map((player) => (
+              <tr key={player.person.id} style={{ borderTop: "1px solid var(--line)" }}>
+                <td style={{ ...cellStyle, textAlign: "left", wordBreak: "break-word" }}>
+                  <PlayerNameLink id={player.person.id} name={player.person.fullName} />
+                  <DecisionBadge note={player.stats.pitching?.note} />
+                </td>
+                <td style={cellStyle}>{player.stats.pitching?.inningsPitched ?? "-"}</td>
+                <td style={cellStyle}>{player.stats.pitching?.hits ?? 0}</td>
+                <td style={cellStyle}>{player.stats.pitching?.runs ?? 0}</td>
+                <td style={cellStyle}>{player.stats.pitching?.earnedRuns ?? 0}</td>
+                <td style={cellStyle}>{player.stats.pitching?.baseOnBalls ?? 0}</td>
+                <td style={cellStyle}>{player.stats.pitching?.strikeOuts ?? 0}</td>
               </tr>
-            </thead>
-            <tbody>
-              {pitchers.map((player) => (
-                <tr key={player.person.id} style={{ borderTop: "1px solid var(--line)" }}>
-                  <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>
-                    <PlayerNameLink id={player.person.id} name={player.person.fullName} />
-                    <DecisionBadge note={player.stats.pitching?.note} />
-                  </td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.pitching?.inningsPitched ?? "-"}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.pitching?.hits ?? 0}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.pitching?.runs ?? 0}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.pitching?.earnedRuns ?? 0}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.pitching?.baseOnBalls ?? 0}</td>
-                  <td style={{ padding: "0.4rem 0.5rem" }}>{player.stats.pitching?.strikeOuts ?? 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
@@ -252,11 +298,6 @@ export default function GameDetailModal({
 
   const postponed = isPostponed(game);
   const isPreview = game.status.abstractGameState === "Preview";
-  const isFinal = game.status.abstractGameState === "Final" && !postponed;
-  const result = getCardinalsResult(game);
-  const resultColor = result.isTie ? "var(--muted)" : result.isWin ? "#0f7a38" : "#b42318";
-  const awayScoreColor = isFinal && !result.cardinalsAreHome ? resultColor : undefined;
-  const homeScoreColor = isFinal && result.cardinalsAreHome ? resultColor : undefined;
 
   useEffect(() => {
     if (isPreview || postponed) {
@@ -298,6 +339,11 @@ export default function GameDetailModal({
 
   const innings = feed?.liveData?.linescore?.innings ?? [];
   const lineTeams = feed?.liveData?.linescore?.teams;
+
+  const teamColWidth = 34;
+  const statColWidth = 8;
+  const inningColWidth =
+    innings.length > 0 ? (100 - teamColWidth - statColWidth * 3) / innings.length : 0;
 
   return createPortal(
     <div
@@ -358,22 +404,9 @@ export default function GameDetailModal({
         </p>
 
         <h2 style={{ margin: "0 0 0.5rem" }}>
-          {game.teams.away.team.name} @ {game.teams.home.team.name}
+          {game.teams.away.team.teamName ?? game.teams.away.team.name} @{" "}
+          {game.teams.home.team.teamName ?? game.teams.home.team.name}
         </h2>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <img src={getTeamLogoUrl(game.teams.away.team.id)} alt="" width={28} height={28} />
-            <span style={{ fontWeight: 700 }}>{game.teams.away.team.name}</span>
-            <span style={{ fontWeight: 800, color: awayScoreColor }}>{game.teams.away.score ?? 0}</span>
-          </div>
-          <span style={{ color: "var(--muted)" }}>-</span>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span style={{ fontWeight: 800, color: homeScoreColor }}>{game.teams.home.score ?? 0}</span>
-            <span style={{ fontWeight: 700 }}>{game.teams.home.team.name}</span>
-            <img src={getTeamLogoUrl(game.teams.home.team.id)} alt="" width={28} height={28} />
-          </div>
-        </div>
 
         <p style={{ marginTop: "0.5rem", color: "var(--muted)" }}>
           {getHomeAwayLabel(game)} · {formatGameTime(game.gameDate)} · {getStatusLabel(game)} · {game.venue?.name ?? "TBD"}
@@ -408,57 +441,117 @@ export default function GameDetailModal({
             The box score couldn&apos;t be loaded right now.
           </p>
         ) : (
-          <div style={{ marginTop: "1.25rem", display: "grid", gap: "1.5rem" }}>
+          <div style={{ marginTop: "1.25rem", display: "grid", gap: "1.25rem" }}>
             {innings.length > 0 && (
-              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px" }}>
-                  <thead>
-                    <tr style={{ textAlign: "center", color: "var(--muted)", fontSize: "0.85rem" }}>
-                      <th style={{ padding: "0.4rem 0.5rem", textAlign: "left" }}>Team</th>
-                      {innings.map((inning) => (
-                        <th key={inning.num} style={{ padding: "0.4rem 0.35rem", minWidth: "28px" }}>
-                          {inning.num}
-                        </th>
-                      ))}
-                      <th style={{ padding: "0.4rem 0.5rem" }}>R</th>
-                      <th style={{ padding: "0.4rem 0.5rem" }}>H</th>
-                      <th style={{ padding: "0.4rem 0.5rem" }}>E</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr style={{ borderTop: "1px solid var(--line)" }}>
-                      <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>{game.teams.away.team.name}</td>
-                      {innings.map((inning) => (
-                        <td key={`away-${inning.num}`} style={{ padding: "0.4rem 0.35rem", textAlign: "center" }}>
-                          {inning.away?.runs ?? "-"}
-                        </td>
-                      ))}
-                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "center", fontWeight: 800 }}>
-                        {lineTeams?.away.runs ?? 0}
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  tableLayout: "fixed",
+                  fontSize: "0.72rem",
+                }}
+              >
+                <colgroup>
+                  <col style={{ width: `${teamColWidth}%` }} />
+                  {innings.map((inning) => (
+                    <col key={inning.num} style={{ width: `${inningColWidth}%` }} />
+                  ))}
+                  <col style={{ width: `${statColWidth}%` }} />
+                  <col style={{ width: `${statColWidth}%` }} />
+                  <col style={{ width: `${statColWidth}%` }} />
+                </colgroup>
+                <thead>
+                  <tr style={{ textAlign: "center", color: "var(--muted)" }}>
+                    <th style={{ ...cellStyle, textAlign: "left" }}>Team</th>
+                    {innings.map((inning) => (
+                      <th key={inning.num} style={cellStyle}>
+                        {inning.num}
+                      </th>
+                    ))}
+                    <th style={cellStyle}>R</th>
+                    <th style={cellStyle}>H</th>
+                    <th style={cellStyle}>E</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderTop: "1px solid var(--line)" }}>
+                    <td style={{ ...cellStyle, textAlign: "left" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        <img
+                          src={getTeamLogoUrl(game.teams.away.team.id)}
+                          alt=""
+                          width={16}
+                          height={16}
+                          style={{ flexShrink: 0 }}
+                        />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {game.teams.away.team.teamName ?? game.teams.away.team.name}
+                        </span>
+                        {game.teams.away.leagueRecord && (
+                          <span style={{ color: "var(--muted)", flexShrink: 0 }}>
+                            ({game.teams.away.leagueRecord.wins}-{game.teams.away.leagueRecord.losses})
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    {innings.map((inning) => (
+                      <td key={`away-${inning.num}`} style={cellStyle}>
+                        {inning.away?.runs ?? "-"}
                       </td>
-                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>{lineTeams?.away.hits ?? 0}</td>
-                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>{lineTeams?.away.errors ?? 0}</td>
-                    </tr>
-                    <tr style={{ borderTop: "1px solid var(--line)" }}>
-                      <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>{game.teams.home.team.name}</td>
-                      {innings.map((inning) => (
-                        <td key={`home-${inning.num}`} style={{ padding: "0.4rem 0.35rem", textAlign: "center" }}>
-                          {inning.home?.runs ?? "-"}
-                        </td>
-                      ))}
-                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "center", fontWeight: 800 }}>
-                        {lineTeams?.home.runs ?? 0}
+                    ))}
+                    <td style={{ ...cellStyle, fontWeight: 800 }}>{lineTeams?.away.runs ?? 0}</td>
+                    <td style={cellStyle}>{lineTeams?.away.hits ?? 0}</td>
+                    <td style={cellStyle}>{lineTeams?.away.errors ?? 0}</td>
+                  </tr>
+                  <tr style={{ borderTop: "1px solid var(--line)" }}>
+                    <td style={{ ...cellStyle, textAlign: "left" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        <img
+                          src={getTeamLogoUrl(game.teams.home.team.id)}
+                          alt=""
+                          width={16}
+                          height={16}
+                          style={{ flexShrink: 0 }}
+                        />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {game.teams.home.team.teamName ?? game.teams.home.team.name}
+                        </span>
+                        {game.teams.home.leagueRecord && (
+                          <span style={{ color: "var(--muted)", flexShrink: 0 }}>
+                            ({game.teams.home.leagueRecord.wins}-{game.teams.home.leagueRecord.losses})
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    {innings.map((inning) => (
+                      <td key={`home-${inning.num}`} style={cellStyle}>
+                        {inning.home?.runs ?? "-"}
                       </td>
-                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>{lineTeams?.home.hits ?? 0}</td>
-                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>{lineTeams?.home.errors ?? 0}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                    ))}
+                    <td style={{ ...cellStyle, fontWeight: 800 }}>{lineTeams?.home.runs ?? 0}</td>
+                    <td style={cellStyle}>{lineTeams?.home.hits ?? 0}</td>
+                    <td style={cellStyle}>{lineTeams?.home.errors ?? 0}</td>
+                  </tr>
+                </tbody>
+              </table>
             )}
 
-            <TeamBoxScore label={game.teams.away.team.name} team={feed.liveData.boxscore.teams.away} />
-            <TeamBoxScore label={game.teams.home.team.name} team={feed.liveData.boxscore.teams.home} />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "0.85rem",
+              }}
+            >
+              <TeamBoxScore
+                label={game.teams.away.team.teamName ?? game.teams.away.team.name}
+                team={feed.liveData.boxscore.teams.away}
+              />
+              <TeamBoxScore
+                label={game.teams.home.team.teamName ?? game.teams.home.team.name}
+                team={feed.liveData.boxscore.teams.home}
+              />
+            </div>
 
             {game.decisions && (
               <div>
