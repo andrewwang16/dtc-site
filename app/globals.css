@@ -257,8 +257,14 @@ a {
     padding-bottom: 0.6rem !important;
   }
 
+  /*
+   * margin: 0 auto (not margin: 0) — the shorthand's left/right auto
+   * is what centers .container and gives it its side padding. A plain
+   * margin: 0 here was zeroing those too, pinning the whole section
+   * flush against the left edge instead of centered.
+   */
   .player-page-section {
-    margin: 0 !important;
+    margin: 0 auto !important;
   }
 
   .player-section-title {
