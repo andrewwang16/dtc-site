@@ -11,6 +11,37 @@ function formatTransactionDate(date: string) {
   }).format(new Date(`${date}T12:00:00Z`));
 }
 
+function TransactionDescription({
+  description,
+  personId,
+  personName,
+}: {
+  description: string;
+  personId?: number;
+  personName?: string;
+}) {
+  if (!personId || !personName || !description.includes(personName)) {
+    return <p style={{ margin: 0, lineHeight: 1.5 }}>{description}</p>;
+  }
+
+  const parts = description.split(personName);
+
+  return (
+    <p style={{ margin: 0, lineHeight: 1.5 }}>
+      {parts.map((part, index) => (
+        <span key={index}>
+          {part}
+          {index < parts.length - 1 && (
+            <Link href={`/players/${personId}`} style={{ color: "var(--accent-soft)", fontWeight: 700 }}>
+              {personName}
+            </Link>
+          )}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 type TransactionsPageProps = {
   searchParams: Promise<{ page?: string }>;
 };
@@ -82,16 +113,11 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
                     </span>
                   </div>
 
-                  <p style={{ margin: 0, lineHeight: 1.5 }}>{transaction.description}</p>
-
-                  {transaction.personId && transaction.personName && (
-                    <Link
-                      href={`/players/${transaction.personId}`}
-                      style={{ color: "var(--accent-soft)", fontWeight: 700, fontSize: "0.85rem" }}
-                    >
-                      View {transaction.personName} →
-                    </Link>
-                  )}
+                  <TransactionDescription
+                    description={transaction.description}
+                    personId={transaction.personId}
+                    personName={transaction.personName}
+                  />
                 </article>
               ))}
             </div>
