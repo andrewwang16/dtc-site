@@ -2,12 +2,17 @@ import Hero from "../components/home/Hero";
 import CardinalsLiveScore from "../components/home/CardinalsLiveScore";
 import DivisionStandings from "../components/home/DivisionStandings";
 import LatestArticles from "../components/home/LatestArticles";
+import WelcomeBanner from "../components/home/WelcomeBanner";
 
 export default function Home() {
   return (
     <div style={{ display: "grid", gap: "5.5rem", paddingBottom: "4rem" }}>
 
-      <section className="container fade-up" style={{ paddingTop: "3.7rem" }}>
+      <div style={{ paddingTop: "2.2rem" }}>
+        <WelcomeBanner />
+      </div>
+
+      <section className="container fade-up">
         <div className="home-top-grid">
           <div className="home-podcasts">
             <Hero />
