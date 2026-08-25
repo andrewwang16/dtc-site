@@ -17,12 +17,12 @@ type SlotDef = {
 const DIAMOND_SLOTS: SlotDef[] = [
   { id: "C", label: "C", group: "diamond", top: "90%", left: "50%" },
   { id: "1B", label: "1B", group: "diamond", top: "62%", left: "83%" },
-  { id: "2B", label: "2B", group: "diamond", top: "24%", left: "50%" },
+  { id: "2B", label: "2B", group: "diamond", top: "42%", left: "66%" },
   { id: "SS", label: "SS", group: "diamond", top: "42%", left: "34%" },
   { id: "3B", label: "3B", group: "diamond", top: "62%", left: "17%" },
-  { id: "LF", label: "LF", group: "diamond", top: "14%", left: "18%" },
-  { id: "CF", label: "CF", group: "diamond", top: "4%", left: "50%" },
-  { id: "RF", label: "RF", group: "diamond", top: "14%", left: "82%" },
+  { id: "LF", label: "LF", group: "diamond", top: "16%", left: "18%" },
+  { id: "CF", label: "CF", group: "diamond", top: "12%", left: "50%" },
+  { id: "RF", label: "RF", group: "diamond", top: "16%", left: "82%" },
 ];
 
 const DH_SLOT: SlotDef = { id: "DH", label: "DH", group: "dh" };
@@ -61,60 +61,142 @@ const slotButtonBase: React.CSSProperties = {
   padding: "0.3rem",
 };
 
-function SlotButton({
+function SlotCell({
   slot,
   player,
+  isOpen,
+  onToggleOpen,
   onDrop,
   onDragStart,
   onClear,
+  query,
+  onQueryChange,
+  eligiblePlayers,
+  onSelect,
 }: {
   slot: SlotDef;
   player: SimplePlayer | null;
+  isOpen: boolean;
+  onToggleOpen: (slot: SlotDef) => void;
   onDrop: (slot: SlotDef, event: React.DragEvent) => void;
   onDragStart: (event: React.DragEvent, playerId: number) => void;
   onClear: (slot: SlotDef) => void;
+  query: string;
+  onQueryChange: (value: string) => void;
+  eligiblePlayers: SimplePlayer[];
+  onSelect: (slot: SlotDef, player: SimplePlayer) => void;
 }) {
   const isDiamond = slot.group === "diamond";
 
-  const style: React.CSSProperties = {
+  const wrapperStyle: React.CSSProperties = isDiamond
+    ? {
+        position: "absolute",
+        top: slot.top,
+        left: slot.left,
+        transform: "translate(-50%, -50%)",
+        zIndex: isOpen ? 20 : 1,
+      }
+    : {
+        position: "relative",
+        width: "100%",
+        zIndex: isOpen ? 20 : 1,
+      };
+
+  const buttonStyle: React.CSSProperties = {
     ...slotButtonBase,
     ...(isDiamond
-      ? {
-          position: "absolute",
-          top: slot.top,
-          left: slot.left,
-          transform: "translate(-50%, -50%)",
-          width: "58px",
-          height: "58px",
-          borderRadius: "50%",
-          zIndex: 1,
-        }
-      : {
-          width: "100%",
-          minHeight: "56px",
-          borderRadius: "12px",
-        }),
+      ? { width: "58px", height: "58px", borderRadius: "50%" }
+      : { width: "100%", minHeight: "56px", borderRadius: "12px" }),
+    border: isOpen ? "2px solid var(--accent)" : "1px solid var(--line)",
     background: player ? "rgba(196,30,58,0.08)" : "var(--panel)",
   };
 
   return (
-    <button
-      type="button"
-      draggable={!!player}
-      onDragStart={(event) => player && onDragStart(event, player.id)}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => onDrop(slot, event)}
-      onClick={() => player && onClear(slot)}
-      title={player ? "Drag to move, click to clear" : "Drag a player here"}
-      style={style}
-    >
-      <span style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
-        {slot.label}
-      </span>
-      <span style={{ fontSize: "0.72rem", fontWeight: 700, lineHeight: 1.1 }}>
-        {player ? lastName(player.fullName) : "+"}
-      </span>
-    </button>
+    <div style={wrapperStyle}>
+      <button
+        type="button"
+        draggable={!!player}
+        onDragStart={(event) => player && onDragStart(event, player.id)}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => onDrop(slot, event)}
+        onClick={() => (player ? onClear(slot) : onToggleOpen(slot))}
+        title={player ? "Drag to move, click to clear" : "Click or drag a player here"}
+        style={buttonStyle}
+      >
+        <span style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+          {slot.label}
+        </span>
+        <span style={{ fontSize: "0.72rem", fontWeight: 700, lineHeight: 1.1 }}>
+          {player ? lastName(player.fullName) : "+"}
+        </span>
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            marginTop: "0.4rem",
+            width: "230px",
+            border: "1px solid var(--line)",
+            borderRadius: "14px",
+            background: "var(--panel)",
+            boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+            padding: "0.6rem",
+            display: "grid",
+            gap: "0.4rem",
+          }}
+        >
+          <input
+            autoFocus
+            type="text"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Search 40-man roster..."
+            style={{
+              width: "100%",
+              padding: "0.45rem 0.7rem",
+              borderRadius: "999px",
+              border: "1px solid var(--line)",
+              background: "var(--bg-soft)",
+              color: "var(--text)",
+              fontSize: "0.8rem",
+            }}
+          />
+          <div style={{ display: "grid", gap: "0.3rem", maxHeight: "220px", overflowY: "auto" }}>
+            {eligiblePlayers.length === 0 ? (
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.8rem" }}>No eligible players.</p>
+            ) : (
+              eligiblePlayers.map((eligible) => (
+                <button
+                  key={eligible.id}
+                  type="button"
+                  onClick={() => onSelect(slot, eligible)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    padding: "0.35rem 0.5rem",
+                    borderRadius: "10px",
+                    border: "1px solid var(--line)",
+                    background: "rgba(15,31,61,0.02)",
+                    color: "inherit",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  <span style={{ fontWeight: 700 }}>{eligible.fullName}</span>
+                  <span style={{ color: "var(--muted)", marginLeft: "auto" }}>{eligible.position}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -131,9 +213,12 @@ export default function RosterBuilder({
 }) {
   const [fortyMan, setFortyMan] = useState<SimplePlayer[]>(roster);
   const [reserveIL, setReserveIL] = useState<SimplePlayer[]>(sixtyDayIL);
+  const [removedPlayers, setRemovedPlayers] = useState<SimplePlayer[]>([]);
   const [assignments, setAssignments] = useState<Record<string, number | null>>({});
   const [addTab, setAddTab] = useState<AddTab>("prospects");
   const [addQuery, setAddQuery] = useState("");
+  const [openSlotId, setOpenSlotId] = useState<string | null>(null);
+  const [slotQuery, setSlotQuery] = useState("");
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
   const fortyManById = useMemo(() => new Map(fortyMan.map((player) => [player.id, player])), [fortyMan]);
@@ -154,6 +239,23 @@ export default function RosterBuilder({
       .slice(0, addTab === "external" && !trimmed ? 0 : 8);
   }, [addTab, addQuery, prospects, externalPlayers, fortyManIds]);
 
+  const openSlotDef = ALL_SLOTS.find((slot) => slot.id === openSlotId) ?? null;
+
+  const slotEligiblePlayers = useMemo(() => {
+    if (!openSlotDef) {
+      return [];
+    }
+
+    const wantsPitcher = isPitcherSlot(openSlotDef.group);
+    const trimmed = slotQuery.trim().toLowerCase();
+
+    return fortyMan
+      .filter((player) => (player.position === "P") === wantsPitcher)
+      .filter((player) => !assignedIds.has(player.id))
+      .filter((player) => !trimmed || player.fullName.toLowerCase().includes(trimmed))
+      .slice(0, 8);
+  }, [openSlotDef, fortyMan, assignedIds, slotQuery]);
+
   function unassignPlayer(playerId: number) {
     setAssignments((current) => {
       const next = { ...current };
@@ -162,6 +264,19 @@ export default function RosterBuilder({
           next[slotId] = null;
         }
       }
+      return next;
+    });
+  }
+
+  function assignPlayerToSlot(slot: SlotDef, playerId: number) {
+    setAssignments((current) => {
+      const next = { ...current };
+      for (const slotId of Object.keys(next)) {
+        if (next[slotId] === playerId) {
+          next[slotId] = null;
+        }
+      }
+      next[slot.id] = playerId;
       return next;
     });
   }
@@ -180,16 +295,7 @@ export default function RosterBuilder({
       return;
     }
 
-    setAssignments((current) => {
-      const next = { ...current };
-      for (const slotId of Object.keys(next)) {
-        if (next[slotId] === playerId) {
-          next[slotId] = null;
-        }
-      }
-      next[slot.id] = playerId;
-      return next;
-    });
+    assignPlayerToSlot(slot, playerId);
   }
 
   function handleDropOnRosterList(event: React.DragEvent) {
@@ -198,6 +304,17 @@ export default function RosterBuilder({
     if (!Number.isNaN(playerId)) {
       unassignPlayer(playerId);
     }
+  }
+
+  function toggleSlotOpen(slot: SlotDef) {
+    setSlotQuery("");
+    setOpenSlotId((current) => (current === slot.id ? null : slot.id));
+  }
+
+  function selectForSlot(slot: SlotDef, player: SimplePlayer) {
+    assignPlayerToSlot(slot, player.id);
+    setOpenSlotId(null);
+    setSlotQuery("");
   }
 
   function addToFortyMan(player: SimplePlayer): boolean {
@@ -218,6 +335,7 @@ export default function RosterBuilder({
     }
 
     setFortyMan((current) => [...current, { id: player.id, fullName: player.fullName, position: player.position }]);
+    setRemovedPlayers((current) => current.filter((p) => p.id !== player.id));
     return true;
   }
 
@@ -228,8 +346,12 @@ export default function RosterBuilder({
   }
 
   function removeFromFortyMan(playerId: number) {
-    setFortyMan((current) => current.filter((player) => player.id !== playerId));
+    const player = fortyManById.get(playerId);
+    setFortyMan((current) => current.filter((p) => p.id !== playerId));
     unassignPlayer(playerId);
+    if (player) {
+      setRemovedPlayers((current) => [...current, player]);
+    }
   }
 
   const addTabButtonStyle = (isActive: boolean): React.CSSProperties => ({
@@ -247,6 +369,10 @@ export default function RosterBuilder({
 
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
+      {openSlotId && (
+        <div onClick={() => setOpenSlotId(null)} style={{ position: "fixed", inset: 0, zIndex: 10 }} />
+      )}
+
       <p style={{ margin: 0, color: "var(--muted)", fontWeight: 700 }}>
         {filledCount} / {TOTAL_SLOTS} roster spots filled
       </p>
@@ -261,31 +387,43 @@ export default function RosterBuilder({
               style={{
                 position: "relative",
                 flex: "1 1 auto",
-                aspectRatio: "1 / 1",
+                aspectRatio: "1 / 1.15",
                 borderRadius: "18px",
                 border: "1px solid var(--line)",
                 background: "var(--panel)",
               }}
             >
               {DIAMOND_SLOTS.map((slot) => (
-                <SlotButton
+                <SlotCell
                   key={slot.id}
                   slot={slot}
                   player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                  isOpen={openSlotId === slot.id}
+                  onToggleOpen={toggleSlotOpen}
                   onDrop={handleDropOnSlot}
                   onDragStart={handleDragStart}
                   onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
+                  query={slotQuery}
+                  onQueryChange={setSlotQuery}
+                  eligiblePlayers={slotEligiblePlayers}
+                  onSelect={selectForSlot}
                 />
               ))}
             </div>
 
             <div style={{ width: "72px", flexShrink: 0 }}>
-              <SlotButton
+              <SlotCell
                 slot={DH_SLOT}
                 player={fortyManById.get(assignments[DH_SLOT.id] ?? -1) ?? null}
+                isOpen={openSlotId === DH_SLOT.id}
+                onToggleOpen={toggleSlotOpen}
                 onDrop={handleDropOnSlot}
                 onDragStart={handleDragStart}
                 onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
+                query={slotQuery}
+                onQueryChange={setSlotQuery}
+                eligiblePlayers={slotEligiblePlayers}
+                onSelect={selectForSlot}
               />
             </div>
           </div>
@@ -297,13 +435,19 @@ export default function RosterBuilder({
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "0.5rem" }}>
             {ROTATION_SLOTS.map((slot) => (
-              <SlotButton
+              <SlotCell
                 key={slot.id}
                 slot={slot}
                 player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                isOpen={openSlotId === slot.id}
+                onToggleOpen={toggleSlotOpen}
                 onDrop={handleDropOnSlot}
                 onDragStart={handleDragStart}
                 onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
+                query={slotQuery}
+                onQueryChange={setSlotQuery}
+                eligiblePlayers={slotEligiblePlayers}
+                onSelect={selectForSlot}
               />
             ))}
           </div>
@@ -313,13 +457,19 @@ export default function RosterBuilder({
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "0.5rem" }}>
             {BULLPEN_SLOTS.map((slot) => (
-              <SlotButton
+              <SlotCell
                 key={slot.id}
                 slot={slot}
                 player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                isOpen={openSlotId === slot.id}
+                onToggleOpen={toggleSlotOpen}
                 onDrop={handleDropOnSlot}
                 onDragStart={handleDragStart}
                 onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
+                query={slotQuery}
+                onQueryChange={setSlotQuery}
+                eligiblePlayers={slotEligiblePlayers}
+                onSelect={selectForSlot}
               />
             ))}
           </div>
@@ -329,13 +479,19 @@ export default function RosterBuilder({
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "0.5rem" }}>
             {BENCH_SLOTS.map((slot) => (
-              <SlotButton
+              <SlotCell
                 key={slot.id}
                 slot={slot}
                 player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                isOpen={openSlotId === slot.id}
+                onToggleOpen={toggleSlotOpen}
                 onDrop={handleDropOnSlot}
                 onDragStart={handleDragStart}
                 onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
+                query={slotQuery}
+                onQueryChange={setSlotQuery}
+                eligiblePlayers={slotEligiblePlayers}
+                onSelect={selectForSlot}
               />
             ))}
           </div>
@@ -448,6 +604,66 @@ export default function RosterBuilder({
                   onClick={() => activateFromIL(player)}
                   aria-label={`Activate ${player.fullName} onto the 40-man roster`}
                   title="Activate onto 40-man"
+                  style={{
+                    width: "1.3rem",
+                    height: "1.3rem",
+                    borderRadius: "50%",
+                    border: "none",
+                    background: "rgba(15,122,56,0.15)",
+                    color: "#0f7a38",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  +
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div>
+        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
+          Removed From 40-Man
+        </p>
+        <div
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            background: "var(--panel)",
+            padding: "1.15rem",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.5rem",
+          }}
+        >
+          {removedPlayers.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--muted)" }}>No players have been removed from the 40-man.</p>
+          ) : (
+            removedPlayers.map((player) => (
+              <span
+                key={player.id}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.3rem 0.3rem 0.3rem 0.7rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--line)",
+                  background: "rgba(15,31,61,0.02)",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                }}
+              >
+                {player.fullName}
+                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                <button
+                  type="button"
+                  onClick={() => addToFortyMan(player)}
+                  aria-label={`Add ${player.fullName} back to the 40-man roster`}
+                  title="Add back to 40-man"
                   style={{
                     width: "1.3rem",
                     height: "1.3rem",
