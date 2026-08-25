@@ -18,12 +18,14 @@ import {
 } from "@/lib/mlb";
 import { getArticlesForPlayer } from "@/lib/articles";
 import { getPlayerGrades } from "@/lib/grades";
+import { getPodcastMentionsForPlayer } from "@/lib/podcast-mentions";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
 import TeamSplitSelect from "@/components/players/TeamSplitSelect";
 import PlayerSearch from "@/components/players/PlayerSearch";
 import PlayerGrades from "@/components/players/PlayerGrades";
+import PodcastMentions from "@/components/players/PodcastMentions";
 
 type PlayerPageProps = {
   params: Promise<{ id: string }>;
@@ -181,11 +183,12 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   const requestedYear = Number.parseInt(yearParam ?? "", 10);
   const selectedYear = years.includes(requestedYear) ? requestedYear : years[0] ?? currentYear;
 
-  const [yearStats, handednessSplits, league, playerGrades] = await Promise.all([
+  const [yearStats, handednessSplits, league, playerGrades, podcastMentions] = await Promise.all([
     getPlayerYearStats(playerId, selectedYear, group),
     getPlayerHandednessSplits(playerId, selectedYear, group),
     getLeagueAverages(selectedYear),
     getPlayerGrades(bio.fullName),
+    getPodcastMentionsForPlayer(bio.fullName),
   ]);
 
   const hasMultipleTeams = yearStats.seasonTeams.length > 1;
@@ -534,6 +537,16 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               </Link>
             ))}
           </div>
+        </section>
+      )}
+
+      {podcastMentions.length > 0 && (
+        <section
+          className="container fade-up player-page-section"
+          style={{ animationDelay: "0.26s", minWidth: 0 }}
+        >
+          <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Podcast Mentions</h2>
+          <PodcastMentions mentions={podcastMentions} />
         </section>
       )}
     </div>
