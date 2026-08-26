@@ -15,6 +15,46 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+type TransactionColor = { background: string; color: string };
+
+// Grouped by what actually happened to the player, not the raw MLB
+// typeDesc string, since e.g. "Recalled"/"Selected"/"Rule 5 Selection"
+// are all really "called up to the majors."
+const TRANSACTION_COLORS: Record<string, TransactionColor> = {
+  Trade: { background: "rgba(124,58,237,0.12)", color: "#7c3aed" },
+  Acquired: { background: "rgba(124,58,237,0.12)", color: "#7c3aed" },
+  Obtained: { background: "rgba(124,58,237,0.12)", color: "#7c3aed" },
+
+  Recalled: { background: "rgba(22,163,74,0.12)", color: "#16a34a" },
+  Selected: { background: "rgba(22,163,74,0.12)", color: "#16a34a" },
+  "Rule 5 Selection": { background: "rgba(22,163,74,0.12)", color: "#16a34a" },
+
+  Optioned: { background: "rgba(217,119,6,0.14)", color: "#b45309" },
+  Outrighted: { background: "rgba(217,119,6,0.14)", color: "#b45309" },
+  Assigned: { background: "rgba(217,119,6,0.14)", color: "#b45309" },
+  "Rule 5 Draft Minors": { background: "rgba(217,119,6,0.14)", color: "#b45309" },
+
+  "Designated for Assignment": { background: "rgba(180,35,24,0.12)", color: "#b42318" },
+  Released: { background: "rgba(180,35,24,0.12)", color: "#b42318" },
+  Returned: { background: "rgba(180,35,24,0.12)", color: "#b42318" },
+  "Declared Free Agency": { background: "rgba(180,35,24,0.12)", color: "#b42318" },
+  Retired: { background: "rgba(180,35,24,0.12)", color: "#b42318" },
+
+  Signed: { background: "rgba(29,78,216,0.12)", color: "#1d4ed8" },
+  "Signed as Free Agent": { background: "rgba(29,78,216,0.12)", color: "#1d4ed8" },
+  Drafted: { background: "rgba(29,78,216,0.12)", color: "#1d4ed8" },
+  "Claimed Off Waivers": { background: "rgba(29,78,216,0.12)", color: "#1d4ed8" },
+};
+
+const DEFAULT_TRANSACTION_COLOR: TransactionColor = {
+  background: "rgba(15,31,61,0.06)",
+  color: "var(--accent-soft)",
+};
+
+function transactionColor(typeDesc: string): TransactionColor {
+  return TRANSACTION_COLORS[typeDesc] ?? DEFAULT_TRANSACTION_COLOR;
+}
+
 function TransactionDescription({
   description,
   people,
@@ -114,8 +154,8 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
                         alignItems: "center",
                         padding: "0.2rem 0.6rem",
                         borderRadius: "999px",
-                        background: "rgba(15,31,61,0.06)",
-                        color: "var(--accent-soft)",
+                        background: transactionColor(transaction.typeDesc).background,
+                        color: transactionColor(transaction.typeDesc).color,
                         fontWeight: 700,
                         fontSize: "0.75rem",
                         textTransform: "uppercase",
