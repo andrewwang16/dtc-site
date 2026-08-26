@@ -284,6 +284,24 @@ a {
     padding: 0.5rem !important;
   }
 
+  .statcast-row {
+    grid-template-columns: 105px 24px 1fr !important;
+    gap: 0.4rem !important;
+  }
+
+  .statcast-label {
+    font-size: 0.74rem !important;
+  }
+
+  .statcast-value {
+    font-size: 0.78rem !important;
+  }
+
+  .statcast-marker {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
   .player-page-topbar .kicker {
     font-size: 0.56rem !important;
     margin-bottom: 0.3rem !important;
