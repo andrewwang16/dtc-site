@@ -211,6 +211,11 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         : Promise.resolve<Record<string, number>>({}),
     ]);
 
+  // Below this, the Statcast card looks sparse/awkward if stretched to
+  // match Season Stats' (usually taller) height, so only equalize height
+  // when there's enough data to fill it reasonably.
+  const hasEnoughStatcastData = statcastMetrics.length >= 10;
+
   const hasMultipleTeams = yearStats.seasonTeams.length > 1;
   const requestedTeamId = Number.parseInt(teamParam ?? "", 10);
   const selectedTeamStint = hasMultipleTeams
@@ -367,7 +372,10 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         className="container fade-up player-page-section"
         style={{ animationDelay: "0.08s" }}
       >
-        <div className="player-stats-statcast-grid">
+        <div
+          className="player-stats-statcast-grid"
+          style={{ alignItems: hasEnoughStatcastData ? "stretch" : "start" }}
+        >
           <div
             style={{
               border: "1px solid var(--line)",
@@ -464,10 +472,21 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               background: "var(--panel)",
               padding: "1.15rem",
               minWidth: 0,
+              display: "flex",
+              flexDirection: "column",
             }}
           >
             <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Statcast</h2>
-            <StatcastPercentiles metrics={statcastMetrics} />
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                flex: hasEnoughStatcastData ? 1 : undefined,
+              }}
+            >
+              <StatcastPercentiles metrics={statcastMetrics} />
+            </div>
           </div>
         </div>
       </section>
