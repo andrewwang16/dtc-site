@@ -1,14 +1,17 @@
+"use client";
+
+import { useState } from "react";
 import type { StatcastPercentile } from "@/lib/statcast";
 
-// Red (bad) -> light gray (average) -> blue (good), matching Baseball
+// Blue (bad) -> light gray (average) -> red (good), matching Baseball
 // Savant's own percentile-chart coloring.
 function percentileColor(percentile: number) {
   const clamped = Math.max(0, Math.min(100, percentile));
 
   const stops =
     clamped <= 50
-      ? { from: [214, 80, 74], to: [225, 225, 225], t: clamped / 50 }
-      : { from: [225, 225, 225], to: [63, 110, 214], t: (clamped - 50) / 50 };
+      ? { from: [63, 110, 214], to: [225, 225, 225], t: clamped / 50 }
+      : { from: [225, 225, 225], to: [214, 80, 74], t: (clamped - 50) / 50 };
 
   const [r1, g1, b1] = stops.from;
   const [r2, g2, b2] = stops.to;
@@ -26,6 +29,17 @@ function PercentileRow({ metric }: { metric: StatcastPercentile }) {
     <div style={{ display: "grid", gridTemplateColumns: "150px 1fr", alignItems: "center", gap: "0.85rem" }}>
       <span style={{ fontWeight: 700, fontSize: "0.88rem" }}>{metric.label}</span>
       <div style={{ position: "relative", height: "10px", borderRadius: "999px", background: "var(--line)" }}>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            height: "100%",
+            width: `${metric.percentile}%`,
+            borderRadius: "999px",
+            background: color,
+          }}
+        />
         <div
           style={{
             position: "absolute",
@@ -54,20 +68,58 @@ function PercentileRow({ metric }: { metric: StatcastPercentile }) {
 }
 
 export default function StatcastPercentiles({ metrics }: { metrics: StatcastPercentile[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
   if (metrics.length === 0) {
     return <p style={{ color: "var(--muted)" }}>No Statcast data available for this season yet.</p>;
   }
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
-      <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
-        League percentile rank for each metric — 100 is best, 0 is worst.
-      </p>
-      <div style={{ display: "grid", gap: "0.85rem" }}>
-        {metrics.map((metric) => (
-          <PercentileRow key={metric.key} metric={metric} />
-        ))}
-      </div>
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          justifySelf: "start",
+          border: "1px solid var(--line)",
+          background: "var(--panel)",
+          color: "var(--text)",
+          fontWeight: 700,
+          borderRadius: "999px",
+          padding: "0.55rem 1.1rem",
+          cursor: "pointer",
+          fontSize: "0.85rem",
+        }}
+      >
+        {isOpen ? "Hide" : "Show"} Percentile Rankings
+        <span
+          style={{
+            fontSize: "0.65rem",
+            display: "inline-block",
+            transform: isOpen ? "rotate(180deg)" : "none",
+            transition: "transform 0.15s ease",
+          }}
+        >
+          ▼
+        </span>
+      </button>
+
+      {isOpen && (
+        <>
+          <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
+            League percentile rank for each metric — red is elite, blue is below average.
+          </p>
+          <div style={{ display: "grid", gap: "0.85rem" }}>
+            {metrics.map((metric) => (
+              <PercentileRow key={metric.key} metric={metric} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
