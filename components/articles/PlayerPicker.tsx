@@ -9,11 +9,13 @@ export default function PlayerPicker({
   selected,
   onSelect,
   onClear,
+  placeholder = "Search Cardinals players to attach...",
 }: {
   roster: RosterEntry[];
   selected: RosterEntry | null;
   onSelect: (player: RosterEntry) => void;
   onClear: () => void;
+  placeholder?: string;
 }) {
   const [query, setQuery] = useState("");
 
@@ -99,7 +101,7 @@ export default function PlayerPicker({
         type="text"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search Cardinals players to attach..."
+        placeholder={placeholder}
         style={{
           width: "100%",
           padding: "0.75rem 1rem",

@@ -29,6 +29,7 @@ const navItems: NavItem[] = [
       { label: "Trends", href: "/hot-cold" },
       { label: "Transactions", href: "/transactions" },
       { label: "Roster Builder", href: "/roster-builder" },
+      { label: "Compare Players", href: "/compare" },
     ],
   },
   { label: "Prospects", href: "/prospects" },
