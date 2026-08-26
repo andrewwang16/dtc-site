@@ -231,7 +231,7 @@ export default function AboutUsPage() {
     <div
       style={{
         display: "grid",
-        gap: "3rem",
+        gap: "1.5rem",
         paddingTop: "2.2rem",
         paddingBottom: "4rem",
       }}

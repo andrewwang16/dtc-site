@@ -221,7 +221,7 @@ export default async function HotColdPage() {
     <div
       style={{
         display: "grid",
-        gap: "3rem",
+        gap: "1.5rem",
         paddingBottom: "4rem",
         paddingTop: "2.2rem",
       }}

@@ -18,7 +18,7 @@ export default async function RosterBuilderPage() {
   const hasAccess = hasPremiumAccess(session?.user);
 
   return (
-    <div style={{ display: "grid", gap: "2rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
+    <div style={{ display: "grid", gap: "1rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up">
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
           <p className="kicker">Players</p>

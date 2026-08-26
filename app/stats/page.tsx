@@ -587,7 +587,7 @@ export default async function StatsPage() {
   const data = await loadStatsPageData(year);
 
   return (
-    <div style={{ display: "grid", gap: "5.5rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
+    <div style={{ display: "grid", gap: "2.75rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up">
         <p className="kicker">Players · Leaders</p>
         <h1 className="section-title">Cardinals Leaderboards</h1>

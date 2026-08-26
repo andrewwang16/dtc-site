@@ -77,7 +77,7 @@ export default async function SchedulePage({ searchParams }: SchedulePageProps) 
   }).format(new Date(year, month - 1, 1));
 
   return (
-    <div style={{ display: "grid", gap: "5.5rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
+    <div style={{ display: "grid", gap: "2.75rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up">
         <p className="kicker">Schedule</p>
         <h1 className="section-title">Cardinals Schedule</h1>

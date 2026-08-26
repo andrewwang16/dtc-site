@@ -247,7 +247,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       className="player-page-root"
       style={{
         display: "grid",
-        gap: "3.5rem",
+        gap: "1.75rem",
         paddingBottom: "4rem",
         paddingTop: "2.2rem",
       }}

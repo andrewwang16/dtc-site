@@ -13,7 +13,7 @@ export default async function NewArticlePage() {
   const roster = await getCardinalsRoster(new Date().getFullYear());
 
   return (
-    <div style={{ display: "grid", gap: "2rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
+    <div style={{ display: "grid", gap: "1rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up" style={{ maxWidth: "760px", margin: "0 auto", width: "100%" }}>
         <p className="kicker">Articles</p>
         <h1 className="section-title">Write Article</h1>

@@ -220,7 +220,7 @@ export default async function PodcastPage({
     <div
       style={{
         display: "grid",
-        gap: "5.5rem",
+        gap: "2.75rem",
         paddingBottom: "4rem",
         paddingTop: "2.2rem",
       }}

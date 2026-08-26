@@ -78,7 +78,7 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
   const hasOlder = safePage < totalPages;
 
   return (
-    <div style={{ display: "grid", gap: "3rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
+    <div style={{ display: "grid", gap: "1.5rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up">
         <p className="kicker">Players</p>
         <h1 className="section-title">Transaction Log</h1>

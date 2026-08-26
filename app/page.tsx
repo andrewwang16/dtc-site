@@ -6,7 +6,7 @@ import WelcomeBanner from "../components/home/WelcomeBanner";
 
 export default function Home() {
   return (
-    <div style={{ display: "grid", gap: "5.5rem", paddingBottom: "4rem" }}>
+    <div style={{ display: "grid", gap: "2.75rem", paddingBottom: "4rem" }}>
 
       <div style={{ paddingTop: "2.2rem" }}>
         <WelcomeBanner />
