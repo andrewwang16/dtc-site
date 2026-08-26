@@ -24,7 +24,7 @@ import {
 import { getArticlesForPlayer } from "@/lib/articles";
 import { getPlayerGrades } from "@/lib/grades";
 import { getPodcastMentionsForPlayer } from "@/lib/podcast-mentions";
-import { getStatcastPercentiles } from "@/lib/statcast";
+import { getStatcastPercentiles, getStatcastNlRanks, isNationalLeagueTeam } from "@/lib/statcast";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
@@ -193,14 +193,26 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   const requestedYear = Number.parseInt(yearParam ?? "", 10);
   const selectedYear = years.includes(requestedYear) ? requestedYear : years[0] ?? currentYear;
 
-  const [yearStats, handednessSplits, league, playerGrades, podcastMentions, statcastMetrics] = await Promise.all([
-    getPlayerYearStats(playerId, selectedYear, group),
-    getPlayerHandednessSplits(playerId, selectedYear, group),
-    getLeagueAverages(selectedYear),
-    getPlayerGrades(bio.fullName),
-    getPodcastMentionsForPlayer(bio.fullName),
-    getStatcastPercentiles(playerId, selectedYear, role === "Pitcher" ? "pitcher" : "batter"),
-  ]);
+  const statcastType = role === "Pitcher" ? "pitcher" : "batter";
+  const isNlPlayer = isNationalLeagueTeam(bio.currentTeam?.id ?? -1);
+
+  const [yearStats, handednessSplits, league, playerGrades, podcastMentions, statcastMetrics, nlRanks] =
+    await Promise.all([
+      getPlayerYearStats(playerId, selectedYear, group),
+      getPlayerHandednessSplits(playerId, selectedYear, group),
+      getLeagueAverages(selectedYear),
+      getPlayerGrades(bio.fullName),
+      getPodcastMentionsForPlayer(bio.fullName),
+      getStatcastPercentiles(playerId, selectedYear, statcastType),
+      isNlPlayer
+        ? getStatcastNlRanks(playerId, selectedYear, statcastType)
+        : Promise.resolve<Record<string, number>>({}),
+    ]);
+
+  const statcastMetricsWithRank = statcastMetrics.map((metric) => ({
+    ...metric,
+    nlRank: nlRanks[metric.key],
+  }));
 
   const hasMultipleTeams = yearStats.seasonTeams.length > 1;
   const requestedTeamId = Number.parseInt(teamParam ?? "", 10);
@@ -358,93 +370,110 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         className="container fade-up player-page-section"
         style={{ animationDelay: "0.08s" }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "1rem",
-            flexWrap: "wrap",
-            marginBottom: "1rem",
-          }}
-        >
-          <h2 className="player-section-title" style={{ margin: 0 }}>Season Stats</h2>
+        <div className="player-stats-statcast-grid">
+          <div
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: "18px",
+              background: "var(--panel)",
+              padding: "1.15rem",
+              minWidth: 0,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "1rem",
+                flexWrap: "wrap",
+                marginBottom: "1rem",
+              }}
+            >
+              <h2 className="player-section-title" style={{ margin: 0 }}>Season Stats</h2>
 
-          <div className="player-header-controls" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-            {isTwoWay && (
-              <div style={{ display: "flex", gap: "0.4rem" }}>
-                <a
-                  href={`/players/${playerId}?year=${selectedYear}&view=hitting`}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "0.55rem 1rem",
-                    borderRadius: "999px",
-                    border: `1px solid ${role === "Hitter" ? "#8a1024" : "var(--line)"}`,
-                    background:
-                      role === "Hitter" ? "rgba(196,30,58,0.18)" : "rgba(15,31,61,0.02)",
-                    color: "var(--text)",
-                    fontWeight: 700,
-                    textDecoration: "none",
-                  }}
-                >
-                  Hitting
-                </a>
-                <a
-                  href={`/players/${playerId}?year=${selectedYear}&view=pitching`}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "0.55rem 1rem",
-                    borderRadius: "999px",
-                    border: `1px solid ${role === "Pitcher" ? "#8a1024" : "var(--line)"}`,
-                    background:
-                      role === "Pitcher" ? "rgba(196,30,58,0.18)" : "rgba(15,31,61,0.02)",
-                    color: "var(--text)",
-                    fontWeight: 700,
-                    textDecoration: "none",
-                  }}
-                >
-                  Pitching
-                </a>
+              <div className="player-header-controls" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                {isTwoWay && (
+                  <div style={{ display: "flex", gap: "0.4rem" }}>
+                    <a
+                      href={`/players/${playerId}?year=${selectedYear}&view=hitting`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "0.55rem 1rem",
+                        borderRadius: "999px",
+                        border: `1px solid ${role === "Hitter" ? "#8a1024" : "var(--line)"}`,
+                        background:
+                          role === "Hitter" ? "rgba(196,30,58,0.18)" : "rgba(15,31,61,0.02)",
+                        color: "var(--text)",
+                        fontWeight: 700,
+                        textDecoration: "none",
+                      }}
+                    >
+                      Hitting
+                    </a>
+                    <a
+                      href={`/players/${playerId}?year=${selectedYear}&view=pitching`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "0.55rem 1rem",
+                        borderRadius: "999px",
+                        border: `1px solid ${role === "Pitcher" ? "#8a1024" : "var(--line)"}`,
+                        background:
+                          role === "Pitcher" ? "rgba(196,30,58,0.18)" : "rgba(15,31,61,0.02)",
+                        color: "var(--text)",
+                        fontWeight: 700,
+                        textDecoration: "none",
+                      }}
+                    >
+                      Pitching
+                    </a>
+                  </div>
+                )}
+
+                {hasMultipleTeams && (
+                  <TeamSplitSelect
+                    playerId={playerId}
+                    year={selectedYear}
+                    view={isTwoWay ? (role === "Pitcher" ? "pitching" : "hitting") : undefined}
+                    teams={yearStats.seasonTeams.map((team) => ({
+                      id: team.teamId,
+                      label: getTeamAbbreviation(team.teamId, team.teamName),
+                    }))}
+                    selectedTeamId={selectedTeamStint?.teamId ?? null}
+                  />
+                )}
+
+                <YearSelect
+                  playerId={playerId}
+                  years={years}
+                  selectedYear={selectedYear}
+                  view={isTwoWay ? (role === "Pitcher" ? "pitching" : "hitting") : undefined}
+                />
               </div>
-            )}
+            </div>
 
-            {hasMultipleTeams && (
-              <TeamSplitSelect
-                playerId={playerId}
-                year={selectedYear}
-                view={isTwoWay ? (role === "Pitcher" ? "pitching" : "hitting") : undefined}
-                teams={yearStats.seasonTeams.map((team) => ({
-                  id: team.teamId,
-                  label: getTeamAbbreviation(team.teamId, team.teamName),
-                }))}
-                selectedTeamId={selectedTeamStint?.teamId ?? null}
-              />
-            )}
-
-            <YearSelect
-              playerId={playerId}
-              years={years}
-              selectedYear={selectedYear}
-              view={isTwoWay ? (role === "Pitcher" ? "pitching" : "hitting") : undefined}
+            <StatTable
+              columns={columns}
+              teamColumn
+              rows={[{ label: String(selectedYear), row: seasonRow, team: seasonTeamLabel }]}
             />
           </div>
+
+          <div
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: "18px",
+              background: "var(--panel)",
+              padding: "1.15rem",
+              minWidth: 0,
+            }}
+          >
+            <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Statcast</h2>
+            <StatcastPercentiles metrics={statcastMetricsWithRank} />
+          </div>
         </div>
-
-        <StatTable
-          columns={columns}
-          teamColumn
-          rows={[{ label: String(selectedYear), row: seasonRow, team: seasonTeamLabel }]}
-        />
-      </section>
-
-      <section
-        className="container fade-up player-page-section"
-        style={{ animationDelay: "0.095s" }}
-      >
-        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Statcast</h2>
-        <StatcastPercentiles metrics={statcastMetrics} />
       </section>
 
       <section

@@ -225,6 +225,19 @@ a {
   min-width: 0;
 }
 
+.player-stats-statcast-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 1200px) {
+  .player-stats-statcast-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 /*
  * Player profile page on mobile: the page itself scrolls vertically
  * like any normal page. Only the wide stat tables scroll internally,
