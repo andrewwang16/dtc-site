@@ -10,6 +10,7 @@ import {
   determinePlayerRole,
   getCardinalsRoster,
   getLeagueAverages,
+  getNlColumnRanks,
   getPlayerBio,
   getPlayerHandednessSplits,
   getPlayerYearStats,
@@ -24,7 +25,7 @@ import {
 import { getArticlesForPlayer } from "@/lib/articles";
 import { getPlayerGrades } from "@/lib/grades";
 import { getPodcastMentionsForPlayer } from "@/lib/podcast-mentions";
-import { getStatcastPercentiles, getStatcastNlRanks, isNationalLeagueTeam } from "@/lib/statcast";
+import { getStatcastPercentiles, isNationalLeagueTeam } from "@/lib/statcast";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
@@ -33,6 +34,7 @@ import PlayerSearch from "@/components/players/PlayerSearch";
 import PlayerGrades from "@/components/players/PlayerGrades";
 import PodcastMentions from "@/components/players/PodcastMentions";
 import StatcastPercentiles from "@/components/players/StatcastPercentiles";
+import SeasonStatCells from "@/components/players/SeasonStatCells";
 
 type PlayerPageProps = {
   params: Promise<{ id: string }>;
@@ -196,7 +198,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   const statcastType = role === "Pitcher" ? "pitcher" : "batter";
   const isNlPlayer = isNationalLeagueTeam(bio.currentTeam?.id ?? -1);
 
-  const [yearStats, handednessSplits, league, playerGrades, podcastMentions, statcastMetrics, nlRanks] =
+  const [yearStats, handednessSplits, league, playerGrades, podcastMentions, statcastMetrics, nlColumnRanks] =
     await Promise.all([
       getPlayerYearStats(playerId, selectedYear, group),
       getPlayerHandednessSplits(playerId, selectedYear, group),
@@ -205,14 +207,9 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       getPodcastMentionsForPlayer(bio.fullName),
       getStatcastPercentiles(playerId, selectedYear, statcastType),
       isNlPlayer
-        ? getStatcastNlRanks(playerId, selectedYear, statcastType)
+        ? getNlColumnRanks(playerId, selectedYear, role)
         : Promise.resolve<Record<string, number>>({}),
     ]);
-
-  const statcastMetricsWithRank = statcastMetrics.map((metric) => ({
-    ...metric,
-    nlRank: nlRanks[metric.key],
-  }));
 
   const hasMultipleTeams = yearStats.seasonTeams.length > 1;
   const requestedTeamId = Number.parseInt(teamParam ?? "", 10);
@@ -454,11 +451,10 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               </div>
             </div>
 
-            <StatTable
-              columns={columns}
-              teamColumn
-              rows={[{ label: String(selectedYear), row: seasonRow, team: seasonTeamLabel }]}
-            />
+            <p style={{ margin: "0 0 0.85rem", color: "var(--muted)", fontSize: "0.85rem" }}>
+              {selectedYear} · {seasonTeamLabel}
+            </p>
+            <SeasonStatCells columns={columns} row={seasonRow} ranks={nlColumnRanks} />
           </div>
 
           <div
@@ -471,7 +467,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             }}
           >
             <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Statcast</h2>
-            <StatcastPercentiles metrics={statcastMetricsWithRank} />
+            <StatcastPercentiles metrics={statcastMetrics} />
           </div>
         </div>
       </section>

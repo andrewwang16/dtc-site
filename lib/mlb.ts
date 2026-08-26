@@ -759,6 +759,77 @@ export function buildStatRow(
   return role === "Pitcher" ? buildPitcherRow(stat, league) : buildHitterRow(stat, league);
 }
 
+// Only columns with a real MLB Stats API leaderboard category are ranked —
+// derived/advanced columns like OPS+, ISO, K%, or the compound W-L don't
+// have one. Rate categories (AVG, ERA, WHIP, etc.) are already restricted
+// to qualified players by the API itself, matching how MLB's own site
+// defines qualification.
+const HITTER_RANK_CATEGORIES: Partial<Record<HitterColumn, string>> = {
+  G: "gamesPlayed",
+  PA: "totalPlateAppearances",
+  AVG: "battingAverage",
+  OBP: "onBasePercentage",
+  SLG: "sluggingPercentage",
+  OPS: "onBasePlusSlugging",
+  HR: "homeRuns",
+  XBH: "extraBaseHits",
+  RBI: "runsBattedIn",
+  SB: "stolenBases",
+};
+
+const PITCHER_RANK_CATEGORIES: Partial<Record<PitcherColumn, string>> = {
+  G: "gamesPlayed",
+  GS: "gamesStarted",
+  SV: "saves",
+  IP: "inningsPitched",
+  ERA: "earnedRunAverage",
+  WHIP: "walksAndHitsPerInningPitched",
+  K: "strikeouts",
+  BB: "walks",
+};
+
+async function fetchCategoryRank(
+  category: string,
+  playerId: number,
+  year: number,
+  group: "hitting" | "pitching"
+): Promise<number | null> {
+  const data = await fetchJson<{
+    leagueLeaders?: Array<{ leaders?: Array<{ rank: number; person: { id: number } }> }>;
+  }>(
+    `https://statsapi.mlb.com/api/v1/stats/leaders?leaderCategories=${category}&season=${year}&sportId=1&leagueId=${NL_LEAGUE_ID}&statGroup=${group}&limit=50`,
+    21_600
+  );
+
+  const leaders = data?.leagueLeaders?.[0]?.leaders ?? [];
+  const entry = leaders.find((leader) => leader.person.id === playerId);
+
+  return entry?.rank ?? null;
+}
+
+// A player's National League rank (top 50 only) for each season-stat
+// column that has a matching leaderboard category. Only meaningful for
+// players on NL teams — callers should gate on that themselves.
+export async function getNlColumnRanks(
+  playerId: number,
+  year: number,
+  role: PlayerRole
+): Promise<Record<string, number>> {
+  const group = role === "Pitcher" ? "pitching" : "hitting";
+  const categories = role === "Pitcher" ? PITCHER_RANK_CATEGORIES : HITTER_RANK_CATEGORIES;
+
+  const entries = await Promise.all(
+    Object.entries(categories).map(async ([column, category]) => {
+      const rank = category ? await fetchCategoryRank(category, playerId, year, group) : null;
+      return [column, rank] as const;
+    })
+  );
+
+  return Object.fromEntries(
+    entries.filter((entry): entry is [string, number] => entry[1] !== null)
+  );
+}
+
 function sumWindow(games: GameLogEntry[], pick: (stat: StatLine) => number | undefined) {
   return games.reduce((total, game) => total + (pick(game.stat) ?? 0), 0);
 }

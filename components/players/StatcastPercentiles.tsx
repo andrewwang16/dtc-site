@@ -19,56 +19,47 @@ function percentileColor(percentile: number) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function PercentileCell({ metric }: { metric: StatcastPercentile }) {
+function PercentileRow({ metric }: { metric: StatcastPercentile }) {
   const color = percentileColor(metric.percentile);
 
   return (
-    <div
-      style={{
-        border: "1px solid var(--line)",
-        borderRadius: "14px",
-        padding: "1rem 0.75rem",
-        display: "grid",
-        gap: "0.6rem",
-        justifyItems: "center",
-        textAlign: "center",
-      }}
-    >
-      <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--muted)" }}>{metric.label}</span>
-      <div
-        style={{
-          width: "76px",
-          height: "76px",
-          borderRadius: "50%",
-          background: color,
-          border: "3px solid var(--panel)",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "1.6rem",
-          fontWeight: 800,
-          color: "white",
-        }}
-      >
-        {metric.percentile}
-      </div>
-      {metric.nlRank && (
-        <span
+    <div style={{ display: "grid", gridTemplateColumns: "150px 1fr", alignItems: "center", gap: "0.85rem" }}>
+      <span style={{ fontWeight: 700, fontSize: "0.88rem" }}>{metric.label}</span>
+      <div style={{ position: "relative", height: "10px", borderRadius: "999px", background: "var(--line)" }}>
+        <div
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "0.2rem 0.6rem",
+            position: "absolute",
+            top: 0,
+            left: 0,
+            height: "100%",
+            width: `${metric.percentile}%`,
             borderRadius: "999px",
-            background: "rgba(15,31,61,0.06)",
-            color: "var(--accent-soft)",
-            fontWeight: 700,
-            fontSize: "0.72rem",
+            background: color,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: `${metric.percentile}%`,
+            transform: "translate(-50%, -50%)",
+            width: "26px",
+            height: "26px",
+            borderRadius: "50%",
+            background: color,
+            border: "2px solid var(--panel)",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "0.68rem",
+            fontWeight: 800,
+            color: "white",
           }}
         >
-          NL #{metric.nlRank}
-        </span>
-      )}
+          {metric.percentile}
+        </div>
+      </div>
     </div>
   );
 }
@@ -83,9 +74,9 @@ export default function StatcastPercentiles({ metrics }: { metrics: StatcastPerc
       <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
         League percentile rank for each metric — red is elite, blue is below average.
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "0.75rem" }}>
+      <div style={{ display: "grid", gap: "0.85rem" }}>
         {metrics.map((metric) => (
-          <PercentileCell key={metric.key} metric={metric} />
+          <PercentileRow key={metric.key} metric={metric} />
         ))}
       </div>
     </div>
