@@ -679,10 +679,6 @@ export const PITCHER_COLUMNS = [
   "BB%",
   "K-BB%",
   "HR/9",
-  "AVG",
-  "OBP",
-  "SLG",
-  "OPS",
   "ERA+",
   "OPS+",
 ] as const;
@@ -750,10 +746,6 @@ export function buildPitcherRow(stat: StatLine | null, league: LeagueAverages): 
     "K-BB%":
       kPercent === null || bbPercent === null ? "-" : formatPercent(kPercent - bbPercent),
     "HR/9": stat.homeRunsPer9 ?? "-",
-    AVG: stat.avg ?? "-",
-    OBP: stat.obp ?? "-",
-    SLG: stat.slg ?? "-",
-    OPS: stat.ops ?? "-",
     "ERA+": formatPlus(computeEraPlus(era, league.lgEra)),
     "OPS+": formatPlus(computeOpsPlus(obp, slg, league.lgObp, league.lgSlg)),
   };

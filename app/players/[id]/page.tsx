@@ -24,6 +24,7 @@ import {
 import { getArticlesForPlayer } from "@/lib/articles";
 import { getPlayerGrades } from "@/lib/grades";
 import { getPodcastMentionsForPlayer } from "@/lib/podcast-mentions";
+import { getStatcastPercentiles } from "@/lib/statcast";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
@@ -31,6 +32,7 @@ import TeamSplitSelect from "@/components/players/TeamSplitSelect";
 import PlayerSearch from "@/components/players/PlayerSearch";
 import PlayerGrades from "@/components/players/PlayerGrades";
 import PodcastMentions from "@/components/players/PodcastMentions";
+import StatcastPercentiles from "@/components/players/StatcastPercentiles";
 
 type PlayerPageProps = {
   params: Promise<{ id: string }>;
@@ -191,12 +193,13 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   const requestedYear = Number.parseInt(yearParam ?? "", 10);
   const selectedYear = years.includes(requestedYear) ? requestedYear : years[0] ?? currentYear;
 
-  const [yearStats, handednessSplits, league, playerGrades, podcastMentions] = await Promise.all([
+  const [yearStats, handednessSplits, league, playerGrades, podcastMentions, statcastMetrics] = await Promise.all([
     getPlayerYearStats(playerId, selectedYear, group),
     getPlayerHandednessSplits(playerId, selectedYear, group),
     getLeagueAverages(selectedYear),
     getPlayerGrades(bio.fullName),
     getPodcastMentionsForPlayer(bio.fullName),
+    getStatcastPercentiles(playerId, selectedYear, role === "Pitcher" ? "pitcher" : "batter"),
   ]);
 
   const hasMultipleTeams = yearStats.seasonTeams.length > 1;
@@ -434,6 +437,14 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           teamColumn
           rows={[{ label: String(selectedYear), row: seasonRow, team: seasonTeamLabel }]}
         />
+      </section>
+
+      <section
+        className="container fade-up player-page-section"
+        style={{ animationDelay: "0.095s" }}
+      >
+        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Statcast</h2>
+        <StatcastPercentiles metrics={statcastMetrics} />
       </section>
 
       <section
