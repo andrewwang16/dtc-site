@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
+  CARDINALS_TEAM_ID,
   formatGameDate,
   formatGameTime,
   getHomeAwayLabel,
@@ -16,6 +17,7 @@ import {
 type BoxPlayer = {
   person: { id: number; fullName: string };
   position?: { abbreviation: string };
+  allPositions?: Array<{ abbreviation: string }>;
   battingOrder?: string;
   stats: {
     batting?: {
@@ -34,6 +36,15 @@ type BoxPlayer = {
       earnedRuns?: number;
       baseOnBalls?: number;
       strikeOuts?: number;
+    };
+  };
+  seasonStats?: {
+    batting?: {
+      avg?: string;
+      ops?: string;
+    };
+    pitching?: {
+      era?: string;
     };
   };
 };
@@ -91,6 +102,19 @@ function PlayerNameLink({ id, name }: { id?: number; name?: string }) {
 
 function getBattingSlot(battingOrder: string) {
   return Math.floor(Number(battingOrder) / 100);
+}
+
+// Players who switched positions mid-game (e.g. moved from 3B to SS) have
+// every position they played in allPositions, in order; fall back to the
+// single current position when that's not present.
+function positionSummary(player: BoxPlayer) {
+  const positions = player.allPositions?.length
+    ? player.allPositions.map((position) => position.abbreviation)
+    : player.position
+      ? [player.position.abbreviation]
+      : [];
+
+  return positions.join("/");
 }
 
 function teamAbbreviation(team: { name: string; teamName?: string; abbreviation?: string }) {
@@ -191,26 +215,28 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
         >
           <colgroup>
             <col style={{ width: "6%" }} />
-            <col style={{ width: "27%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "10%" }} />
+            <col style={{ width: "30%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
           </colgroup>
           <thead>
             <tr style={{ textAlign: "center", color: "var(--muted)" }}>
               <th style={cellStyle} aria-label="Batting order" />
               <th style={{ ...cellStyle, textAlign: "left" }}>Batting</th>
-              <th style={cellStyle}>Pos</th>
               <th style={cellStyle}>AB</th>
               <th style={cellStyle}>R</th>
               <th style={cellStyle}>H</th>
               <th style={cellStyle}>RBI</th>
               <th style={cellStyle}>BB</th>
               <th style={cellStyle}>SO</th>
+              <th style={cellStyle}>AVG</th>
+              <th style={cellStyle}>OPS</th>
             </tr>
           </thead>
           <tbody>
@@ -219,19 +245,23 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
                 <td style={{ ...cellStyle, color: "var(--muted)" }}>{isStarter ? slot : "-"}</td>
                 <td style={{ ...cellStyle, textAlign: "left", wordBreak: "break-word" }}>
                   <PlayerNameLink id={player.person.id} name={player.person.fullName} />
+                  {positionSummary(player) && (
+                    <span style={{ color: "var(--muted)", fontWeight: 400 }}> {positionSummary(player)}</span>
+                  )}
                   {subNote && (
                     <div style={{ color: "var(--muted)", fontSize: "0.58rem", fontWeight: 400 }}>
                       {subNote}
                     </div>
                   )}
                 </td>
-                <td style={cellStyle}>{player.position?.abbreviation ?? "-"}</td>
                 <td style={cellStyle}>{player.stats.batting?.atBats ?? 0}</td>
                 <td style={cellStyle}>{player.stats.batting?.runs ?? 0}</td>
                 <td style={cellStyle}>{player.stats.batting?.hits ?? 0}</td>
                 <td style={cellStyle}>{player.stats.batting?.rbi ?? 0}</td>
                 <td style={cellStyle}>{player.stats.batting?.baseOnBalls ?? 0}</td>
                 <td style={cellStyle}>{player.stats.batting?.strikeOuts ?? 0}</td>
+                <td style={cellStyle}>{player.seasonStats?.batting?.avg ?? "-"}</td>
+                <td style={cellStyle}>{player.seasonStats?.batting?.ops ?? "-"}</td>
               </tr>
             ))}
           </tbody>
@@ -248,13 +278,14 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
           }}
         >
           <colgroup>
-            <col style={{ width: "38%" }} />
-            <col style={{ width: "10.33%" }} />
-            <col style={{ width: "10.33%" }} />
-            <col style={{ width: "10.33%" }} />
-            <col style={{ width: "10.33%" }} />
-            <col style={{ width: "10.33%" }} />
-            <col style={{ width: "10.33%" }} />
+            <col style={{ width: "34%" }} />
+            <col style={{ width: "9.43%" }} />
+            <col style={{ width: "9.43%" }} />
+            <col style={{ width: "9.43%" }} />
+            <col style={{ width: "9.43%" }} />
+            <col style={{ width: "9.43%" }} />
+            <col style={{ width: "9.43%" }} />
+            <col style={{ width: "9.42%" }} />
           </colgroup>
           <thead>
             <tr style={{ textAlign: "center", color: "var(--muted)" }}>
@@ -265,6 +296,7 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
               <th style={cellStyle}>ER</th>
               <th style={cellStyle}>BB</th>
               <th style={cellStyle}>K</th>
+              <th style={cellStyle}>ERA</th>
             </tr>
           </thead>
           <tbody>
@@ -280,6 +312,7 @@ function TeamBoxScore({ label, team }: { label: string; team: BoxTeam }) {
                 <td style={cellStyle}>{player.stats.pitching?.earnedRuns ?? 0}</td>
                 <td style={cellStyle}>{player.stats.pitching?.baseOnBalls ?? 0}</td>
                 <td style={cellStyle}>{player.stats.pitching?.strikeOuts ?? 0}</td>
+                <td style={cellStyle}>{player.seasonStats?.pitching?.era ?? "-"}</td>
               </tr>
             ))}
           </tbody>
@@ -299,7 +332,9 @@ export default function GameDetailModal({
   const [feed, setFeed] = useState<FeedLiveResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [activeTeam, setActiveTeam] = useState<"away" | "home">("away");
+  const [activeTeam, setActiveTeam] = useState<"away" | "home">(
+    game.teams.home.team.id === CARDINALS_TEAM_ID ? "home" : "away"
+  );
 
   const postponed = isPostponed(game);
   const isPreview = game.status.abstractGameState === "Preview";

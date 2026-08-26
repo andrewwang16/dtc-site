@@ -646,12 +646,11 @@ a {
 }
 
 /*
- * The box score's two team panels sit side by side by default. Below
- * 600px that gets too cramped to read even with the smaller fonts, so
- * switch to tabs showing one team at a time instead.
+ * The box score shows one team at a time via tabs, at every screen size —
+ * previously desktop showed both team panels side by side with no tabs.
  */
 .box-score-tabs {
-  display: none;
+  display: flex;
   gap: 0.5rem;
   margin-bottom: 0.6rem;
 }
@@ -675,25 +674,13 @@ a {
 }
 
 .box-score-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.85rem;
+  display: block;
 }
 
-@media (max-width: 600px) {
-  .box-score-tabs {
-    display: flex;
-  }
+.box-score-team-panel {
+  display: none;
+}
 
-  .box-score-split {
-    display: block;
-  }
-
-  .box-score-team-panel {
-    display: none;
-  }
-
-  .box-score-team-panel.active {
-    display: block;
-  }
+.box-score-team-panel.active {
+  display: block;
 }
