@@ -114,7 +114,7 @@ function positionSummary(player: BoxPlayer) {
       ? [player.position.abbreviation]
       : [];
 
-  return positions.join("/");
+  return positions.join("-");
 }
 
 function teamAbbreviation(team: { name: string; teamName?: string; abbreviation?: string }) {
@@ -381,7 +381,7 @@ export default function GameDetailModal({
   const lineTeams = feed?.liveData?.linescore?.teams;
 
   const teamColWidth = 34;
-  const statColWidth = 8;
+  const statColWidth = 5;
   const inningColWidth =
     innings.length > 0 ? (100 - teamColWidth - statColWidth * 3) / innings.length : 0;
 
@@ -590,7 +590,7 @@ export default function GameDetailModal({
             )}
 
             {game.decisions && (
-              <p style={{ margin: 0, color: "var(--muted)" }}>
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.78rem" }}>
                 {game.decisions.winner?.fullName && (
                   <>
                     W: <PlayerNameLink id={game.decisions.winner.id} name={game.decisions.winner.fullName} />
