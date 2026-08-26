@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import BoxScoreButton from "./BoxScoreButton";
 import { getTeamNotablePositionPlayers, type NotablePlayer } from "@/lib/mlb";
+import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
+import TeamLogo from "@/components/shared/TeamLogo";
 
 type MlbPlayerRef = {
   id: number;
@@ -669,7 +671,7 @@ function NotablePlayersList({
                 border: "1px solid var(--line)",
               }}
             >
-              <img
+              <PlayerHeadshot
                 src={playerHeadshotUrl(player.id, 80)}
                 alt={player.fullName}
                 style={{
@@ -1190,12 +1192,11 @@ export default async function CardinalsLiveScore() {
                         gap: ".4rem",
                       }}
                     >
-                      <img
+                      <TeamLogo
                         src={teamLogoUrl(
                           away.team.id
                         )}
-                        width={20}
-                        height={20}
+                        style={{ width: 20, height: 20 }}
                         alt=""
                       />
                       <span>{away.team.teamName ?? away.team.name}</span>
@@ -1292,12 +1293,11 @@ export default async function CardinalsLiveScore() {
                         gap: ".4rem",
                       }}
                     >
-                      <img
+                      <TeamLogo
                         src={teamLogoUrl(
                           home.team.id
                         )}
-                        width={20}
-                        height={20}
+                        style={{ width: 20, height: 20 }}
                         alt=""
                       />
                       <span>{home.team.teamName ?? home.team.name}</span>
@@ -1485,7 +1485,7 @@ export default async function CardinalsLiveScore() {
                         "1px solid var(--line)",
                     }}
                   >
-                    <img
+                    <PlayerHeadshot
                       src={playerHeadshotUrl(
                         awayProbablePitcher.id,
                         160
@@ -1592,7 +1592,7 @@ export default async function CardinalsLiveScore() {
                         "1px solid var(--line)",
                     }}
                   >
-                    <img
+                    <PlayerHeadshot
                       src={playerHeadshotUrl(
                         homeProbablePitcher.id,
                         160
@@ -1736,7 +1736,7 @@ export default async function CardinalsLiveScore() {
                           "1px solid var(--line)",
                       }}
                     >
-                      <img
+                      <PlayerHeadshot
                         src={playerHeadshotUrl(
                           selectedGame.decisions.winner.id,
                           160
@@ -1834,7 +1834,7 @@ export default async function CardinalsLiveScore() {
                           "1px solid var(--line)",
                       }}
                     >
-                      <img
+                      <PlayerHeadshot
                         src={playerHeadshotUrl(
                           selectedGame.decisions.loser.id,
                           160
@@ -1933,7 +1933,7 @@ export default async function CardinalsLiveScore() {
                             "1px solid var(--line)",
                         }}
                       >
-                        <img
+                        <PlayerHeadshot
                           src={playerHeadshotUrl(
                             selectedGame.decisions.save.id,
                             160
@@ -2050,7 +2050,7 @@ export default async function CardinalsLiveScore() {
                         "1px solid var(--line)",
                     }}
                   >
-                    <img
+                    <PlayerHeadshot
                       src={playerHeadshotUrl(
                         hitter.id,
                         160
@@ -2157,7 +2157,7 @@ export default async function CardinalsLiveScore() {
                         "1px solid var(--line)",
                     }}
                   >
-                    <img
+                    <PlayerHeadshot
                       src={playerHeadshotUrl(
                         pitcher.id,
                         160
@@ -2274,7 +2274,7 @@ export default async function CardinalsLiveScore() {
                       border: "1px solid var(--line)",
                     }}
                   >
-                    <img
+                    <PlayerHeadshot
                       src={playerHeadshotUrl(performer.id, 160)}
                       alt={performer.fullName}
                       style={{

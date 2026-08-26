@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import {
   computeRollingValue,
   formatRollingValue,
@@ -156,7 +157,7 @@ function MoverList({
                   border: "1px solid var(--line)",
                 }}
               >
-                <img
+                <PlayerHeadshot
                   src={playerHeadshotUrl(entry.id, 80)}
                   alt={entry.name}
                   style={{

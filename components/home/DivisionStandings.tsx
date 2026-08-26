@@ -5,6 +5,7 @@ import {
   teamLogoUrl,
   type TeamStanding,
 } from "@/lib/mlb";
+import TeamLogo from "@/components/shared/TeamLogo";
 
 const STANDINGS_TABLE_MAX_HEIGHT = "230px";
 
@@ -89,11 +90,10 @@ function StandingsTable({
                     </td>
                     <td style={{ padding: "0.45rem 0.5rem", whiteSpace: "nowrap" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
-                        <img
+                        <TeamLogo
                           src={teamLogoUrl(team.teamId)}
                           alt=""
-                          width={20}
-                          height={20}
+                          style={{ width: 20, height: 20 }}
                         />
                         {team.teamName}
                       </div>

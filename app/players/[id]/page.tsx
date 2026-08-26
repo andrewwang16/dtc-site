@@ -2,6 +2,8 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { hasPremiumAccess } from "@/lib/access";
 import { PremiumBadge, PremiumLockCard } from "@/components/shared/PremiumLock";
+import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
+import TeamLogo from "@/components/shared/TeamLogo";
 import {
   buildStatRow,
   computeAgeAsOf,
@@ -278,7 +280,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               border: "1px solid var(--line)",
             }}
           >
-            <img
+            <PlayerHeadshot
               src={playerHeadshotUrl(playerId, 280)}
               alt={bio.fullName}
               style={{
@@ -307,11 +309,10 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
                   marginTop: "0.6rem",
                 }}
               >
-                <img
+                <TeamLogo
                   src={teamLogoUrl(bio.currentTeam.id)}
                   alt={bio.currentTeam.name}
-                  width={28}
-                  height={28}
+                  style={{ width: 28, height: 28 }}
                 />
                 <span style={{ color: "var(--muted)" }}>{bio.currentTeam.name}</span>
               </div>

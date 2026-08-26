@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { playerHeadshotUrl, type RosterEntry } from "@/lib/mlb";
+import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 
 export default function PlayerPicker({
   roster,
@@ -54,7 +55,7 @@ export default function PlayerPicker({
               border: "1px solid var(--line)",
             }}
           >
-            <img
+            <PlayerHeadshot
               src={playerHeadshotUrl(selected.id, 80)}
               alt={selected.fullName}
               style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
@@ -150,7 +151,7 @@ export default function PlayerPicker({
                     border: "1px solid var(--line)",
                   }}
                 >
-                  <img
+                  <PlayerHeadshot
                     src={playerHeadshotUrl(player.id, 80)}
                     alt={player.fullName}
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import PlayerSearch from "@/components/players/PlayerSearch";
 import DepthChartView from "@/components/roster/DepthChartView";
 import { getCardinalsRoster, playerHeadshotUrl, type RosterEntry, type RosterType } from "@/lib/mlb";
+import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import { getDepthChart } from "@/lib/depth-chart";
 
 const TABS: Array<{ slug: string; label: string; rosterType?: RosterType }> = [
@@ -181,7 +182,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                       border: "1px solid var(--line)",
                     }}
                   >
-                    <img
+                    <PlayerHeadshot
                       src={playerHeadshotUrl(player.id, 128)}
                       alt={player.fullName}
                       style={{

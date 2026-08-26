@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { playerHeadshotUrl } from "@/lib/mlb";
+import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import type { DepthChart, DepthChartGroup, DepthChartPlayer } from "@/lib/depth-chart";
 
 function StatusTag({ status }: { status?: string }) {
@@ -57,7 +58,7 @@ function PlayerChip({ player }: { player: DepthChartPlayer }) {
           border: "1px solid var(--line)",
         }}
       >
-        <img
+        <PlayerHeadshot
           src={playerHeadshotUrl(player.id, 60)}
           alt={player.fullName}
           style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}

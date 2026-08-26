@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { playerHeadshotUrl, type RosterEntry, type ExternalPlayer } from "@/lib/mlb";
+import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import type { ProspectPlayer } from "@/lib/prospects";
 
 type SlotGroup = "diamond" | "dh" | "bench" | "rotation" | "bullpen";
@@ -763,7 +764,7 @@ export default function RosterBuilder({
                       border: "1px solid var(--line)",
                     }}
                   >
-                    <img
+                    <PlayerHeadshot
                       src={playerHeadshotUrl(player.id, 68)}
                       alt={player.fullName}
                       style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
