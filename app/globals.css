@@ -285,7 +285,7 @@ a {
   }
 
   .statcast-row {
-    grid-template-columns: 105px 24px 1fr !important;
+    grid-template-columns: 105px 46px 1fr !important;
     gap: 0.4rem !important;
   }
 
@@ -294,12 +294,13 @@ a {
   }
 
   .statcast-value {
-    font-size: 0.78rem !important;
+    font-size: 0.72rem !important;
   }
 
   .statcast-marker {
-    width: 14px !important;
-    height: 14px !important;
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 0.55rem !important;
   }
 
   .player-page-topbar .kicker {

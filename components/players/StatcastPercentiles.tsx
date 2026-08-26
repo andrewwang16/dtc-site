@@ -25,13 +25,13 @@ function PercentileRow({ metric }: { metric: StatcastPercentile }) {
   return (
     <div
       className="statcast-row"
-      style={{ display: "grid", gridTemplateColumns: "150px 30px 1fr", alignItems: "center", gap: "0.6rem" }}
+      style={{ display: "grid", gridTemplateColumns: "150px 56px 1fr", alignItems: "center", gap: "0.6rem" }}
     >
       <span className="statcast-label" style={{ fontWeight: 700, fontSize: "0.88rem" }}>
         {metric.label}
       </span>
       <span className="statcast-value" style={{ fontWeight: 800, fontSize: "0.92rem", textAlign: "right" }}>
-        {metric.percentile}
+        {metric.value ?? metric.percentile}
       </span>
       <div style={{ position: "relative", height: "10px", borderRadius: "999px", background: "var(--line)" }}>
         <div
@@ -52,14 +52,22 @@ function PercentileRow({ metric }: { metric: StatcastPercentile }) {
             top: "50%",
             left: `${metric.percentile}%`,
             transform: "translate(-50%, -50%)",
-            width: "18px",
-            height: "18px",
+            width: "26px",
+            height: "26px",
             borderRadius: "50%",
             background: color,
             border: "2px solid var(--panel)",
             boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "0.68rem",
+            fontWeight: 800,
+            color: "white",
           }}
-        />
+        >
+          {metric.percentile}
+        </div>
       </div>
     </div>
   );
@@ -73,7 +81,7 @@ export default function StatcastPercentiles({ metrics }: { metrics: StatcastPerc
   return (
     <div className="statcast-percentiles" style={{ display: "grid", gap: "1rem" }}>
       <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
-        League percentile rank for each metric — red is elite, blue is below average.
+        Actual value on the left; percentile rank in the circle — red is elite, blue is below average.
       </p>
       <div style={{ display: "grid", gap: "0.85rem" }}>
         {metrics.map((metric) => (
