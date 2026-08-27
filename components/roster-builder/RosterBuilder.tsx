@@ -5,7 +5,7 @@ import { playerHeadshotUrl, stripDiacritics, type RosterEntry, type ExternalPlay
 import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import type { ProspectPlayer } from "@/lib/prospects";
 
-type SlotGroup = "diamond" | "dh" | "bench" | "rotation" | "bullpen";
+type SlotGroup = "diamond" | "bench" | "rotation" | "bullpen";
 
 type SlotDef = {
   id: string;
@@ -15,23 +15,25 @@ type SlotDef = {
   left?: string;
 };
 
+// 3B, C, and DH share the bottom row of the diamond (same top offset),
+// left to right, since DH has no fielding position of its own.
 const DIAMOND_SLOTS: SlotDef[] = [
+  { id: "3B", label: "3B", group: "diamond", top: "90%", left: "17%" },
   { id: "C", label: "C", group: "diamond", top: "90%", left: "50%" },
+  { id: "DH", label: "DH", group: "diamond", top: "90%", left: "83%" },
   { id: "1B", label: "1B", group: "diamond", top: "62%", left: "83%" },
   { id: "2B", label: "2B", group: "diamond", top: "42%", left: "66%" },
   { id: "SS", label: "SS", group: "diamond", top: "42%", left: "34%" },
-  { id: "3B", label: "3B", group: "diamond", top: "62%", left: "17%" },
   { id: "LF", label: "LF", group: "diamond", top: "16%", left: "18%" },
   { id: "CF", label: "CF", group: "diamond", top: "12%", left: "50%" },
   { id: "RF", label: "RF", group: "diamond", top: "16%", left: "82%" },
 ];
 
-const DH_SLOT: SlotDef = { id: "DH", label: "DH", group: "dh" };
 const BENCH_SLOTS: SlotDef[] = [1, 2, 3, 4].map((n) => ({ id: `BN${n}`, label: `Bench ${n}`, group: "bench" }));
 const ROTATION_SLOTS: SlotDef[] = [1, 2, 3, 4, 5].map((n) => ({ id: `SP${n}`, label: `SP${n}`, group: "rotation" }));
 const BULLPEN_SLOTS: SlotDef[] = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ id: `RP${n}`, label: `RP${n}`, group: "bullpen" }));
 
-const ALL_SLOTS: SlotDef[] = [DH_SLOT, ...DIAMOND_SLOTS, ...BENCH_SLOTS, ...ROTATION_SLOTS, ...BULLPEN_SLOTS];
+const ALL_SLOTS: SlotDef[] = [...DIAMOND_SLOTS, ...BENCH_SLOTS, ...ROTATION_SLOTS, ...BULLPEN_SLOTS];
 const TOTAL_SLOTS = ALL_SLOTS.length;
 const FORTY_MAN_LIMIT = 40;
 const PLAYER_ID_DRAG_TYPE = "text/plain";
@@ -383,40 +385,21 @@ export default function RosterBuilder({
           <p className="kicker" style={{ marginBottom: "0.6rem" }}>
             Position Players
           </p>
-          <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
-            <div
-              style={{
-                position: "relative",
-                flex: "1 1 auto",
-                aspectRatio: "1 / 1.15",
-                borderRadius: "18px",
-                border: "1px solid var(--line)",
-                background: "var(--panel)",
-              }}
-            >
-              {DIAMOND_SLOTS.map((slot) => (
-                <SlotCell
-                  key={slot.id}
-                  slot={slot}
-                  player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
-                  isOpen={openSlotId === slot.id}
-                  onToggleOpen={toggleSlotOpen}
-                  onDrop={handleDropOnSlot}
-                  onDragStart={handleDragStart}
-                  onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
-                  query={slotQuery}
-                  onQueryChange={setSlotQuery}
-                  eligiblePlayers={slotEligiblePlayers}
-                  onSelect={selectForSlot}
-                />
-              ))}
-            </div>
-
-            <div style={{ width: "72px", flexShrink: 0 }}>
+          <div
+            style={{
+              position: "relative",
+              aspectRatio: "1 / 1.15",
+              borderRadius: "18px",
+              border: "1px solid var(--line)",
+              background: "var(--panel)",
+            }}
+          >
+            {DIAMOND_SLOTS.map((slot) => (
               <SlotCell
-                slot={DH_SLOT}
-                player={fortyManById.get(assignments[DH_SLOT.id] ?? -1) ?? null}
-                isOpen={openSlotId === DH_SLOT.id}
+                key={slot.id}
+                slot={slot}
+                player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                isOpen={openSlotId === slot.id}
                 onToggleOpen={toggleSlotOpen}
                 onDrop={handleDropOnSlot}
                 onDragStart={handleDragStart}
@@ -426,7 +409,7 @@ export default function RosterBuilder({
                 eligiblePlayers={slotEligiblePlayers}
                 onSelect={selectForSlot}
               />
-            </div>
+            ))}
           </div>
         </div>
 
