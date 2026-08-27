@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { GameLogEntry } from "@/lib/mlb";
+import { teamLogoUrl, type GameLogEntry, type PlayerRole } from "@/lib/mlb";
+import TeamLogo from "@/components/shared/TeamLogo";
 
 function formatLogDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -10,8 +11,37 @@ function formatLogDate(date: string) {
   }).format(new Date(`${date}T12:00:00Z`));
 }
 
-export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
+const HITTER_LOG_COLUMNS = ["AB", "R", "H", "HR", "RBI", "BB", "SO"] as const;
+const PITCHER_LOG_COLUMNS = ["IP", "H", "R", "ER", "BB", "K"] as const;
+
+function hitterLogRow(stat: GameLogEntry["stat"]): Record<string, string> {
+  return {
+    AB: String(stat.atBats ?? 0),
+    R: String(stat.runs ?? 0),
+    H: String(stat.hits ?? 0),
+    HR: String(stat.homeRuns ?? 0),
+    RBI: String(stat.rbi ?? 0),
+    BB: String(stat.baseOnBalls ?? 0),
+    SO: String(stat.strikeOuts ?? 0),
+  };
+}
+
+function pitcherLogRow(stat: GameLogEntry["stat"]): Record<string, string> {
+  return {
+    IP: stat.inningsPitched ?? "-",
+    H: String(stat.hits ?? 0),
+    R: String(stat.runs ?? 0),
+    ER: String(stat.earnedRuns ?? 0),
+    BB: String(stat.baseOnBalls ?? 0),
+    K: String(stat.strikeOuts ?? 0),
+  };
+}
+
+export default function GameLogTable({ gameLog, role }: { gameLog: GameLogEntry[]; role: PlayerRole }) {
   const [mode, setMode] = useState<"last15" | "all">("last15");
+
+  const columns = role === "Pitcher" ? PITCHER_LOG_COLUMNS : HITTER_LOG_COLUMNS;
+  const buildRow = role === "Pitcher" ? pitcherLogRow : hitterLogRow;
 
   const rows = useMemo(() => {
     const newestFirst = [...gameLog].reverse();
@@ -64,40 +94,57 @@ export default function GameLogTable({ gameLog }: { gameLog: GameLogEntry[] }) {
                 <th style={{ padding: "0.4rem 0.6rem" }}>Date</th>
                 <th style={{ padding: "0.4rem 0.6rem" }}>Opponent</th>
                 <th style={{ padding: "0.4rem 0.6rem" }}>Result</th>
-                <th style={{ padding: "0.4rem 0.6rem" }}>Line</th>
+                {columns.map((column) => (
+                  <th key={column} style={{ padding: "0.4rem 0.6rem", textAlign: "center" }}>
+                    {column}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((game, index) => (
-                <tr
-                  key={`${game.gamePk}-${index}`}
-                  style={{ borderTop: "1px solid var(--line)" }}
-                >
-                  <td style={{ padding: "0.45rem 0.6rem", whiteSpace: "nowrap" }}>
-                    {formatLogDate(game.date)}
-                  </td>
-                  <td style={{ padding: "0.45rem 0.6rem" }}>
-                    {game.isHome ? "vs" : "@"} {game.opponentName}
-                  </td>
-                  <td style={{ padding: "0.45rem 0.6rem" }}>
-                    {game.isWin === undefined ? (
-                      "-"
-                    ) : (
-                      <span
-                        style={{
-                          fontWeight: 800,
-                          color: game.isWin ? "#0f7a38" : "#b42318",
-                        }}
-                      >
-                        {game.isWin ? "W" : "L"}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: "0.45rem 0.6rem", color: "var(--muted)" }}>
-                    {game.summary ?? "-"}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((game, index) => {
+                const row = buildRow(game.stat);
+
+                return (
+                  <tr
+                    key={`${game.gamePk}-${index}`}
+                    style={{ borderTop: "1px solid var(--line)" }}
+                  >
+                    <td style={{ padding: "0.45rem 0.6rem", whiteSpace: "nowrap" }}>
+                      {formatLogDate(game.date)}
+                    </td>
+                    <td style={{ padding: "0.45rem 0.6rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        <span>{game.isHome ? "vs" : "@"}</span>
+                        <TeamLogo
+                          src={teamLogoUrl(game.opponentId)}
+                          alt={game.opponentName}
+                          style={{ width: 20, height: 20 }}
+                        />
+                      </div>
+                    </td>
+                    <td style={{ padding: "0.45rem 0.6rem" }}>
+                      {game.isWin === undefined ? (
+                        "-"
+                      ) : (
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            color: game.isWin ? "#0f7a38" : "#b42318",
+                          }}
+                        >
+                          {game.isWin ? "W" : "L"}
+                        </span>
+                      )}
+                    </td>
+                    {columns.map((column) => (
+                      <td key={column} style={{ padding: "0.45rem 0.6rem", textAlign: "center" }}>
+                        {row[column]}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

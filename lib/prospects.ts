@@ -45,10 +45,13 @@ async function fetchAffiliateTeams(year: number): Promise<AffiliateTeam[]> {
 async function fetchAffiliateRoster(teamId: number, year: number): Promise<RosterEntry[]> {
   try {
     // "fullSeason" accumulates everyone who was ever on the roster this
-    // year, including players since traded/released/DFA'd out of the org —
-    // "active" reflects who's actually still there right now.
+    // year, including players since traded/released/DFA'd out of the org.
+    // "active" excludes anyone hurt. "fullRoster" is the one that reflects
+    // who's actually still with the organization right now, active or
+    // injured (confirmed: excludes departed players, includes long-term
+    // injured ones like a 60-day IL pitcher).
     const response = await fetch(
-      `https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=active&season=${year}`,
+      `https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=fullRoster&season=${year}`,
       { next: { revalidate: 21_600 } }
     );
 

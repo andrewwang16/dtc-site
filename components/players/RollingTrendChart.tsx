@@ -7,7 +7,6 @@ import {
   computeRollingValue,
   formatRollingValue,
   type GameLogEntry,
-  type LeagueAverages,
   type PlayerRole,
 } from "@/lib/mlb";
 
@@ -34,11 +33,9 @@ function formatDelta(statKey: string, value: number, average: number) {
 export default function RollingTrendChart({
   gameLog,
   role,
-  league,
 }: {
   gameLog: GameLogEntry[];
   role: PlayerRole;
-  league: LeagueAverages;
 }) {
   const columns = role === "Pitcher" ? PITCHER_COLUMNS : HITTER_COLUMNS;
   const defaultStat = role === "Pitcher" ? "ERA" : "OPS";
@@ -53,8 +50,8 @@ export default function RollingTrendChart({
 
     for (let i = windowSize - 1; i < gameLog.length; i += 1) {
       const window = gameLog.slice(i - windowSize + 1, i + 1);
-      const value = computeRollingValue(window, statKey, role, league);
-      const playingTime = computeRollingValue(window, playingTimeKey, role, league);
+      const value = computeRollingValue(window, statKey, role);
+      const playingTime = computeRollingValue(window, playingTimeKey, role);
 
       if (value !== null && Number.isFinite(value)) {
         results.push({ date: gameLog[i].date, value, playingTime: playingTime ?? 0 });
@@ -62,11 +59,11 @@ export default function RollingTrendChart({
     }
 
     return results;
-  }, [gameLog, windowSize, statKey, playingTimeKey, role, league]);
+  }, [gameLog, windowSize, statKey, playingTimeKey, role]);
 
   const seasonAverage = useMemo(
-    () => computeRollingValue(gameLog, statKey, role, league),
-    [gameLog, statKey, role, league]
+    () => computeRollingValue(gameLog, statKey, role),
+    [gameLog, statKey, role]
   );
 
   const width = 640;

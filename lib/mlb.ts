@@ -100,6 +100,7 @@ export type StatLine = {
   battersFaced?: number;
   atBats?: number;
   hits?: number;
+  runs?: number;
   doubles?: number;
   triples?: number;
   homeRuns?: number;
@@ -145,12 +146,6 @@ export type GameLogEntry = {
   isWin?: boolean;
   summary?: string;
   stat: StatLine;
-};
-
-export type LeagueAverages = {
-  lgObp: number;
-  lgSlg: number;
-  lgEra: number;
 };
 
 export type RosterEntry = {
@@ -507,75 +502,6 @@ export async function getPlayerHandednessSplits(
   }));
 }
 
-export async function getLeagueAverages(year: number): Promise<LeagueAverages> {
-  const [hitting, pitching] = await Promise.all([
-    fetchJson<{ stats?: Array<{ splits?: Array<{ stat: Record<string, any> }> }> }>(
-      `https://statsapi.mlb.com/api/v1/teams/stats?stats=season&group=hitting&season=${year}&sportId=1&gameType=R`,
-      21600
-    ),
-    fetchJson<{ stats?: Array<{ splits?: Array<{ stat: Record<string, any> }> }> }>(
-      `https://statsapi.mlb.com/api/v1/teams/stats?stats=season&group=pitching&season=${year}&sportId=1&gameType=R`,
-      21600
-    ),
-  ]);
-
-  const hittingSplits = hitting?.stats?.[0]?.splits ?? [];
-  const pitchingSplits = pitching?.stats?.[0]?.splits ?? [];
-
-  let hits = 0;
-  let baseOnBalls = 0;
-  let hitByPitch = 0;
-  let atBats = 0;
-  let sacFlies = 0;
-  let totalBases = 0;
-
-  for (const split of hittingSplits) {
-    hits += split.stat.hits ?? 0;
-    baseOnBalls += split.stat.baseOnBalls ?? 0;
-    hitByPitch += split.stat.hitByPitch ?? 0;
-    atBats += split.stat.atBats ?? 0;
-    sacFlies += split.stat.sacFlies ?? 0;
-    totalBases += split.stat.totalBases ?? 0;
-  }
-
-  const obpDenominator = atBats + baseOnBalls + hitByPitch + sacFlies;
-  const lgObp = obpDenominator > 0 ? (hits + baseOnBalls + hitByPitch) / obpDenominator : 0;
-  const lgSlg = atBats > 0 ? totalBases / atBats : 0;
-
-  let earnedRuns = 0;
-  let outs = 0;
-
-  for (const split of pitchingSplits) {
-    earnedRuns += split.stat.earnedRuns ?? 0;
-    outs += split.stat.outs ?? 0;
-  }
-
-  const lgEra = outs > 0 ? (earnedRuns * 27) / outs : 0;
-
-  return { lgObp, lgSlg, lgEra };
-}
-
-export function computeOpsPlus(
-  obp: number,
-  slg: number,
-  lgObp: number,
-  lgSlg: number
-): number | null {
-  if (!lgObp || !lgSlg) {
-    return null;
-  }
-
-  return Math.round(100 * (obp / lgObp + slg / lgSlg - 1));
-}
-
-export function computeEraPlus(era: number, lgEra: number): number | null {
-  if (!era || !lgEra) {
-    return null;
-  }
-
-  return Math.round((100 * lgEra) / era);
-}
-
 export function computeIso(slg: number, avg: number): number {
   return slg - avg;
 }
@@ -666,14 +592,10 @@ export function formatPercent(value: number | null): string {
   return `${value.toFixed(1)}%`;
 }
 
-export function formatPlus(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "-";
-  }
-
-  return String(value);
-}
-
+// No OPS+/ERA+ here — a real park-factor adjustment isn't available at
+// every granularity these columns are used at (season, month, handedness
+// split, rolling window), and showing a non-park-adjusted number under
+// that name would misrepresent it.
 export const HITTER_COLUMNS = [
   "G",
   "PA",
@@ -688,7 +610,6 @@ export const HITTER_COLUMNS = [
   "ISO",
   "BB%",
   "K%",
-  "OPS+",
 ] as const;
 
 export const PITCHER_COLUMNS = [
@@ -705,21 +626,18 @@ export const PITCHER_COLUMNS = [
   "BB%",
   "K-BB%",
   "HR/9",
-  "ERA+",
-  "OPS+",
 ] as const;
 
 export type HitterColumn = (typeof HITTER_COLUMNS)[number];
 export type PitcherColumn = (typeof PITCHER_COLUMNS)[number];
 export type StatRow = Record<string, string>;
 
-export function buildHitterRow(stat: StatLine | null, league: LeagueAverages): StatRow {
+export function buildHitterRow(stat: StatLine | null): StatRow {
   if (!stat) {
     return Object.fromEntries(HITTER_COLUMNS.map((column) => [column, "-"]));
   }
 
   const avg = parseStatNumber(stat.avg);
-  const obp = parseStatNumber(stat.obp);
   const slg = parseStatNumber(stat.slg);
   const pa = stat.plateAppearances ?? 0;
   const bb = stat.baseOnBalls ?? 0;
@@ -739,18 +657,14 @@ export function buildHitterRow(stat: StatLine | null, league: LeagueAverages): S
     ISO: formatRate(computeIso(slg, avg)),
     "BB%": formatPercent(computeBbPercent(bb, pa)),
     "K%": formatPercent(computeKPercent(k, pa)),
-    "OPS+": formatPlus(computeOpsPlus(obp, slg, league.lgObp, league.lgSlg)),
   };
 }
 
-export function buildPitcherRow(stat: StatLine | null, league: LeagueAverages): StatRow {
+export function buildPitcherRow(stat: StatLine | null): StatRow {
   if (!stat) {
     return Object.fromEntries(PITCHER_COLUMNS.map((column) => [column, "-"]));
   }
 
-  const era = parseStatNumber(stat.era);
-  const obp = parseStatNumber(stat.obp);
-  const slg = parseStatNumber(stat.slg);
   const bf = stat.battersFaced ?? 0;
   const bb = stat.baseOnBalls ?? 0;
   const k = stat.strikeOuts ?? 0;
@@ -772,17 +686,11 @@ export function buildPitcherRow(stat: StatLine | null, league: LeagueAverages): 
     "K-BB%":
       kPercent === null || bbPercent === null ? "-" : formatPercent(kPercent - bbPercent),
     "HR/9": stat.homeRunsPer9 ?? "-",
-    "ERA+": formatPlus(computeEraPlus(era, league.lgEra)),
-    "OPS+": formatPlus(computeOpsPlus(obp, slg, league.lgObp, league.lgSlg)),
   };
 }
 
-export function buildStatRow(
-  role: PlayerRole,
-  stat: StatLine | null,
-  league: LeagueAverages
-): StatRow {
-  return role === "Pitcher" ? buildPitcherRow(stat, league) : buildHitterRow(stat, league);
+export function buildStatRow(role: PlayerRole, stat: StatLine | null): StatRow {
+  return role === "Pitcher" ? buildPitcherRow(stat) : buildHitterRow(stat);
 }
 
 // Only columns with a real MLB Stats API leaderboard category are ranked —
@@ -818,12 +726,15 @@ async function fetchCategoryRank(
   category: string,
   playerId: number,
   year: number,
-  group: "hitting" | "pitching"
+  group: "hitting" | "pitching",
+  leagueId?: number
 ): Promise<number | null> {
+  const leagueParam = leagueId ? `&leagueId=${leagueId}` : "";
+
   const data = await fetchJson<{
     leagueLeaders?: Array<{ leaders?: Array<{ rank: number; person: { id: number } }> }>;
   }>(
-    `https://statsapi.mlb.com/api/v1/stats/leaders?leaderCategories=${category}&season=${year}&sportId=1&leagueId=${NL_LEAGUE_ID}&statGroup=${group}&limit=50`,
+    `https://statsapi.mlb.com/api/v1/stats/leaders?leaderCategories=${category}&season=${year}&sportId=1${leagueParam}&statGroup=${group}&limit=50`,
     21_600
   );
 
@@ -833,20 +744,23 @@ async function fetchCategoryRank(
   return entry?.rank ?? null;
 }
 
-// A player's National League rank (top 50 only) for each season-stat
-// column that has a matching leaderboard category. Only meaningful for
-// players on NL teams — callers should gate on that themselves.
-export async function getNlColumnRanks(
+// A player's rank (top 50 only) for each season-stat column that has a
+// matching leaderboard category. Pass a leagueId to rank within just the AL
+// or NL (104=NL, 103=AL); omit it entirely for a combined MLB-wide rank,
+// which is what a player traded across leagues mid-season should get since
+// neither league's own leaderboard reflects their full-season line.
+export async function getColumnRanks(
   playerId: number,
   year: number,
-  role: PlayerRole
+  role: PlayerRole,
+  leagueId?: number
 ): Promise<Record<string, number>> {
   const group = role === "Pitcher" ? "pitching" : "hitting";
   const categories = role === "Pitcher" ? PITCHER_RANK_CATEGORIES : HITTER_RANK_CATEGORIES;
 
   const entries = await Promise.all(
     Object.entries(categories).map(async ([column, category]) => {
-      const rank = category ? await fetchCategoryRank(category, playerId, year, group) : null;
+      const rank = category ? await fetchCategoryRank(category, playerId, year, group, leagueId) : null;
       return [column, rank] as const;
     })
   );
@@ -863,8 +777,7 @@ function sumWindow(games: GameLogEntry[], pick: (stat: StatLine) => number | und
 export function computeRollingValue(
   window: GameLogEntry[],
   statKey: string,
-  role: PlayerRole,
-  league: LeagueAverages
+  role: PlayerRole
 ): number | null {
   if (window.length === 0) {
     return null;
@@ -915,8 +828,6 @@ export function computeRollingValue(
         return computeBbPercent(bb, pa);
       case "K%":
         return computeKPercent(k, pa);
-      case "OPS+":
-        return computeOpsPlus(obp, slg, league.lgObp, league.lgSlg);
       default:
         return null;
     }
@@ -973,10 +884,6 @@ export function computeRollingValue(
       return slg;
     case "OPS":
       return obp + slg;
-    case "ERA+":
-      return computeEraPlus(era, league.lgEra);
-    case "OPS+":
-      return computeOpsPlus(obp, slg, league.lgObp, league.lgSlg);
     default:
       return null;
   }
@@ -985,10 +892,6 @@ export function computeRollingValue(
 export function formatRollingValue(statKey: string, value: number | null): string {
   if (value === null || !Number.isFinite(value)) {
     return "-";
-  }
-
-  if (statKey === "OPS+" || statKey === "ERA+") {
-    return String(Math.round(value));
   }
 
   if (statKey.endsWith("%")) {
@@ -1010,7 +913,8 @@ export function formatRollingValue(statKey: string, value: number | null): strin
   return formatRate(value);
 }
 
-const NL_LEAGUE_ID = 104;
+export const NL_LEAGUE_ID = 104;
+export const AL_LEAGUE_ID = 103;
 const NL_CENTRAL_DIVISION_ID = 205;
 
 export type TeamStanding = {

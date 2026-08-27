@@ -13,28 +13,35 @@ function rankOutline(rank: number | undefined) {
   return "var(--line)";
 }
 
-function rankLabel(rank: number | undefined) {
-  if (rank === 1) return "1st in NL";
-  if (rank === 2) return "2nd in NL";
-  if (rank === 3) return "3rd in NL";
-  if (rank !== undefined) return `NL #${rank}`;
-  return null;
+function rankLabel(rank: number | undefined, scope: "NL" | "AL" | "MLB" | null) {
+  if (rank === undefined || !scope) {
+    return null;
+  }
+
+  const scopeLabel = scope === "MLB" ? "MLB" : `the ${scope}`;
+
+  if (rank === 1) return `1st in ${scopeLabel}`;
+  if (rank === 2) return `2nd in ${scopeLabel}`;
+  if (rank === 3) return `3rd in ${scopeLabel}`;
+  return `${scope} #${rank}`;
 }
 
 export default function SeasonStatCells({
   columns,
   row,
   ranks,
+  scope,
 }: {
   columns: readonly string[];
   row: StatRow;
   ranks: Record<string, number>;
+  scope: "NL" | "AL" | "MLB" | null;
 }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: "0.75rem" }}>
       {columns.map((column) => {
         const rank = ranks[column];
-        const label = rankLabel(rank);
+        const label = rankLabel(rank, scope);
 
         return (
           <div

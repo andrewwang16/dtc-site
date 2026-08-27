@@ -9,7 +9,6 @@ import {
   buildStatRow,
   computeAgeAsOf,
   determinePlayerRole,
-  getLeagueAverages,
   getPlayerBio,
   getPlayerYearStats,
   getTeamAbbreviation,
@@ -34,12 +33,12 @@ type ComparisonSide = {
 // W-L is a compound "12-5" string, not a single number, so it's excluded
 // from both sets below and never highlighted.
 const HIGHER_IS_BETTER_HITTER = new Set([
-  "G", "PA", "AVG", "OBP", "SLG", "OPS", "HR", "XBH", "RBI", "SB", "ISO", "BB%", "OPS+",
+  "G", "PA", "AVG", "OBP", "SLG", "OPS", "HR", "XBH", "RBI", "SB", "ISO", "BB%",
 ]);
 const LOWER_IS_BETTER_HITTER = new Set(["K%"]);
 
-const HIGHER_IS_BETTER_PITCHER = new Set(["G", "GS", "SV", "IP", "K", "K%", "K-BB%", "ERA+"]);
-const LOWER_IS_BETTER_PITCHER = new Set(["ERA", "WHIP", "BB", "BB%", "HR/9", "OPS+"]);
+const HIGHER_IS_BETTER_PITCHER = new Set(["G", "GS", "SV", "IP", "K", "K%", "K-BB%"]);
+const LOWER_IS_BETTER_PITCHER = new Set(["ERA", "WHIP", "BB", "BB%", "HR/9"]);
 
 function parseComparableValue(raw: string): number | null {
   if (raw === "-") {
@@ -83,16 +82,13 @@ async function loadComparisonSide(playerId: number, year: number): Promise<Compa
   const group = role === "Pitcher" ? "pitching" : "hitting";
   const columns = role === "Pitcher" ? PITCHER_COLUMNS : HITTER_COLUMNS;
 
-  const [{ season }, league] = await Promise.all([
-    getPlayerYearStats(playerId, year, group),
-    getLeagueAverages(year),
-  ]);
+  const { season } = await getPlayerYearStats(playerId, year, group);
 
   return {
     bio,
     role,
     columns,
-    row: buildStatRow(role, season, league),
+    row: buildStatRow(role, season),
     age: computeAgeAsOf(bio.birthDate, `${year}-07-01`),
   };
 }

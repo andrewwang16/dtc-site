@@ -15,15 +15,15 @@ type SlotDef = {
   left?: string;
 };
 
-// 3B, C, and DH share the bottom row of the diamond (same top offset),
-// left to right, since DH has no fielding position of its own.
+// DH has no fielding position of its own, so it sits at the bottom of the
+// diamond next to home plate, below 1B.
 const DIAMOND_SLOTS: SlotDef[] = [
-  { id: "3B", label: "3B", group: "diamond", top: "90%", left: "17%" },
   { id: "C", label: "C", group: "diamond", top: "90%", left: "50%" },
   { id: "DH", label: "DH", group: "diamond", top: "90%", left: "83%" },
   { id: "1B", label: "1B", group: "diamond", top: "62%", left: "83%" },
   { id: "2B", label: "2B", group: "diamond", top: "42%", left: "66%" },
   { id: "SS", label: "SS", group: "diamond", top: "42%", left: "34%" },
+  { id: "3B", label: "3B", group: "diamond", top: "62%", left: "17%" },
   { id: "LF", label: "LF", group: "diamond", top: "16%", left: "18%" },
   { id: "CF", label: "CF", group: "diamond", top: "12%", left: "50%" },
   { id: "RF", label: "RF", group: "diamond", top: "16%", left: "82%" },

@@ -4,12 +4,10 @@ import {
   computeRollingValue,
   formatRollingValue,
   getCardinalsRoster,
-  getLeagueAverages,
   getPlayerYearStats,
   parseStatNumber,
   playerHeadshotUrl,
   type GameLogEntry,
-  type LeagueAverages,
   type PlayerRole,
 } from "@/lib/mlb";
 
@@ -32,7 +30,7 @@ function isWithinTrailingWindow(dateString: string, cutoff: Date) {
   return new Date(`${dateString}T12:00:00Z`) >= cutoff;
 }
 
-async function buildMovers(year: number, league: LeagueAverages): Promise<{
+async function buildMovers(year: number): Promise<{
   hitters: MoverEntry[];
   pitchers: MoverEntry[];
 }> {
@@ -64,7 +62,7 @@ async function buildMovers(year: number, league: LeagueAverages): Promise<{
         return null;
       }
 
-      const recentValue = computeRollingValue(recentGames, statKey, role, league);
+      const recentValue = computeRollingValue(recentGames, statKey, role);
       const seasonRaw =
         statKey === "ERA" ? yearStats.season.era : yearStats.season.ops;
       const seasonValue = parseStatNumber(seasonRaw);
@@ -198,8 +196,7 @@ function MoverList({
 
 export default async function HotColdPage() {
   const year = new Date().getFullYear();
-  const league = await getLeagueAverages(year);
-  const { hitters, pitchers } = await buildMovers(year, league);
+  const { hitters, pitchers } = await buildMovers(year);
 
   const hotHitters = hitters
     .filter((entry) => entry.delta > 0)

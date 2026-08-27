@@ -6,9 +6,14 @@ export type StatcastPercentile = {
 };
 
 const NL_TEAM_IDS = new Set([109, 144, 112, 113, 115, 119, 146, 158, 121, 143, 134, 135, 137, 138, 120]);
+const AL_TEAM_IDS = new Set([108, 110, 111, 114, 116, 117, 118, 133, 136, 139, 140, 141, 142, 145, 147]);
 
 export function isNationalLeagueTeam(teamId: number): boolean {
   return NL_TEAM_IDS.has(teamId);
+}
+
+export function isAmericanLeagueTeam(teamId: number): boolean {
+  return AL_TEAM_IDS.has(teamId);
 }
 
 // Baseball Savant's percentile rankings already rank players by "goodness"

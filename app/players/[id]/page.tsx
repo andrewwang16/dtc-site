@@ -5,18 +5,19 @@ import { PremiumBadge, PremiumLockCard } from "@/components/shared/PremiumLock";
 import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import TeamLogo from "@/components/shared/TeamLogo";
 import {
+  AL_LEAGUE_ID,
   buildStatRow,
   computeAgeAsOf,
   determinePlayerRole,
   getCardinalsRoster,
-  getLeagueAverages,
-  getNlColumnRanks,
+  getColumnRanks,
   getPlayerBio,
   getPlayerCareerYears,
   getPlayerHandednessSplits,
   getPlayerYearStats,
   getTeamAbbreviation,
   HITTER_COLUMNS,
+  NL_LEAGUE_ID,
   PITCHER_COLUMNS,
   playerHeadshotUrl,
   teamLogoUrl,
@@ -26,7 +27,7 @@ import {
 import { getArticlesForPlayer } from "@/lib/articles";
 import { getPlayerGrades } from "@/lib/grades";
 import { getPodcastMentionsForPlayer } from "@/lib/podcast-mentions";
-import { getStatcastPercentiles, isNationalLeagueTeam } from "@/lib/statcast";
+import { getStatcastPercentiles, isAmericanLeagueTeam, isNationalLeagueTeam } from "@/lib/statcast";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
@@ -204,25 +205,48 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   const selectedYear = years.includes(requestedYear) ? requestedYear : years[0] ?? currentYear;
 
   const statcastType = role === "Pitcher" ? "pitcher" : "batter";
-  const isNlPlayer = isNationalLeagueTeam(bio.currentTeam?.id ?? -1);
 
-  const [yearStats, handednessSplits, league, playerGrades, podcastMentions, statcastMetrics, nlColumnRanks] =
+  const [yearStats, handednessSplits, playerGrades, podcastMentions, statcastMetrics] =
     await Promise.all([
       getPlayerYearStats(playerId, selectedYear, group),
       getPlayerHandednessSplits(playerId, selectedYear, group),
-      getLeagueAverages(selectedYear),
       getPlayerGrades(bio.fullName),
       getPodcastMentionsForPlayer(bio.fullName),
       getStatcastPercentiles(playerId, selectedYear, statcastType),
-      isNlPlayer
-        ? getNlColumnRanks(playerId, selectedYear, role)
-        : Promise.resolve<Record<string, number>>({}),
     ]);
 
   // Below this, the Statcast card looks sparse/awkward if stretched to
   // match Season Stats' (usually taller) height, so only equalize height
   // when there's enough data to fill it reasonably.
   const hasEnoughStatcastData = statcastMetrics.length >= 10;
+
+  // A player traded across leagues mid-season doesn't fit either league's
+  // own leaderboard, so rank them MLB-wide instead; a player who stayed in
+  // one league all year (even across teams, e.g. an in-league trade) gets
+  // ranked within that league.
+  function teamLeague(teamId: number): "AL" | "NL" | null {
+    if (isNationalLeagueTeam(teamId)) return "NL";
+    if (isAmericanLeagueTeam(teamId)) return "AL";
+    return null;
+  }
+
+  const teamIdsThisSeason =
+    yearStats.seasonTeams.length > 0
+      ? yearStats.seasonTeams.map((team) => team.teamId)
+      : bio.currentTeam
+        ? [bio.currentTeam.id]
+        : [];
+
+  const leaguesThisSeason = new Set(
+    teamIdsThisSeason.map(teamLeague).filter((league): league is "AL" | "NL" => league !== null)
+  );
+
+  const rankScope: "NL" | "AL" | "MLB" | null =
+    leaguesThisSeason.size > 1 ? "MLB" : leaguesThisSeason.size === 1 ? [...leaguesThisSeason][0] : null;
+
+  const rankLeagueId = rankScope === "NL" ? NL_LEAGUE_ID : rankScope === "AL" ? AL_LEAGUE_ID : undefined;
+
+  const columnRanks = rankScope ? await getColumnRanks(playerId, selectedYear, role, rankLeagueId) : {};
 
   const hasMultipleTeams = yearStats.seasonTeams.length > 1;
   const requestedTeamId = Number.parseInt(teamParam ?? "", 10);
@@ -243,11 +267,11 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           )
         : "-";
 
-  const seasonRow = buildStatRow(role, seasonStat, league);
+  const seasonRow = buildStatRow(role, seasonStat);
 
   const monthRows = yearStats.months.map((month) => ({
     label: month.month,
-    row: buildStatRow(role, month.stat, league),
+    row: buildStatRow(role, month.stat),
   }));
 
   const handednessLabel = (code: string) => {
@@ -260,7 +284,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
   const handednessRows = handednessSplits.map((split) => ({
     label: handednessLabel(split.code),
-    row: buildStatRow(role, split.stat, league),
+    row: buildStatRow(role, split.stat),
   }));
 
   const age = computeAgeAsOf(bio.birthDate, `${selectedYear}-07-01`);
@@ -470,7 +494,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             <p style={{ margin: "0 0 0.85rem", color: "var(--muted)", fontSize: "0.85rem" }}>
               {selectedYear} · {seasonTeamLabel}
             </p>
-            <SeasonStatCells columns={columns} row={seasonRow} ranks={nlColumnRanks} />
+            <SeasonStatCells columns={columns} row={seasonRow} ranks={columnRanks} scope={rankScope} />
           </div>
 
           <div
@@ -541,7 +565,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               padding: "1.15rem",
             }}
           >
-            <RollingTrendChart gameLog={yearStats.gameLog} role={role} league={league} />
+            <RollingTrendChart gameLog={yearStats.gameLog} role={role} />
           </article>
         ) : (
           <PremiumLockCard message="Subscribe to see rolling trend charts." />
@@ -562,7 +586,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             padding: "1.15rem",
           }}
         >
-          <GameLogTable gameLog={yearStats.gameLog} />
+          <GameLogTable gameLog={yearStats.gameLog} role={role} />
         </article>
       </section>
 
