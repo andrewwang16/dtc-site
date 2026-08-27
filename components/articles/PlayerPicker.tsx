@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { playerHeadshotUrl, type RosterEntry } from "@/lib/mlb";
+import { playerHeadshotUrl, stripDiacritics, type RosterEntry } from "@/lib/mlb";
 import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 
 export default function PlayerPicker({
@@ -20,14 +20,14 @@ export default function PlayerPicker({
   const [query, setQuery] = useState("");
 
   const results = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
+    const trimmed = stripDiacritics(query.trim().toLowerCase());
 
     if (!trimmed) {
       return [];
     }
 
     return roster
-      .filter((player) => player.fullName.toLowerCase().includes(trimmed))
+      .filter((player) => stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
       .slice(0, 8);
   }, [roster, query]);
 

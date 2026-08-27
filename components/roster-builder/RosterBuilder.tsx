@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { playerHeadshotUrl, type RosterEntry, type ExternalPlayer } from "@/lib/mlb";
+import { playerHeadshotUrl, stripDiacritics, type RosterEntry, type ExternalPlayer } from "@/lib/mlb";
 import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import type { ProspectPlayer } from "@/lib/prospects";
 
@@ -231,12 +231,12 @@ export default function RosterBuilder({
   const filledCount = assignedIds.size;
 
   const addPool = useMemo(() => {
-    const trimmed = addQuery.trim().toLowerCase();
+    const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
     const base: SimplePlayer[] = addTab === "prospects" ? prospects : externalPlayers;
 
     return base
       .filter((player) => !fortyManIds.has(player.id))
-      .filter((player) => !trimmed || player.fullName.toLowerCase().includes(trimmed))
+      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
       .slice(0, addTab === "external" && !trimmed ? 0 : 8);
   }, [addTab, addQuery, prospects, externalPlayers, fortyManIds]);
 
@@ -248,12 +248,12 @@ export default function RosterBuilder({
     }
 
     const wantsPitcher = isPitcherSlot(openSlotDef.group);
-    const trimmed = slotQuery.trim().toLowerCase();
+    const trimmed = stripDiacritics(slotQuery.trim().toLowerCase());
 
     return fortyMan
       .filter((player) => (player.position === "P") === wantsPitcher)
       .filter((player) => !assignedIds.has(player.id))
-      .filter((player) => !trimmed || player.fullName.toLowerCase().includes(trimmed))
+      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
       .slice(0, 8);
   }, [openSlotDef, fortyMan, assignedIds, slotQuery]);
 

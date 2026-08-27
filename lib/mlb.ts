@@ -1,5 +1,12 @@
 export const CARDINALS_TEAM_ID = 138;
 
+// MLB bio data often includes accent marks ("Iván Herrera", "Joshua Báez")
+// that a search box won't be typed with — strip diacritics from both sides
+// before comparing so plain-ASCII queries still match.
+export function stripDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
 export function playerHeadshotUrl(playerId: number, width = 160) {
   return `https://img.mlbstatic.com/mlb-photos/image/upload/w_${width},q_auto:best/v1/people/${playerId}/headshot/67/current`;
 }
@@ -367,6 +374,25 @@ export type PlayerYearStats = {
   months: MonthSplit[];
   gameLog: GameLogEntry[];
 };
+
+// Every season a player actually recorded a stat line for, in one call —
+// used to trim the year-picker dropdown down from a flat debut-to-now
+// range, which otherwise includes years a long-retired or injured player
+// never played.
+export async function getPlayerCareerYears(playerId: number, group: StatGroup): Promise<Set<number>> {
+  const data = await fetchJson<{ stats?: Array<{ splits?: Array<{ season?: string }> }> }>(
+    `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=yearByYear&group=${group}`,
+    86400
+  );
+
+  const splits = data?.stats?.[0]?.splits ?? [];
+
+  return new Set(
+    splits
+      .map((split) => Number.parseInt(split.season ?? "", 10))
+      .filter((season) => Number.isFinite(season))
+  );
+}
 
 export async function getPlayerYearStats(
   playerId: number,

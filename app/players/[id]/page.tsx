@@ -12,6 +12,7 @@ import {
   getLeagueAverages,
   getNlColumnRanks,
   getPlayerBio,
+  getPlayerCareerYears,
   getPlayerHandednessSplits,
   getPlayerYearStats,
   getTeamAbbreviation,
@@ -132,7 +133,7 @@ function InfoTile({ label, value }: { label: string; value: string }) {
       <p className="kicker" style={{ marginBottom: "0.25rem" }}>
         {label}
       </p>
-      <p style={{ margin: 0, fontWeight: 700 }}>{value}</p>
+      <p style={{ margin: 0, fontWeight: 700, whiteSpace: "nowrap" }}>{value}</p>
     </div>
   );
 }
@@ -187,9 +188,16 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     ? Number.parseInt(bio.mlbDebutDate.slice(0, 4), 10)
     : currentYear - 19;
 
+  const careerYears = await getPlayerCareerYears(playerId, group);
+
   const years: number[] = [];
   for (let year = currentYear; year >= debutYear; year -= 1) {
-    years.push(year);
+    // Keep the current year regardless (a rookie's debut season may not
+    // show up in yearByYear yet) and fall back to the full range if the
+    // fetch failed outright, rather than collapsing the dropdown to empty.
+    if (careerYears.size === 0 || careerYears.has(year) || year === currentYear) {
+      years.push(year);
+    }
   }
 
   const requestedYear = Number.parseInt(yearParam ?? "", 10);
@@ -346,9 +354,9 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               borderRadius: "18px",
               background: "var(--panel)",
               padding: "1.15rem",
-              display: "grid",
-              gap: "1rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "1.25rem",
             }}
           >
             <InfoTile label="Age" value={age !== null ? String(age) : "-"} />

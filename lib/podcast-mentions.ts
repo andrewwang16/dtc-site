@@ -1,4 +1,5 @@
 import { getPlaylistVideos } from "@/lib/youtube";
+import { stripDiacritics } from "@/lib/mlb";
 
 const SHOWS = [
   { label: "Dealin' the Cards", playlistId: "PLzLr3_w2micHl1PeuYZYfjYQdZfT9LO0a" },
@@ -12,13 +13,6 @@ export type PodcastMention = {
   thumbnailUrl: string;
   showLabel: string;
 };
-
-// Podcast titles/descriptions are plain text and rarely include accent
-// marks, while MLB's bio data does (e.g. "Iván Herrera", "Joshua Báez") —
-// strip diacritics from both sides before comparing so those still match.
-function stripDiacritics(value: string): string {
-  return value.normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
 
 // A numbered/suffixed name ("Victor Scott II") is often referenced without
 // the suffix in casual commentary, so match on both forms.

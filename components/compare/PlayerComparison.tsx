@@ -31,6 +31,47 @@ type ComparisonSide = {
   age: number | null;
 };
 
+// W-L is a compound "12-5" string, not a single number, so it's excluded
+// from both sets below and never highlighted.
+const HIGHER_IS_BETTER_HITTER = new Set([
+  "G", "PA", "AVG", "OBP", "SLG", "OPS", "HR", "XBH", "RBI", "SB", "ISO", "BB%", "OPS+",
+]);
+const LOWER_IS_BETTER_HITTER = new Set(["K%"]);
+
+const HIGHER_IS_BETTER_PITCHER = new Set(["G", "GS", "SV", "IP", "K", "K%", "K-BB%", "ERA+"]);
+const LOWER_IS_BETTER_PITCHER = new Set(["ERA", "WHIP", "BB", "BB%", "HR/9", "OPS+"]);
+
+function parseComparableValue(raw: string): number | null {
+  if (raw === "-") {
+    return null;
+  }
+
+  const num = Number.parseFloat(raw.replace("%", ""));
+  return Number.isFinite(num) ? num : null;
+}
+
+// Only meaningful when both players share the same role — the same column
+// label (e.g. "K%" or "OPS+") points at opposite things for a hitter vs a
+// pitcher, so a mixed comparison can't say who's "better" at it.
+function betterSide(column: string, role: PlayerRole, rawA: string, rawB: string): "A" | "B" | null {
+  const higherSet = role === "Pitcher" ? HIGHER_IS_BETTER_PITCHER : HIGHER_IS_BETTER_HITTER;
+  const lowerSet = role === "Pitcher" ? LOWER_IS_BETTER_PITCHER : LOWER_IS_BETTER_HITTER;
+
+  if (!higherSet.has(column) && !lowerSet.has(column)) {
+    return null;
+  }
+
+  const a = parseComparableValue(rawA);
+  const b = parseComparableValue(rawB);
+
+  if (a === null || b === null || a === b) {
+    return null;
+  }
+
+  const aIsBetter = higherSet.has(column) ? a > b : a < b;
+  return aIsBetter ? "A" : "B";
+}
+
 async function loadComparisonSide(playerId: number, year: number): Promise<ComparisonSide | null> {
   const bio = await getPlayerBio(playerId);
 
@@ -248,25 +289,70 @@ export default function PlayerComparison({
         </p>
         <div className="stat-table-scroll" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table className="stat-table" style={{ width: "100%", borderCollapse: "collapse", minWidth: "420px" }}>
+            <colgroup>
+              <col style={{ width: "42%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "42%" }} />
+            </colgroup>
             <thead>
               <tr style={{ textAlign: "center", color: "var(--muted)", fontSize: "0.85rem" }}>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "left" }}></th>
                 <th style={{ padding: "0.5rem 0.75rem" }}>{sideA ? sideA.bio.fullName : "-"}</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}></th>
                 <th style={{ padding: "0.5rem 0.75rem" }}>{sideB ? sideB.bio.fullName : "-"}</th>
               </tr>
             </thead>
             <tbody>
-              {columns.map((column) => (
-                <tr key={column} style={{ borderTop: "1px solid var(--line)" }}>
-                  <td style={{ padding: "0.5rem 0.75rem", fontWeight: 700, color: "var(--muted)" }}>{column}</td>
-                  <td style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 700 }}>
-                    {sideA?.row[column] ?? "-"}
-                  </td>
-                  <td style={{ padding: "0.5rem 0.75rem", textAlign: "center", fontWeight: 700 }}>
-                    {sideB?.row[column] ?? "-"}
-                  </td>
-                </tr>
-              ))}
+              {columns.map((column) => {
+                const rawA = sideA?.row[column] ?? "-";
+                const rawB = sideB?.row[column] ?? "-";
+                const winner =
+                  sideA && sideB && sideA.role === sideB.role
+                    ? betterSide(column, sideA.role, rawA, rawB)
+                    : null;
+
+                const winnerStyle: React.CSSProperties = {
+                  background: "rgba(15,122,56,0.12)",
+                  color: "#0f7a38",
+                };
+
+                return (
+                  <tr key={column} style={{ borderTop: "1px solid var(--line)" }}>
+                    <td
+                      style={{
+                        padding: "0.5rem 0.75rem",
+                        textAlign: "center",
+                        fontWeight: 700,
+                        borderRadius: "10px 0 0 10px",
+                        ...(winner === "A" ? winnerStyle : {}),
+                      }}
+                    >
+                      {rawA}
+                    </td>
+                    <td
+                      style={{
+                        padding: "0.5rem 0.75rem",
+                        textAlign: "center",
+                        fontWeight: 700,
+                        color: "var(--muted)",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {column}
+                    </td>
+                    <td
+                      style={{
+                        padding: "0.5rem 0.75rem",
+                        textAlign: "center",
+                        fontWeight: 700,
+                        borderRadius: "0 10px 10px 0",
+                        ...(winner === "B" ? winnerStyle : {}),
+                      }}
+                    >
+                      {rawB}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
