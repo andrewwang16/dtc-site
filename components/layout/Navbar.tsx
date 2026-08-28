@@ -136,6 +136,20 @@ export default function Navbar() {
                       zIndex: 40,
                     }}
                   >
+                    <Link
+                      href="/account"
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "0.55rem 0.7rem",
+                        borderRadius: "10px",
+                        color: "var(--text)",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Manage Account
+                    </Link>
                     {session.user.isAdmin && (
                       <>
                         <p

@@ -38,7 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return {
             id: email,
             email,
-            name: email.split("@")[0],
+            name: user.displayName?.trim() || email.split("@")[0],
             isAdmin: user.isAdmin,
             isSubscriber: user.isSubscriber,
           };
@@ -52,11 +52,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   pages: { signIn: "/sign-in" },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         const typedUser = user as { isAdmin?: boolean; isSubscriber?: boolean };
         token.isAdmin = Boolean(typedUser.isAdmin);
         token.isSubscriber = Boolean(typedUser.isSubscriber);
+      }
+
+      // Lets the account settings page refresh the session's display name
+      // immediately (via useSession().update()) instead of requiring the
+      // user to sign out and back in to see the change reflected.
+      if (trigger === "update" && typeof session?.name === "string") {
+        token.name = session.name;
       }
 
       return token;

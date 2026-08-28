@@ -141,6 +141,22 @@ export async function addPaywallColumnsAction(key: string): Promise<SetupResult>
   }
 }
 
+export async function addDisplayNameColumnAction(key: string): Promise<SetupResult> {
+  if (!checkKey(key)) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  try {
+    const sql = getSql();
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT`;
+
+    return { ok: true, message: "Added users.display_name." };
+  } catch (error) {
+    console.error("Add display name column failed", error);
+    return { ok: false, error: "Migration failed — check server logs." };
+  }
+}
+
 export async function createAdminSetupAction(
   key: string,
   email: string,

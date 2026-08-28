@@ -179,3 +179,34 @@ export async function createArticle(input: {
 
   return rowToArticle(rows[0]);
 }
+
+export async function updateArticle(
+  slug: string,
+  input: {
+    title: string;
+    author: string;
+    body: ArticleBlock[];
+    playerId?: number;
+    playerName?: string;
+    isPremium?: boolean;
+  }
+): Promise<Article | undefined> {
+  const excerpt = buildExcerpt(input.body);
+  const sql = getSql();
+
+  const rows = (await sql`
+    UPDATE articles
+    SET
+      title = ${input.title},
+      author = ${input.author},
+      excerpt = ${excerpt},
+      body = ${JSON.stringify(input.body)}::jsonb,
+      player_id = ${input.playerId ?? null},
+      player_name = ${input.playerName ?? null},
+      is_premium = ${input.isPremium ?? true}
+    WHERE slug = ${slug}
+    RETURNING slug, title, author, author_email, date, excerpt, body, player_id, player_name, is_premium
+  `) as ArticleRow[];
+
+  return rows[0] ? rowToArticle(rows[0]) : undefined;
+}

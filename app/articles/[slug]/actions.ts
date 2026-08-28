@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { getViewerSession } from "@/lib/require-viewer";
 import { getAdminSession } from "@/lib/require-admin";
+import { hasPremiumAccess } from "@/lib/access";
 import { createComment, deleteComment } from "@/lib/comments";
-import { deleteArticle } from "@/lib/articles";
+import { deleteArticle, updateArticle, type ArticleBlock } from "@/lib/articles";
 
 const MAX_COMMENT_LENGTH = 2000;
 
@@ -13,12 +14,17 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 
 export async function postCommentAction(
   articleSlug: string,
-  body: string
+  body: string,
+  isPremium: boolean
 ): Promise<PostCommentResult> {
   const session = await getViewerSession();
 
   if (!session?.user?.email) {
     return { ok: false, error: "Sign in to comment." };
+  }
+
+  if (isPremium && !hasPremiumAccess(session.user)) {
+    return { ok: false, error: "Subscribe to comment on this article." };
   }
 
   const trimmed = body.trim();
@@ -93,5 +99,81 @@ export async function deleteArticleAction(articleSlug: string): Promise<ActionRe
   } catch (error) {
     console.error("Failed to delete article", error);
     return { ok: false, error: "Something went wrong deleting the article." };
+  }
+}
+
+export type UpdateArticleInput = {
+  title: string;
+  authorName?: string;
+  blocks: ArticleBlock[];
+  playerId?: number;
+  playerName?: string;
+  isPremium?: boolean;
+};
+
+export type UpdateArticleResult =
+  | { ok: true; slug: string }
+  | { ok: false; error: string };
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function sanitizeBlocks(blocks: ArticleBlock[]): ArticleBlock[] {
+  return blocks.filter((block) => {
+    if (block.type === "paragraph") {
+      return isNonEmptyString(block.text);
+    }
+
+    if (block.type === "youtube") {
+      return isNonEmptyString(block.videoId);
+    }
+
+    return isNonEmptyString(block.tweetId);
+  });
+}
+
+export async function updateArticleAction(
+  articleSlug: string,
+  input: UpdateArticleInput
+): Promise<UpdateArticleResult> {
+  const session = await getAdminSession();
+
+  if (!session?.user?.email) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  if (!isNonEmptyString(input.title)) {
+    return { ok: false, error: "Title is required." };
+  }
+
+  const blocks = sanitizeBlocks(input.blocks ?? []);
+
+  if (blocks.length === 0) {
+    return { ok: false, error: "Add at least one paragraph or embed." };
+  }
+
+  try {
+    const article = await updateArticle(articleSlug, {
+      title: input.title.trim(),
+      author: input.authorName?.trim() || session.user.name || session.user.email,
+      body: blocks,
+      playerId: input.playerId,
+      playerName: input.playerName,
+      isPremium: input.isPremium ?? true,
+    });
+
+    if (!article) {
+      return { ok: false, error: "Article not found." };
+    }
+
+    revalidatePath("/articles");
+    revalidatePath("/");
+    revalidatePath(`/articles/${article.slug}`);
+
+    return { ok: true, slug: article.slug };
+  } catch (error) {
+    console.error("Failed to update article", error);
+    return { ok: false, error: "Something went wrong updating the article." };
   }
 }

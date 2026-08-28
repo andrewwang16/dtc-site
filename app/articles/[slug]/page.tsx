@@ -49,7 +49,27 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           By {article.author} · {formatArticleDate(article.date)}
         </p>
 
-        {isAdmin && <DeleteArticleButton articleSlug={article.slug} />}
+        {isAdmin && (
+          <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <Link
+              href={`/articles/${article.slug}/edit`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "0.4rem 0.9rem",
+                borderRadius: "999px",
+                border: "1px solid var(--line)",
+                background: "rgba(15,31,61,0.02)",
+                color: "var(--text)",
+                fontWeight: 700,
+                fontSize: "0.8rem",
+              }}
+            >
+              Edit Article
+            </Link>
+            <DeleteArticleButton articleSlug={article.slug} />
+          </div>
+        )}
 
         <div style={{ marginTop: "1.75rem", display: "grid", gap: "1.5rem" }}>
           {isLocked ? (
@@ -92,7 +112,12 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           </Link>
         )}
 
-        <CommentSection articleSlug={article.slug} initialComments={comments} />
+        <CommentSection
+          articleSlug={article.slug}
+          initialComments={comments}
+          isPremium={article.isPremium}
+          hasPremiumAccess={hasPremiumAccess(session?.user)}
+        />
       </section>
     </div>
   );

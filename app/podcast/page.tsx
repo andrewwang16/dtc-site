@@ -1,3 +1,5 @@
+import { getPlaylistVideos } from "@/lib/youtube";
+
 const SHOWS = {
   dtc: {
     slug: "dtc",
@@ -13,168 +15,18 @@ const SHOWS = {
 
 type ShowSlug = keyof typeof SHOWS;
 
-const EPISODES_PER_PAGE = 10;
+const EPISODES_PER_PAGE = 12;
 
-type PlaylistEpisode = {
-  videoId: string;
-  title: string;
-  thumbnailUrl: string;
-  duration?: string;
-};
-
-function getDeepValue<T>(value: unknown, path: Array<string>): T | undefined {
-  let current: any = value;
-
-  for (const key of path) {
-    if (!current || typeof current !== "object") {
-      return undefined;
-    }
-
-    current = current[key];
+function formatEpisodeDate(iso: string) {
+  if (!iso) {
+    return "";
   }
 
-  return current as T | undefined;
-}
-
-function collectEpisodes(node: unknown, episodes: PlaylistEpisode[]) {
-  if (!node || typeof node !== "object" || episodes.length >= 500) {
-    return;
-  }
-
-  const record = node as Record<string, any>;
-
-  if (record.lockupViewModel) {
-    const card = record.lockupViewModel;
-
-    const title =
-      getDeepValue<string>(card, [
-        "metadata",
-        "lockupMetadataViewModel",
-        "title",
-        "content",
-      ]) ?? "Untitled episode";
-
-    const videoId =
-      getDeepValue<string>(card, [
-        "rendererContext",
-        "commandContext",
-        "onTap",
-        "innertubeCommand",
-        "watchEndpoint",
-        "videoId",
-      ]) ??
-      getDeepValue<string>(card, [
-        "contentImage",
-        "thumbnailViewModel",
-        "overlays",
-        "1",
-        "thumbnailHoverOverlayToggleActionsViewModel",
-        "buttons",
-        "1",
-        "toggleButtonViewModel",
-        "defaultButtonViewModel",
-        "buttonViewModel",
-        "onTap",
-        "innertubeCommand",
-        "signalServiceEndpoint",
-        "actions",
-        "0",
-        "addToPlaylistCommand",
-        "videoId",
-      ]) ??
-      "";
-
-    const thumbnailSources =
-      getDeepValue<any[]>(card, [
-        "contentImage",
-        "thumbnailViewModel",
-        "image",
-        "sources",
-      ]) ?? [];
-
-    const thumbnailUrl =
-      getDeepValue<string>(card, [
-        "contentImage",
-        "thumbnailViewModel",
-        "image",
-        "sources",
-        String(thumbnailSources.length - 1),
-        "url",
-      ]) ??
-      getDeepValue<string>(card, [
-        "contentImage",
-        "thumbnailViewModel",
-        "image",
-        "sources",
-        "0",
-        "url",
-      ]) ??
-      "";
-
-    const duration = getDeepValue<string>(card, [
-      "metadata",
-      "lockupMetadataViewModel",
-      "metadata",
-      "content",
-    ]);
-
-    if (videoId && thumbnailUrl) {
-      episodes.push({
-        videoId,
-        title,
-        thumbnailUrl,
-        duration,
-      });
-    }
-  }
-
-  for (const value of Object.values(record)) {
-    collectEpisodes(value, episodes);
-  }
-}
-
-async function getPodcastEpisodes(playlistId: string) {
-  try {
-    const response = await fetch(
-      `https://www.youtube.com/playlist?list=${playlistId}`,
-      {
-        headers: {
-          "user-agent": "Mozilla/5.0",
-        },
-        next: {
-          revalidate: 3600,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      return [] as PlaylistEpisode[];
-    }
-
-    const html = await response.text();
-    const marker = "var ytInitialData = ";
-    const start = html.indexOf(marker);
-
-    if (start === -1) {
-      return [] as PlaylistEpisode[];
-    }
-
-    const jsonStart = start + marker.length;
-    const jsonEnd = html.indexOf(";</script>", jsonStart);
-
-    if (jsonEnd === -1) {
-      return [] as PlaylistEpisode[];
-    }
-
-    const data = JSON.parse(html.slice(jsonStart, jsonEnd));
-    const episodes: PlaylistEpisode[] = [];
-
-    collectEpisodes(data, episodes);
-
-    return episodes;
-  } catch {
-    return [] as PlaylistEpisode[];
-  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(iso));
 }
 
 type PodcastPageProps = {
@@ -192,7 +44,7 @@ export default async function PodcastPage({
   const activeShowSlug: ShowSlug = params.show === "btf" ? "btf" : "dtc";
   const show = SHOWS[activeShowSlug];
 
-  const episodes = await getPodcastEpisodes(show.playlistId);
+  const episodes = await getPlaylistVideos(show.playlistId);
 
   const requestedPage = Number.parseInt(params.page ?? "1", 10);
   const currentPage =
@@ -295,7 +147,7 @@ export default async function PodcastPage({
                   style={{
                     display: "grid",
                     border: "1px solid var(--line)",
-                    borderRadius: "18px",
+                    borderRadius: "14px",
                     background: "var(--panel)",
                     overflow: "hidden",
                     color: "inherit",
@@ -316,18 +168,18 @@ export default async function PodcastPage({
                     />
                   </div>
 
-                  <div style={{ padding: "1rem", display: "grid", gap: "0.4rem" }}>
-                    <p className="kicker" style={{ margin: 0 }}>
+                  <div style={{ padding: "0.7rem", display: "grid", gap: "0.3rem" }}>
+                    <p className="kicker" style={{ margin: 0, fontSize: "0.68rem" }}>
                       {show.label}
-                      {episode.duration ? ` · ${episode.duration}` : ""}
+                      {episode.publishedAt ? ` · ${formatEpisodeDate(episode.publishedAt)}` : ""}
                     </p>
 
                     <p
                       style={{
                         margin: 0,
                         fontWeight: 700,
-                        fontSize: "0.95rem",
-                        lineHeight: 1.35,
+                        fontSize: "0.82rem",
+                        lineHeight: 1.3,
                       }}
                     >
                       {episode.title}

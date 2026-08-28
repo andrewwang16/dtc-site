@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { createArticleAction } from "@/app/articles/new/actions";
-import type { ArticleBlock } from "@/lib/articles";
+import { updateArticleAction } from "@/app/articles/[slug]/actions";
+import type { Article, ArticleBlock } from "@/lib/articles";
 import type { RosterEntry } from "@/lib/mlb";
 import ArticleBody from "@/components/articles/ArticleBody";
 import PlayerPicker from "@/components/articles/PlayerPicker";
@@ -195,27 +196,48 @@ function BlockCard({
   );
 }
 
-function formatPreviewDate() {
+function formatPreviewDate(date?: string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
-  }).format(new Date());
+  }).format(date ? new Date(`${date}T12:00:00Z`) : new Date());
 }
 
-export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
+export default function ArticleEditor({
+  roster,
+  initialArticle,
+}: {
+  roster: RosterEntry[];
+  initialArticle?: Article;
+}) {
   const router = useRouter();
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
-  const [title, setTitle] = useState("");
-  const [blocks, setBlocks] = useState<EditableBlock[]>([
-    { id: makeId(), type: "paragraph", text: "" },
-  ]);
-  const [selectedPlayer, setSelectedPlayer] = useState<RosterEntry | null>(null);
-  const [isFree, setIsFree] = useState(false);
+  const [title, setTitle] = useState(initialArticle?.title ?? "");
+  const [authorName, setAuthorName] = useState(
+    initialArticle?.author ?? session?.user?.name ?? session?.user?.email ?? ""
+  );
+  const [blocks, setBlocks] = useState<EditableBlock[]>(
+    initialArticle?.body.length
+      ? initialArticle.body.map((block) => ({ ...block, id: makeId() }))
+      : [{ id: makeId(), type: "paragraph", text: "" }]
+  );
+  const [selectedPlayer, setSelectedPlayer] = useState<RosterEntry | null>(
+    initialArticle?.playerId && initialArticle?.playerName
+      ? (roster.find((player) => player.id === initialArticle.playerId) ?? {
+          id: initialArticle.playerId,
+          fullName: initialArticle.playerName,
+          position: "",
+        })
+      : null
+  );
+  const [isFree, setIsFree] = useState(initialArticle ? !initialArticle.isPremium : false);
   const [error, setError] = useState<string | null>(null);
+
+  const isEditing = Boolean(initialArticle);
 
   function updateBlock(id: string, next: EditableBlock) {
     setBlocks((current) => current.map((block) => (block.id === id ? next : block)));
@@ -270,7 +292,7 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
     setError(null);
 
     if (!title.trim()) {
-      setError("Title is required.");
+      setError("Header is required.");
       return;
     }
 
@@ -282,13 +304,18 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
     }
 
     startTransition(async () => {
-      const result = await createArticleAction({
+      const input = {
         title: title.trim(),
+        authorName: authorName.trim(),
         blocks: cleanedBlocks,
         playerId: selectedPlayer?.id,
         playerName: selectedPlayer?.fullName,
         isPremium: !isFree,
-      });
+      };
+
+      const result = initialArticle
+        ? await updateArticleAction(initialArticle.slug, input)
+        : await createArticleAction(input);
 
       if (!result.ok) {
         setError(result.error);
@@ -301,7 +328,7 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
 
   const canPublish = !isPending;
   const previewBlocks = getCleanedBlocks();
-  const authorName = session?.user?.name ?? session?.user?.email ?? "You";
+  const previewAuthorName = authorName.trim() || session?.user?.name || session?.user?.email || "You";
 
   return (
     <div style={{ display: "grid", gap: "1.25rem" }}>
@@ -334,17 +361,36 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
 
       {mode === "edit" ? (
         <>
-          <div>
-            <p className="kicker" style={{ marginBottom: "0.4rem" }}>
-              Title
+          <div style={{ ...cardStyle, display: "grid", gap: "0.9rem" }}>
+            <p className="kicker" style={{ margin: 0 }}>
+              Author &amp; Header
             </p>
-            <input
-              type="text"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Article title"
-              style={inputStyle}
-            />
+
+            <div>
+              <p className="kicker" style={{ marginBottom: "0.4rem" }}>
+                Author Name
+              </p>
+              <input
+                type="text"
+                value={authorName}
+                onChange={(event) => setAuthorName(event.target.value)}
+                placeholder="Byline shown on the article"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <p className="kicker" style={{ marginBottom: "0.4rem" }}>
+                Header
+              </p>
+              <input
+                type="text"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Article header"
+                style={inputStyle}
+              />
+            </div>
           </div>
 
           <div>
@@ -425,7 +471,7 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
           <h1 className="section-title">{title.trim() || "Untitled article"}</h1>
 
           <p style={{ marginTop: "0.75rem", color: "var(--muted)" }}>
-            By {authorName} · {formatPreviewDate()}
+            By {previewAuthorName} · {formatPreviewDate(initialArticle?.date)}
           </p>
 
           <div style={{ marginTop: "1.75rem" }}>
@@ -490,7 +536,7 @@ export default function ArticleEditor({ roster }: { roster: RosterEntry[] }) {
           fontSize: "1rem",
         }}
       >
-        {isPending ? "Publishing..." : "Publish"}
+        {isPending ? (isEditing ? "Saving..." : "Publishing...") : isEditing ? "Save Changes" : "Publish"}
       </button>
     </div>
   );

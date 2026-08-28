@@ -29,7 +29,7 @@ export default function DeleteArticleButton({ articleSlug }: { articleSlug: stri
   }
 
   return (
-    <div style={{ marginTop: "0.75rem" }}>
+    <div>
       <button
         type="button"
         onClick={handleDelete}

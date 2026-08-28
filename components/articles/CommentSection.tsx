@@ -38,9 +38,13 @@ function formatCommentDate(iso: string) {
 export default function CommentSection({
   articleSlug,
   initialComments,
+  isPremium,
+  hasPremiumAccess,
 }: {
   articleSlug: string;
   initialComments: Comment[];
+  isPremium: boolean;
+  hasPremiumAccess: boolean;
 }) {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -59,7 +63,7 @@ export default function CommentSection({
     setError(null);
 
     startTransition(async () => {
-      const result = await postCommentAction(articleSlug, draft);
+      const result = await postCommentAction(articleSlug, draft, isPremium);
 
       if (!result.ok) {
         setError(result.error);
@@ -148,7 +152,14 @@ export default function CommentSection({
         <p style={{ margin: "0 0 1rem", color: "#b42318", fontWeight: 700 }}>{deleteError}</p>
       )}
 
-      {status === "authenticated" ? (
+      {status === "authenticated" && isPremium && !hasPremiumAccess ? (
+        <p style={{ margin: 0, color: "var(--muted)" }}>
+          <Link href="/subscribe" style={{ color: "var(--accent-soft)", fontWeight: 700 }}>
+            Subscribe
+          </Link>{" "}
+          to comment on this article.
+        </p>
+      ) : status === "authenticated" ? (
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: "0.6rem" }}>
           <textarea
             value={draft}

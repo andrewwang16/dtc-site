@@ -7,6 +7,7 @@ import {
   dropImageColumnAction,
   createCommentsTableAction,
   addPaywallColumnsAction,
+  addDisplayNameColumnAction,
 } from "@/app/setup/actions";
 
 const inputStyle: React.CSSProperties = {
@@ -62,6 +63,9 @@ export default function SetupPanel({ setupKey }: { setupKey: string }) {
 
   const [paywallMessage, setPaywallMessage] = useState<string | null>(null);
   const [paywallError, setPaywallError] = useState<string | null>(null);
+
+  const [displayNameMessage, setDisplayNameMessage] = useState<string | null>(null);
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
 
   function handleSeed() {
     setSeedMessage(null);
@@ -140,8 +144,42 @@ export default function SetupPanel({ setupKey }: { setupKey: string }) {
     });
   }
 
+  function handleAddDisplayNameColumn() {
+    setDisplayNameMessage(null);
+    setDisplayNameError(null);
+
+    startTransition(async () => {
+      const result = await addDisplayNameColumnAction(setupKey);
+
+      if (result.ok) {
+        setDisplayNameMessage(result.message);
+      } else {
+        setDisplayNameError(result.error);
+      }
+    });
+  }
+
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
+      <div style={cardStyle}>
+        <p className="kicker" style={{ margin: 0 }}>
+          One-time migration
+        </p>
+        <h2 style={{ margin: 0 }}>Add Display Name Column</h2>
+        <p style={{ margin: 0, color: "var(--muted)" }}>
+          Adds users.display_name for the account settings page. Safe to run more than once.
+        </p>
+
+        <button type="button" onClick={handleAddDisplayNameColumn} disabled={isPending} style={buttonStyle}>
+          {isPending ? "Working..." : "Add Column"}
+        </button>
+
+        {displayNameMessage && (
+          <p style={{ margin: 0, color: "#1a7a3c", fontWeight: 700 }}>{displayNameMessage}</p>
+        )}
+        {displayNameError && <p style={{ margin: 0, color: "#b42318", fontWeight: 700 }}>{displayNameError}</p>}
+      </div>
+
       <div style={cardStyle}>
         <p className="kicker" style={{ margin: 0 }}>
           One-time migration

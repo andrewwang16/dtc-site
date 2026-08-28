@@ -6,6 +6,7 @@ import { createArticle, type ArticleBlock } from "@/lib/articles";
 
 export type CreateArticleInput = {
   title: string;
+  authorName?: string;
   blocks: ArticleBlock[];
   playerId?: number;
   playerName?: string;
@@ -56,7 +57,7 @@ export async function createArticleAction(
   try {
     const article = await createArticle({
       title: input.title.trim(),
-      author: session.user.name ?? session.user.email,
+      author: input.authorName?.trim() || session.user.name || session.user.email,
       authorEmail: session.user.email,
       body: blocks,
       playerId: input.playerId,
