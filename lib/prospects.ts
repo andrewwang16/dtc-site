@@ -3,6 +3,7 @@ import { CARDINALS_TEAM_ID } from "@/lib/mlb";
 export type ProspectPlayer = {
   id: number;
   fullName: string;
+  lastName?: string;
   position: string;
   level: string;
 };
@@ -18,7 +19,7 @@ type AffiliateTeam = {
 };
 
 type RosterEntry = {
-  person: { id: number; fullName: string };
+  person: { id: number; fullName: string; useLastName?: string };
   position: { abbreviation: string };
 };
 
@@ -51,7 +52,7 @@ async function fetchAffiliateRoster(teamId: number, year: number): Promise<Roste
     // injured (confirmed: excludes departed players, includes long-term
     // injured ones like a 60-day IL pitcher).
     const response = await fetch(
-      `https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=fullRoster&season=${year}`,
+      `https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=fullRoster&season=${year}&hydrate=person`,
       { next: { revalidate: 21_600 } }
     );
 
@@ -95,6 +96,7 @@ export async function getCardinalsProspects(year: number): Promise<ProspectPlaye
       prospects.push({
         id: entry.person.id,
         fullName: entry.person.fullName,
+        lastName: entry.person.useLastName,
         position: entry.position.abbreviation,
         level,
       });

@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { playerHeadshotUrl, stripDiacritics, type RosterEntry, type ExternalPlayer } from "@/lib/mlb";
 import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import type { ProspectPlayer } from "@/lib/prospects";
+import { CONTRACT_SEASON, formatSalary, getContract, type ContractInfo } from "@/lib/contracts";
 
 type SlotGroup = "diamond" | "bench" | "rotation" | "bullpen";
 
@@ -38,11 +39,26 @@ const TOTAL_SLOTS = ALL_SLOTS.length;
 const FORTY_MAN_LIMIT = 40;
 const PLAYER_ID_DRAG_TYPE = "text/plain";
 
-type SimplePlayer = { id: number; fullName: string; position: string; level?: string };
-type AddTab = "prospects" | "external";
+type SimplePlayer = { id: number; fullName: string; lastName?: string; position: string; level?: string };
+type AddTab = "prospects" | "external" | "create";
 
-function lastName(fullName: string) {
-  const parts = fullName.trim().split(/\s+/);
+const CREATE_POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"];
+
+const CONTRACT_STATUS_LABELS: Record<ContractInfo["status"], string> = {
+  guaranteed: "Signed",
+  "club-option": "Club option",
+  arbitration: "Arbitration",
+  "pre-arb": "Pre-arb",
+};
+
+// Prefer the API's display last name ("Scott II", "De La Cruz"); the
+// last-word fallback only covers players without one.
+function displayLastName(player: SimplePlayer) {
+  if (player.lastName) {
+    return player.lastName;
+  }
+
+  const parts = player.fullName.trim().split(/\s+/);
   return parts[parts.length - 1];
 }
 
@@ -130,7 +146,7 @@ function SlotCell({
           {slot.label}
         </span>
         <span style={{ fontSize: "0.72rem", fontWeight: 700, lineHeight: 1.1 }}>
-          {player ? lastName(player.fullName) : "+"}
+          {player ? displayLastName(player) : "+"}
         </span>
       </button>
 
@@ -222,6 +238,55 @@ export default function RosterBuilder({
   const [addQuery, setAddQuery] = useState("");
   const [openSlotId, setOpenSlotId] = useState<string | null>(null);
   const [slotQuery, setSlotQuery] = useState("");
+  const [createFirstName, setCreateFirstName] = useState("");
+  const [createLastName, setCreateLastName] = useState("");
+  const [createPosition, setCreatePosition] = useState(CREATE_POSITIONS[0]);
+  // Created players get negative ids so they can never collide with a
+  // real MLB player id.
+  const nextCreatedId = useRef(-1);
+
+  // Players who started in the organization (40-man, 60-day IL, or the
+  // minors). Anyone here without a listed contract is treated as pre-arb.
+  const organizationalIds = useMemo(
+    () => new Set([...roster, ...sixtyDayIL, ...prospects].map((player) => player.id)),
+    [roster, sixtyDayIL, prospects]
+  );
+
+  function contractFor(player: SimplePlayer) {
+    return getContract(player.id, organizationalIds.has(player.id));
+  }
+
+  // Everyone on the 40-man or the 60-day IL is paid. A removed player
+  // costs nothing (released / non-tendered) except a declined club
+  // option, which still owes the buyout.
+  const payroll = useMemo(() => {
+    const paidPlayers = [...fortyMan, ...reserveIL];
+    const rows = paidPlayers
+      .map((player) => ({ player, contract: getContract(player.id, organizationalIds.has(player.id)) }))
+      .sort((a, b) => (b.contract?.salary ?? -1) - (a.contract?.salary ?? -1));
+
+    const totals = { guaranteed: 0, arbitration: 0, preArb: 0, buyouts: 0, unknownCount: 0 };
+
+    for (const { contract } of rows) {
+      if (!contract) {
+        totals.unknownCount += 1;
+      } else if (contract.status === "arbitration") {
+        totals.arbitration += contract.salary;
+      } else if (contract.status === "pre-arb") {
+        totals.preArb += contract.salary;
+      } else {
+        totals.guaranteed += contract.salary;
+      }
+    }
+
+    for (const player of removedPlayers) {
+      totals.buyouts += getContract(player.id, organizationalIds.has(player.id))?.buyout ?? 0;
+    }
+
+    const total = totals.guaranteed + totals.arbitration + totals.preArb + totals.buyouts;
+
+    return { rows, totals, total };
+  }, [fortyMan, reserveIL, removedPlayers, organizationalIds]);
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
   const fortyManById = useMemo(() => new Map(fortyMan.map((player) => [player.id, player])), [fortyMan]);
@@ -258,6 +323,20 @@ export default function RosterBuilder({
       .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
       .slice(0, 8);
   }, [openSlotDef, fortyMan, assignedIds, slotQuery]);
+
+  // Created players have negative ids, so slot lookups can't use a
+  // sentinel id for "empty" — check for an assignment explicitly.
+  function playerInSlot(slotId: string) {
+    const playerId = assignments[slotId];
+    return playerId == null ? null : fortyManById.get(playerId) ?? null;
+  }
+
+  function clearSlot(slot: SlotDef) {
+    const playerId = assignments[slot.id];
+    if (playerId != null) {
+      unassignPlayer(playerId);
+    }
+  }
 
   function unassignPlayer(playerId: number) {
     setAssignments((current) => {
@@ -337,9 +416,35 @@ export default function RosterBuilder({
       }
     }
 
-    setFortyMan((current) => [...current, { id: player.id, fullName: player.fullName, position: player.position }]);
+    setFortyMan((current) => [
+      ...current,
+      { id: player.id, fullName: player.fullName, lastName: player.lastName, position: player.position },
+    ]);
     setRemovedPlayers((current) => current.filter((p) => p.id !== player.id));
     return true;
+  }
+
+  function createPlayer(event: React.FormEvent) {
+    event.preventDefault();
+    const first = createFirstName.trim();
+    const last = createLastName.trim();
+
+    if (!first || !last) {
+      return;
+    }
+
+    const player: SimplePlayer = {
+      id: nextCreatedId.current,
+      fullName: `${first} ${last}`,
+      lastName: last,
+      position: createPosition,
+    };
+
+    if (addToFortyMan(player)) {
+      nextCreatedId.current -= 1;
+      setCreateFirstName("");
+      setCreateLastName("");
+    }
   }
 
   function activateFromIL(player: SimplePlayer) {
@@ -370,6 +475,15 @@ export default function RosterBuilder({
     fontSize: "0.85rem",
   });
 
+  const createFieldStyle: React.CSSProperties = {
+    padding: "0.6rem 0.9rem",
+    borderRadius: "999px",
+    border: "1px solid var(--line)",
+    background: "var(--bg-soft)",
+    color: "var(--text)",
+    fontSize: "0.95rem",
+  };
+
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
       {openSlotId && (
@@ -398,12 +512,12 @@ export default function RosterBuilder({
               <SlotCell
                 key={slot.id}
                 slot={slot}
-                player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                player={playerInSlot(slot.id)}
                 isOpen={openSlotId === slot.id}
                 onToggleOpen={toggleSlotOpen}
                 onDrop={handleDropOnSlot}
                 onDragStart={handleDragStart}
-                onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
+                onClear={clearSlot}
                 query={slotQuery}
                 onQueryChange={setSlotQuery}
                 eligiblePlayers={slotEligiblePlayers}
@@ -422,12 +536,12 @@ export default function RosterBuilder({
               <SlotCell
                 key={slot.id}
                 slot={slot}
-                player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                player={playerInSlot(slot.id)}
                 isOpen={openSlotId === slot.id}
                 onToggleOpen={toggleSlotOpen}
                 onDrop={handleDropOnSlot}
                 onDragStart={handleDragStart}
-                onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
+                onClear={clearSlot}
                 query={slotQuery}
                 onQueryChange={setSlotQuery}
                 eligiblePlayers={slotEligiblePlayers}
@@ -444,12 +558,12 @@ export default function RosterBuilder({
               <SlotCell
                 key={slot.id}
                 slot={slot}
-                player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                player={playerInSlot(slot.id)}
                 isOpen={openSlotId === slot.id}
                 onToggleOpen={toggleSlotOpen}
                 onDrop={handleDropOnSlot}
                 onDragStart={handleDragStart}
-                onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
+                onClear={clearSlot}
                 query={slotQuery}
                 onQueryChange={setSlotQuery}
                 eligiblePlayers={slotEligiblePlayers}
@@ -466,12 +580,12 @@ export default function RosterBuilder({
               <SlotCell
                 key={slot.id}
                 slot={slot}
-                player={fortyManById.get(assignments[slot.id] ?? -1) ?? null}
+                player={playerInSlot(slot.id)}
                 isOpen={openSlotId === slot.id}
                 onToggleOpen={toggleSlotOpen}
                 onDrop={handleDropOnSlot}
                 onDragStart={handleDragStart}
-                onClear={(s) => unassignPlayer(assignments[s.id] ?? -1)}
+                onClear={clearSlot}
                 query={slotQuery}
                 onQueryChange={setSlotQuery}
                 eligiblePlayers={slotEligiblePlayers}
@@ -502,47 +616,134 @@ export default function RosterBuilder({
           {fortyMan.length === 0 ? (
             <p style={{ margin: 0, color: "var(--muted)" }}>No players on the 40-man roster.</p>
           ) : (
-            fortyMan.map((player) => (
-              <span
-                key={player.id}
-                draggable
-                onDragStart={(event) => handleDragStart(event, player.id)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.4rem",
-                  padding: "0.3rem 0.3rem 0.3rem 0.7rem",
-                  borderRadius: "999px",
-                  border: "1px solid var(--line)",
-                  background: assignedIds.has(player.id) ? "rgba(196,30,58,0.08)" : "rgba(15,31,61,0.02)",
-                  fontSize: "0.85rem",
-                  fontWeight: 700,
-                  cursor: "grab",
-                }}
-              >
-                {player.fullName}
-                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
-                <button
-                  type="button"
-                  onClick={() => removeFromFortyMan(player.id)}
-                  aria-label={`Remove ${player.fullName} from the 40-man roster`}
+            fortyMan.map((player) => {
+              const contract = contractFor(player);
+
+              return (
+                <span
+                  key={player.id}
+                  draggable
+                  onDragStart={(event) => handleDragStart(event, player.id)}
                   style={{
-                    width: "1.3rem",
-                    height: "1.3rem",
-                    borderRadius: "50%",
-                    border: "none",
-                    background: "rgba(180,35,24,0.12)",
-                    color: "#b42318",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    lineHeight: 1,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.4rem",
+                    padding: "0.3rem 0.3rem 0.3rem 0.7rem",
+                    borderRadius: "999px",
+                    border: "1px solid var(--line)",
+                    background: assignedIds.has(player.id) ? "rgba(196,30,58,0.08)" : "rgba(15,31,61,0.02)",
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    cursor: "grab",
                   }}
                 >
-                  ×
-                </button>
-              </span>
-            ))
+                  {player.fullName}
+                  <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                  {contract && (
+                    <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: "0.75rem" }}>
+                      {formatSalary(contract.salary)}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeFromFortyMan(player.id)}
+                    aria-label={`Remove ${player.fullName} from the 40-man roster`}
+                    style={{
+                      width: "1.3rem",
+                      height: "1.3rem",
+                      borderRadius: "50%",
+                      border: "none",
+                      background: "rgba(180,35,24,0.12)",
+                      color: "#b42318",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })
           )}
+        </div>
+      </div>
+
+      <div>
+        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
+          {CONTRACT_SEASON} Payroll &amp; Contracts
+        </p>
+        <div
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            background: "var(--panel)",
+            padding: "1.15rem",
+            display: "grid",
+            gap: "1rem",
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
+            {[
+              { label: "Projected payroll", value: payroll.total, strong: true },
+              { label: "Signed / options", value: payroll.totals.guaranteed },
+              { label: "Arbitration (proj.)", value: payroll.totals.arbitration },
+              { label: "Pre-arb (est.)", value: payroll.totals.preArb },
+              ...(payroll.totals.buyouts > 0 ? [{ label: "Option buyouts", value: payroll.totals.buyouts }] : []),
+            ].map((item) => (
+              <div key={item.label}>
+                <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+                  {item.label}
+                </p>
+                <p style={{ margin: 0, fontSize: item.strong ? "1.4rem" : "1.1rem", fontWeight: 800 }}>
+                  {formatSalary(item.value)}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.72rem", textTransform: "uppercase" }}>
+                  <th style={{ padding: "0.4rem 0.5rem" }}>Player</th>
+                  <th style={{ padding: "0.4rem 0.5rem" }}>Status</th>
+                  <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>{CONTRACT_SEASON}</th>
+                  <th style={{ padding: "0.4rem 0.5rem" }}>Contract</th>
+                  <th style={{ padding: "0.4rem 0.5rem" }}>FA After</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payroll.rows.map(({ player, contract }) => (
+                  <tr key={player.id} style={{ borderTop: "1px solid var(--line)" }}>
+                    <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700, whiteSpace: "nowrap" }}>
+                      {player.fullName}
+                      <span style={{ color: "var(--muted)", fontWeight: 400, marginLeft: "0.4rem" }}>
+                        {player.position}
+                        {reserveIL.some((p) => p.id === player.id) && " · 60-day IL"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>
+                      {contract ? CONTRACT_STATUS_LABELS[contract.status] : "Unknown"}
+                    </td>
+                    <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
+                      {contract ? formatSalary(contract.salary) : "—"}
+                    </td>
+                    <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }}>{contract?.detail ?? "—"}</td>
+                    <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }}>{contract?.freeAgentAfter ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.78rem" }}>
+            Includes the 40-man and 60-day IL. Arbitration figures are MLB Trade Rumors projections; pre-arb
+            salaries use the {CONTRACT_SEASON - 1} league minimum. Removing an arbitration player counts as a
+            non-tender, and removing a club-option player counts as declining the option (buyout still owed).
+            {payroll.totals.unknownCount > 0 &&
+              ` ${payroll.totals.unknownCount} external or created player${payroll.totals.unknownCount === 1 ? " has" : "s have"} no contract data and ${payroll.totals.unknownCount === 1 ? "isn't" : "aren't"} counted.`}
+          </p>
         </div>
       </div>
 
@@ -697,86 +898,145 @@ export default function RosterBuilder({
             >
               External Players
             </button>
+            <button
+              type="button"
+              style={addTabButtonStyle(addTab === "create")}
+              onClick={() => { setAddTab("create"); setAddQuery(""); }}
+            >
+              Create Player
+            </button>
           </div>
 
-          <input
-            type="text"
-            value={addQuery}
-            onChange={(event) => setAddQuery(event.target.value)}
-            placeholder={
-              addTab === "external" ? "Search any MLB player by name..." : "Search Cardinals prospects..."
-            }
-            style={{
-              width: "100%",
-              padding: "0.65rem 0.9rem",
-              borderRadius: "999px",
-              border: "1px solid var(--line)",
-              background: "var(--bg-soft)",
-              color: "var(--text)",
-              fontSize: "0.95rem",
-            }}
-          />
+          {addTab === "create" ? (
+            <form onSubmit={createPlayer} style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              <select
+                value={createPosition}
+                onChange={(event) => setCreatePosition(event.target.value)}
+                aria-label="Position"
+                style={{ ...createFieldStyle, flex: "0 0 auto" }}
+              >
+                {CREATE_POSITIONS.map((position) => (
+                  <option key={position} value={position}>
+                    {position}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={createFirstName}
+                onChange={(event) => setCreateFirstName(event.target.value)}
+                placeholder="First name"
+                aria-label="First name"
+                style={{ ...createFieldStyle, flex: "1 1 140px" }}
+              />
+              <input
+                type="text"
+                value={createLastName}
+                onChange={(event) => setCreateLastName(event.target.value)}
+                placeholder="Last name"
+                aria-label="Last name"
+                style={{ ...createFieldStyle, flex: "1 1 140px" }}
+              />
+              <button
+                type="submit"
+                disabled={!createFirstName.trim() || !createLastName.trim()}
+                style={{
+                  border: "1px solid var(--line)",
+                  background: "var(--panel)",
+                  color: "var(--text)",
+                  fontWeight: 700,
+                  borderRadius: "999px",
+                  padding: "0.55rem 1rem",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  opacity: !createFirstName.trim() || !createLastName.trim() ? 0.5 : 1,
+                }}
+              >
+                Add to 40-Man
+              </button>
+            </form>
+          ) : (
+            <>
+              <input
+                type="text"
+                value={addQuery}
+                onChange={(event) => setAddQuery(event.target.value)}
+                placeholder={
+                  addTab === "external" ? "Search any MLB player by name..." : "Search Cardinals prospects..."
+                }
+                style={{
+                  width: "100%",
+                  padding: "0.65rem 0.9rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--line)",
+                  background: "var(--bg-soft)",
+                  color: "var(--text)",
+                  fontSize: "0.95rem",
+                }}
+              />
 
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            {addTab === "external" && !addQuery.trim() ? (
-              <p style={{ margin: 0, color: "var(--muted)" }}>Type a name to search all of MLB.</p>
-            ) : addPool.length === 0 ? (
-              <p style={{ margin: 0, color: "var(--muted)" }}>No matching players found.</p>
-            ) : (
-              addPool.map((player) => (
-                <div
-                  key={player.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.65rem",
-                    padding: "0.5rem 0.7rem",
-                    borderRadius: "12px",
-                    border: "1px solid var(--line)",
-                    background: "rgba(15,31,61,0.02)",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "34px",
-                      height: "34px",
-                      borderRadius: "50%",
-                      overflow: "hidden",
-                      flexShrink: 0,
-                      background: "rgba(15,31,61,.08)",
-                      border: "1px solid var(--line)",
-                    }}
-                  >
-                    <PlayerHeadshot
-                      src={playerHeadshotUrl(player.id, 68)}
-                      alt={player.fullName}
-                      style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
-                    />
-                  </div>
-                  <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>{player.fullName}</span>
-                  {player.level && <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>{player.level}</span>}
-                  <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{player.position}</span>
-                  <button
-                    type="button"
-                    onClick={() => addToFortyMan(player)}
-                    style={{
-                      marginLeft: "auto",
-                      border: "1px solid var(--line)",
-                      background: "var(--panel)",
-                      color: "var(--text)",
-                      fontWeight: 700,
-                      borderRadius: "999px",
-                      padding: "0.35rem 0.8rem",
-                      cursor: "pointer",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    Add
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
+              <div style={{ display: "grid", gap: "0.5rem" }}>
+                {addTab === "external" && !addQuery.trim() ? (
+                  <p style={{ margin: 0, color: "var(--muted)" }}>Type a name to search all of MLB.</p>
+                ) : addPool.length === 0 ? (
+                  <p style={{ margin: 0, color: "var(--muted)" }}>No matching players found.</p>
+                ) : (
+                  addPool.map((player) => (
+                    <div
+                      key={player.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.65rem",
+                        padding: "0.5rem 0.7rem",
+                        borderRadius: "12px",
+                        border: "1px solid var(--line)",
+                        background: "rgba(15,31,61,0.02)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "34px",
+                          height: "34px",
+                          borderRadius: "50%",
+                          overflow: "hidden",
+                          flexShrink: 0,
+                          background: "rgba(15,31,61,.08)",
+                          border: "1px solid var(--line)",
+                        }}
+                      >
+                        <PlayerHeadshot
+                          src={playerHeadshotUrl(player.id, 68)}
+                          alt={player.fullName}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+                        />
+                      </div>
+                      <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>{player.fullName}</span>
+                      {player.level && <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>{player.level}</span>}
+                      <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{player.position}</span>
+                      <button
+                        type="button"
+                        onClick={() => addToFortyMan(player)}
+                        style={{
+                          marginLeft: "auto",
+                          border: "1px solid var(--line)",
+                          background: "var(--panel)",
+                          color: "var(--text)",
+                          fontWeight: 700,
+                          borderRadius: "999px",
+                          padding: "0.35rem 0.8rem",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

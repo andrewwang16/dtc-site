@@ -151,6 +151,10 @@ export type GameLogEntry = {
 export type RosterEntry = {
   id: number;
   fullName: string;
+  // The API's display last name, which keeps multi-word surnames and
+  // suffixes intact ("Scott II", "De La Cruz") — splitting fullName on
+  // spaces can't recover those.
+  lastName?: string;
   position: string;
   jerseyNumber?: string;
   status?: string;
@@ -187,19 +191,20 @@ export async function getCardinalsRoster(
 ): Promise<RosterEntry[]> {
   const data = await fetchJson<{
     roster?: Array<{
-      person: { id: number; fullName: string };
+      person: { id: number; fullName: string; useLastName?: string };
       position: { abbreviation: string };
       jerseyNumber?: string;
       status?: { description?: string };
     }>;
   }>(
-    `https://statsapi.mlb.com/api/v1/teams/${CARDINALS_TEAM_ID}/roster?rosterType=${rosterType}&season=${year}`,
+    `https://statsapi.mlb.com/api/v1/teams/${CARDINALS_TEAM_ID}/roster?rosterType=${rosterType}&season=${year}&hydrate=person`,
     3600
   );
 
   return (data?.roster ?? []).map((entry) => ({
     id: entry.person.id,
     fullName: entry.person.fullName,
+    lastName: entry.person.useLastName,
     position: entry.position.abbreviation,
     jerseyNumber: entry.jerseyNumber,
     status: entry.status?.description,
@@ -236,6 +241,7 @@ export async function getFortyManSplit(year: number): Promise<FortyManSplit> {
 export type ExternalPlayer = {
   id: number;
   fullName: string;
+  lastName?: string;
   position: string;
   teamId?: number;
 };
@@ -248,6 +254,7 @@ export async function getAllMlbPlayers(year: number): Promise<ExternalPlayer[]> 
     people?: Array<{
       id: number;
       fullName: string;
+      useLastName?: string;
       primaryPosition?: { abbreviation?: string };
       currentTeam?: { id?: number };
     }>;
@@ -256,6 +263,7 @@ export async function getAllMlbPlayers(year: number): Promise<ExternalPlayer[]> 
   return (data?.people ?? []).map((person) => ({
     id: person.id,
     fullName: person.fullName,
+    lastName: person.useLastName,
     position: person.primaryPosition?.abbreviation ?? "",
     teamId: person.currentTeam?.id,
   }));
