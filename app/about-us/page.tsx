@@ -28,24 +28,6 @@ const people: PersonCard[] = [
     image: "/images/andrew_wang.jpg",
     bio: "Bio coming soon.",
   },
-  {
-    name: "Kareem Haq",
-    title: "Birds on the Farm Host",
-    image: "/images/kareem_haq.jpg",
-    bio: "Bio coming soon.",
-  },
-  {
-    name: "Tyler Gettinger",
-    title: "Contributor",
-    image: "/images/tyler_gettinger.jpg",
-    bio: "Bio coming soon.",
-  },
-  {
-    name: "Aidan Gray",
-    title: "Contributor",
-    image: "/images/aidan_gray.jpg",
-    bio: "Bio coming soon.",
-  },
 ];
 
 function PersonCard({
