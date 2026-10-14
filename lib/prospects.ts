@@ -5,6 +5,7 @@ export type ProspectPlayer = {
   fullName: string;
   lastName?: string;
   position: string;
+  debutDate?: string;
   level: string;
 };
 
@@ -19,7 +20,7 @@ type AffiliateTeam = {
 };
 
 type RosterEntry = {
-  person: { id: number; fullName: string; useLastName?: string };
+  person: { id: number; fullName: string; useLastName?: string; mlbDebutDate?: string };
   position: { abbreviation: string };
 };
 
@@ -98,6 +99,7 @@ export async function getCardinalsProspects(year: number): Promise<ProspectPlaye
         fullName: entry.person.fullName,
         lastName: entry.person.useLastName,
         position: entry.position.abbreviation,
+        debutDate: entry.person.mlbDebutDate,
         level,
       });
     }

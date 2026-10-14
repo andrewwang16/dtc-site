@@ -1,10 +1,25 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { playerHeadshotUrl, stripDiacritics, type RosterEntry, type ExternalPlayer } from "@/lib/mlb";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  CARDINALS_TEAM_ID,
+  getTeamAbbreviation,
+  playerHeadshotUrl,
+  stripDiacritics,
+  type RosterEntry,
+  type ExternalPlayer,
+} from "@/lib/mlb";
 import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import type { ProspectPlayer } from "@/lib/prospects";
-import { CONTRACT_SEASON, formatSalary, getContract, type ContractInfo } from "@/lib/contracts";
+import {
+  CONTRACT_SEASON,
+  formatSalary,
+  getContract,
+  signedContract,
+  type ContractInfo,
+  type Signing,
+} from "@/lib/contracts";
+import { FREE_AGENTS, type FreeAgent, type FreeAgentGroup } from "@/lib/free-agents";
 
 type SlotGroup = "diamond" | "bench" | "rotation" | "bullpen";
 
@@ -39,13 +54,26 @@ const TOTAL_SLOTS = ALL_SLOTS.length;
 const FORTY_MAN_LIMIT = 40;
 const PLAYER_ID_DRAG_TYPE = "text/plain";
 
-type SimplePlayer = { id: number; fullName: string; lastName?: string; position: string; level?: string };
-type AddTab = "prospects" | "external" | "create";
+type SimplePlayer = {
+  id: number;
+  fullName: string;
+  lastName?: string;
+  position: string;
+  debutDate?: string;
+  level?: string;
+};
+type AddTab = "prospects" | "free-agents" | "trades" | "create";
+type FreeAgentFilter = "all" | FreeAgentGroup;
+
+const FREE_AGENT_FILTERS: FreeAgentFilter[] = ["all", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF", "DH", "SP", "RP"];
+const FREE_AGENT_IDS = new Set(FREE_AGENTS.map((player) => player.id));
+const MAX_CONTRACT_YEARS = 15;
 
 const CREATE_POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"];
 
 const CONTRACT_STATUS_LABELS: Record<ContractInfo["status"], string> = {
   guaranteed: "Signed",
+  signed: "New deal",
   "club-option": "Club option",
   arbitration: "Arbitration",
   "pre-arb": "Pre-arb",
@@ -60,6 +88,107 @@ function displayLastName(player: SimplePlayer) {
 
   const parts = player.fullName.trim().split(/\s+/);
   return parts[parts.length - 1];
+}
+
+// Salary is entered in millions per year. Returns null until both fields
+// hold a usable deal.
+function parseSigning(salaryText: string, yearsText: string): Signing | null {
+  const millions = Number(salaryText);
+  const years = Number(yearsText);
+
+  if (!salaryText.trim() || !Number.isFinite(millions) || millions <= 0) {
+    return null;
+  }
+
+  if (!Number.isInteger(years) || years < 1 || years > MAX_CONTRACT_YEARS) {
+    return null;
+  }
+
+  return { salary: Math.round(millions * 1_000_000), years };
+}
+
+function formatFreeAgentAfter(contract: ContractInfo | null) {
+  if (!contract?.freeAgentAfter) {
+    return "—";
+  }
+
+  return contract.freeAgentEstimated ? `${contract.freeAgentAfter}+ est.` : String(contract.freeAgentAfter);
+}
+
+const contractFieldStyle: React.CSSProperties = {
+  padding: "0.35rem 0.6rem",
+  borderRadius: "999px",
+  border: "1px solid var(--line)",
+  background: "var(--bg-soft)",
+  color: "var(--text)",
+  fontSize: "0.8rem",
+};
+
+const smallButtonStyle: React.CSSProperties = {
+  border: "1px solid var(--line)",
+  background: "var(--panel)",
+  color: "var(--text)",
+  fontWeight: 700,
+  borderRadius: "999px",
+  padding: "0.35rem 0.8rem",
+  cursor: "pointer",
+  fontSize: "0.8rem",
+  whiteSpace: "nowrap",
+};
+
+// Salary ($M per year) + years, used to sign a free agent or set a
+// contract on a created or traded-for player.
+function SignForm({
+  submitLabel,
+  initial,
+  onSign,
+}: {
+  submitLabel: string;
+  initial?: Signing;
+  onSign: (signing: Signing) => void;
+}) {
+  const [salary, setSalary] = useState(initial ? String(initial.salary / 1_000_000) : "");
+  const [years, setYears] = useState(initial ? String(initial.years) : "1");
+  const signing = parseSigning(salary, years);
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (signing) {
+          onSign(signing);
+        }
+      }}
+      style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}
+    >
+      <input
+        type="number"
+        min="0"
+        step="0.1"
+        inputMode="decimal"
+        value={salary}
+        onChange={(event) => setSalary(event.target.value)}
+        placeholder="$M / yr"
+        aria-label="Salary in millions per year"
+        style={{ ...contractFieldStyle, width: "6.5rem" }}
+      />
+      <input
+        type="number"
+        min="1"
+        max={MAX_CONTRACT_YEARS}
+        step="1"
+        inputMode="numeric"
+        value={years}
+        onChange={(event) => setYears(event.target.value)}
+        aria-label="Contract years"
+        style={{ ...contractFieldStyle, width: "4rem" }}
+      />
+      <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>yr</span>
+      <button type="submit" disabled={!signing} style={{ ...smallButtonStyle, opacity: signing ? 1 : 0.5 }}>
+        {submitLabel}
+      </button>
+    </form>
+  );
 }
 
 function isPitcherSlot(group: SlotGroup) {
@@ -241,6 +370,14 @@ export default function RosterBuilder({
   const [createFirstName, setCreateFirstName] = useState("");
   const [createLastName, setCreateLastName] = useState("");
   const [createPosition, setCreatePosition] = useState(CREATE_POSITIONS[0]);
+  const [createSalary, setCreateSalary] = useState("");
+  const [createYears, setCreateYears] = useState("1");
+  const [freeAgentFilter, setFreeAgentFilter] = useState<FreeAgentFilter>("all");
+  // Deals made in the builder, keyed by player id. These override any
+  // real contract data for that player.
+  const [signings, setSignings] = useState<Record<number, Signing>>({});
+  const [editingContractId, setEditingContractId] = useState<number | null>(null);
+  const [payrollOpen, setPayrollOpen] = useState(false);
   // Created players get negative ids so they can never collide with a
   // real MLB player id.
   const nextCreatedId = useRef(-1);
@@ -252,9 +389,13 @@ export default function RosterBuilder({
     [roster, sixtyDayIL, prospects]
   );
 
-  function contractFor(player: SimplePlayer) {
-    return getContract(player.id, organizationalIds.has(player.id));
-  }
+  const contractFor = useCallback(
+    (player: SimplePlayer) => {
+      const signing = signings[player.id];
+      return signing ? signedContract(signing) : getContract(player, organizationalIds.has(player.id));
+    },
+    [signings, organizationalIds]
+  );
 
   // Everyone on the 40-man or the 60-day IL is paid. A removed player
   // costs nothing (released / non-tendered) except a declined club
@@ -262,7 +403,7 @@ export default function RosterBuilder({
   const payroll = useMemo(() => {
     const paidPlayers = [...fortyMan, ...reserveIL];
     const rows = paidPlayers
-      .map((player) => ({ player, contract: getContract(player.id, organizationalIds.has(player.id)) }))
+      .map((player) => ({ player, contract: contractFor(player) }))
       .sort((a, b) => (b.contract?.salary ?? -1) - (a.contract?.salary ?? -1));
 
     const totals = { guaranteed: 0, arbitration: 0, preArb: 0, buyouts: 0, unknownCount: 0 };
@@ -280,13 +421,13 @@ export default function RosterBuilder({
     }
 
     for (const player of removedPlayers) {
-      totals.buyouts += getContract(player.id, organizationalIds.has(player.id))?.buyout ?? 0;
+      totals.buyouts += contractFor(player)?.buyout ?? 0;
     }
 
     const total = totals.guaranteed + totals.arbitration + totals.preArb + totals.buyouts;
 
     return { rows, totals, total };
-  }, [fortyMan, reserveIL, removedPlayers, organizationalIds]);
+  }, [fortyMan, reserveIL, removedPlayers, contractFor]);
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
   const fortyManById = useMemo(() => new Map(fortyMan.map((player) => [player.id, player])), [fortyMan]);
@@ -297,15 +438,36 @@ export default function RosterBuilder({
   );
   const filledCount = assignedIds.size;
 
-  const addPool = useMemo(() => {
+  const addPool = useMemo((): SimplePlayer[] => {
     const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
-    const base: SimplePlayer[] = addTab === "prospects" ? prospects : externalPlayers;
+    const matches = (player: SimplePlayer) =>
+      !fortyManIds.has(player.id) && (!trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed));
 
-    return base
-      .filter((player) => !fortyManIds.has(player.id))
-      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
-      .slice(0, addTab === "external" && !trimmed ? 0 : 8);
+    if (addTab === "prospects") {
+      return prospects.filter(matches).slice(0, 8);
+    }
+
+    // Trade targets: players under contract with other clubs, so impending
+    // free agents (on their own tab) and Cardinals are left out.
+    if (addTab === "trades") {
+      return trimmed
+        ? externalPlayers
+            .filter((player) => player.teamId !== CARDINALS_TEAM_ID && !FREE_AGENT_IDS.has(player.id))
+            .filter(matches)
+            .slice(0, 8)
+        : [];
+    }
+
+    return [];
   }, [addTab, addQuery, prospects, externalPlayers, fortyManIds]);
+
+  const freeAgentPool = useMemo(() => {
+    const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
+
+    return FREE_AGENTS.filter((player) => !fortyManIds.has(player.id))
+      .filter((player) => freeAgentFilter === "all" || player.groups.includes(freeAgentFilter))
+      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed));
+  }, [addQuery, freeAgentFilter, fortyManIds]);
 
   const openSlotDef = ALL_SLOTS.find((slot) => slot.id === openSlotId) ?? null;
 
@@ -418,18 +580,40 @@ export default function RosterBuilder({
 
     setFortyMan((current) => [
       ...current,
-      { id: player.id, fullName: player.fullName, lastName: player.lastName, position: player.position },
+      {
+        id: player.id,
+        fullName: player.fullName,
+        lastName: player.lastName,
+        position: player.position,
+        debutDate: player.debutDate,
+      },
     ]);
     setRemovedPlayers((current) => current.filter((p) => p.id !== player.id));
     return true;
   }
+
+  function setSigning(playerId: number, signing: Signing) {
+    setSignings((current) => ({ ...current, [playerId]: signing }));
+  }
+
+  function signFreeAgent(freeAgent: FreeAgent, signing: Signing) {
+    if (addToFortyMan(freeAgent)) {
+      setSigning(freeAgent.id, signing);
+    }
+  }
+
+  // A created player's contract is optional, but if either contract field
+  // is filled in, both have to make a valid deal.
+  const createSigning = parseSigning(createSalary, createYears);
+  const createHasContract = createSalary.trim() !== "";
+  const canCreate = !!createFirstName.trim() && !!createLastName.trim() && (!createHasContract || !!createSigning);
 
   function createPlayer(event: React.FormEvent) {
     event.preventDefault();
     const first = createFirstName.trim();
     const last = createLastName.trim();
 
-    if (!first || !last) {
+    if (!canCreate) {
       return;
     }
 
@@ -441,9 +625,15 @@ export default function RosterBuilder({
     };
 
     if (addToFortyMan(player)) {
+      if (createSigning) {
+        setSigning(player.id, createSigning);
+      }
+
       nextCreatedId.current -= 1;
       setCreateFirstName("");
       setCreateLastName("");
+      setCreateSalary("");
+      setCreateYears("1");
     }
   }
 
@@ -671,84 +861,6 @@ export default function RosterBuilder({
 
       <div>
         <p className="kicker" style={{ marginBottom: "0.6rem" }}>
-          {CONTRACT_SEASON} Payroll &amp; Contracts
-        </p>
-        <div
-          style={{
-            border: "1px solid var(--line)",
-            borderRadius: "18px",
-            background: "var(--panel)",
-            padding: "1.15rem",
-            display: "grid",
-            gap: "1rem",
-          }}
-        >
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
-            {[
-              { label: "Projected payroll", value: payroll.total, strong: true },
-              { label: "Signed / options", value: payroll.totals.guaranteed },
-              { label: "Arbitration (proj.)", value: payroll.totals.arbitration },
-              { label: "Pre-arb (est.)", value: payroll.totals.preArb },
-              ...(payroll.totals.buyouts > 0 ? [{ label: "Option buyouts", value: payroll.totals.buyouts }] : []),
-            ].map((item) => (
-              <div key={item.label}>
-                <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
-                  {item.label}
-                </p>
-                <p style={{ margin: 0, fontSize: item.strong ? "1.4rem" : "1.1rem", fontWeight: 800 }}>
-                  {formatSalary(item.value)}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-              <thead>
-                <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.72rem", textTransform: "uppercase" }}>
-                  <th style={{ padding: "0.4rem 0.5rem" }}>Player</th>
-                  <th style={{ padding: "0.4rem 0.5rem" }}>Status</th>
-                  <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>{CONTRACT_SEASON}</th>
-                  <th style={{ padding: "0.4rem 0.5rem" }}>Contract</th>
-                  <th style={{ padding: "0.4rem 0.5rem" }}>FA After</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payroll.rows.map(({ player, contract }) => (
-                  <tr key={player.id} style={{ borderTop: "1px solid var(--line)" }}>
-                    <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700, whiteSpace: "nowrap" }}>
-                      {player.fullName}
-                      <span style={{ color: "var(--muted)", fontWeight: 400, marginLeft: "0.4rem" }}>
-                        {player.position}
-                        {reserveIL.some((p) => p.id === player.id) && " · 60-day IL"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>
-                      {contract ? CONTRACT_STATUS_LABELS[contract.status] : "Unknown"}
-                    </td>
-                    <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
-                      {contract ? formatSalary(contract.salary) : "—"}
-                    </td>
-                    <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }}>{contract?.detail ?? "—"}</td>
-                    <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }}>{contract?.freeAgentAfter ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.78rem" }}>
-            Includes the 40-man and 60-day IL. Arbitration figures are MLB Trade Rumors projections; pre-arb
-            salaries use the {CONTRACT_SEASON - 1} league minimum. Removing an arbitration player counts as a
-            non-tender, and removing a club-option player counts as declining the option (buyout still owed).
-            {payroll.totals.unknownCount > 0 &&
-              ` ${payroll.totals.unknownCount} external or created player${payroll.totals.unknownCount === 1 ? " has" : "s have"} no contract data and ${payroll.totals.unknownCount === 1 ? "isn't" : "aren't"} counted.`}
-          </p>
-        </div>
-      </div>
-
-      <div>
-        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
           60-Day IL (Outside 40-Man)
         </p>
         <div
@@ -807,6 +919,156 @@ export default function RosterBuilder({
             ))
           )}
         </div>
+      </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setPayrollOpen((open) => !open)}
+          aria-expanded={payrollOpen}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "0.9rem 1.15rem",
+            border: "1px solid var(--line)",
+            borderRadius: payrollOpen ? "18px 18px 0 0" : "18px",
+            background: "var(--panel)",
+            color: "var(--text)",
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <span className="kicker" style={{ margin: 0 }}>
+            {CONTRACT_SEASON} Payroll &amp; Contracts
+          </span>
+          <span style={{ marginLeft: "auto", fontWeight: 800, fontSize: "1.05rem" }}>{formatSalary(payroll.total)}</span>
+          <span
+            aria-hidden="true"
+            style={{ transition: "transform 0.15s", transform: payrollOpen ? "rotate(180deg)" : "none", color: "var(--muted)" }}
+          >
+            ▾
+          </span>
+        </button>
+
+        {payrollOpen && (
+          <div
+            style={{
+              border: "1px solid var(--line)",
+              borderTop: "none",
+              borderRadius: "0 0 18px 18px",
+              background: "var(--panel)",
+              padding: "1.15rem",
+              display: "grid",
+              gap: "1rem",
+            }}
+          >
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
+              {[
+                { label: "Projected payroll", value: payroll.total, strong: true },
+                { label: "Signed / options", value: payroll.totals.guaranteed },
+                { label: "Arbitration (proj.)", value: payroll.totals.arbitration },
+                { label: "Pre-arb (est.)", value: payroll.totals.preArb },
+                ...(payroll.totals.buyouts > 0 ? [{ label: "Option buyouts", value: payroll.totals.buyouts }] : []),
+              ].map((item) => (
+                <div key={item.label}>
+                  <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+                    {item.label}
+                  </p>
+                  <p style={{ margin: 0, fontSize: item.strong ? "1.4rem" : "1.1rem", fontWeight: 800 }}>
+                    {formatSalary(item.value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.72rem", textTransform: "uppercase" }}>
+                    <th style={{ padding: "0.4rem 0.5rem" }}>Player</th>
+                    <th style={{ padding: "0.4rem 0.5rem" }}>Status</th>
+                    <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>{CONTRACT_SEASON}</th>
+                    <th style={{ padding: "0.4rem 0.5rem" }}>Contract</th>
+                    <th style={{ padding: "0.4rem 0.5rem" }}>FA After</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payroll.rows.map(({ player, contract }) => {
+                    // Only players without real contract data (or with a
+                    // builder deal already) can have a contract set here.
+                    const canSetContract = !contract || contract.status === "signed";
+                    const isEditing = editingContractId === player.id;
+
+                    return (
+                      <tr key={player.id} style={{ borderTop: "1px solid var(--line)" }}>
+                        <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700, whiteSpace: "nowrap" }}>
+                          {player.fullName}
+                          <span style={{ color: "var(--muted)", fontWeight: 400, marginLeft: "0.4rem" }}>
+                            {player.position}
+                            {reserveIL.some((p) => p.id === player.id) && " · 60-day IL"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>
+                          {contract ? CONTRACT_STATUS_LABELS[contract.status] : "Unknown"}
+                        </td>
+                        <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
+                          {contract ? formatSalary(contract.salary) : "—"}
+                        </td>
+                        <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }}>
+                          {isEditing ? (
+                            <SignForm
+                              submitLabel="Save"
+                              initial={signings[player.id]}
+                              onSign={(signing) => {
+                                setSigning(player.id, signing);
+                                setEditingContractId(null);
+                              }}
+                            />
+                          ) : (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                              {contract?.detail ?? "—"}
+                              {canSetContract && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingContractId(player.id)}
+                                  style={{ ...smallButtonStyle, padding: "0.2rem 0.6rem", fontSize: "0.72rem" }}
+                                >
+                                  {contract ? "Edit" : "Set contract"}
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                        <td
+                          style={{ padding: "0.4rem 0.5rem", color: "var(--muted)", whiteSpace: "nowrap" }}
+                          title={
+                            contract?.freeAgentEstimated
+                              ? "Earliest possible year, estimated from MLB debut date — any time in the minors pushes it later"
+                              : undefined
+                          }
+                        >
+                          {formatFreeAgentAfter(contract)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.78rem" }}>
+              Includes the 40-man and 60-day IL. Arbitration figures are MLB Trade Rumors projections; pre-arb
+              salaries use the {CONTRACT_SEASON - 1} league minimum. Pre-arb free-agency years come from FanGraphs
+              where listed; years marked &ldquo;est.&rdquo; are the earliest possible, based on MLB debut date.
+              Removing an arbitration player counts as a non-tender, and removing a club-option player counts as
+              declining the option (buyout still owed).
+              {payroll.totals.unknownCount > 0 &&
+                ` ${payroll.totals.unknownCount} player${payroll.totals.unknownCount === 1 ? " has" : "s have"} no contract set and ${payroll.totals.unknownCount === 1 ? "isn't" : "aren't"} counted.`}
+            </p>
+          </div>
+        )}
       </div>
 
       <div>
@@ -893,10 +1155,17 @@ export default function RosterBuilder({
             </button>
             <button
               type="button"
-              style={addTabButtonStyle(addTab === "external")}
-              onClick={() => { setAddTab("external"); setAddQuery(""); }}
+              style={addTabButtonStyle(addTab === "free-agents")}
+              onClick={() => { setAddTab("free-agents"); setAddQuery(""); }}
             >
-              External Players
+              Free Agents
+            </button>
+            <button
+              type="button"
+              style={addTabButtonStyle(addTab === "trades")}
+              onClick={() => { setAddTab("trades"); setAddQuery(""); }}
+            >
+              Trades
             </button>
             <button
               type="button"
@@ -937,9 +1206,32 @@ export default function RosterBuilder({
                 aria-label="Last name"
                 style={{ ...createFieldStyle, flex: "1 1 140px" }}
               />
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                inputMode="decimal"
+                value={createSalary}
+                onChange={(event) => setCreateSalary(event.target.value)}
+                placeholder="$M / yr (optional)"
+                aria-label="Salary in millions per year"
+                style={{ ...createFieldStyle, flex: "1 1 150px" }}
+              />
+              <input
+                type="number"
+                min="1"
+                max={MAX_CONTRACT_YEARS}
+                step="1"
+                inputMode="numeric"
+                value={createYears}
+                onChange={(event) => setCreateYears(event.target.value)}
+                aria-label="Contract years"
+                title="Contract years"
+                style={{ ...createFieldStyle, flex: "0 0 5rem" }}
+              />
               <button
                 type="submit"
-                disabled={!createFirstName.trim() || !createLastName.trim()}
+                disabled={!canCreate}
                 style={{
                   border: "1px solid var(--line)",
                   background: "var(--panel)",
@@ -949,10 +1241,10 @@ export default function RosterBuilder({
                   padding: "0.55rem 1rem",
                   cursor: "pointer",
                   fontSize: "0.85rem",
-                  opacity: !createFirstName.trim() || !createLastName.trim() ? 0.5 : 1,
+                  opacity: canCreate ? 1 : 0.5,
                 }}
               >
-                Add to 40-Man
+                {createHasContract ? "Sign to 40-Man" : "Add to 40-Man"}
               </button>
             </form>
           ) : (
@@ -962,7 +1254,11 @@ export default function RosterBuilder({
                 value={addQuery}
                 onChange={(event) => setAddQuery(event.target.value)}
                 placeholder={
-                  addTab === "external" ? "Search any MLB player by name..." : "Search Cardinals prospects..."
+                  addTab === "trades"
+                    ? "Search players on other MLB teams..."
+                    : addTab === "free-agents"
+                      ? `Search ${FREE_AGENTS.length} impending free agents...`
+                      : "Search Cardinals prospects..."
                 }
                 style={{
                   width: "100%",
@@ -975,66 +1271,140 @@ export default function RosterBuilder({
                 }}
               />
 
-              <div style={{ display: "grid", gap: "0.5rem" }}>
-                {addTab === "external" && !addQuery.trim() ? (
-                  <p style={{ margin: 0, color: "var(--muted)" }}>Type a name to search all of MLB.</p>
-                ) : addPool.length === 0 ? (
-                  <p style={{ margin: 0, color: "var(--muted)" }}>No matching players found.</p>
-                ) : (
-                  addPool.map((player) => (
-                    <div
-                      key={player.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.65rem",
-                        padding: "0.5rem 0.7rem",
-                        borderRadius: "12px",
-                        border: "1px solid var(--line)",
-                        background: "rgba(15,31,61,0.02)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: "34px",
-                          height: "34px",
-                          borderRadius: "50%",
-                          overflow: "hidden",
-                          flexShrink: 0,
-                          background: "rgba(15,31,61,.08)",
-                          border: "1px solid var(--line)",
-                        }}
-                      >
-                        <PlayerHeadshot
-                          src={playerHeadshotUrl(player.id, 68)}
-                          alt={player.fullName}
-                          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
-                        />
-                      </div>
-                      <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>{player.fullName}</span>
-                      {player.level && <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>{player.level}</span>}
-                      <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{player.position}</span>
+              {addTab === "free-agents" ? (
+                <>
+                  <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                    {FREE_AGENT_FILTERS.map((filter) => (
                       <button
+                        key={filter}
                         type="button"
-                        onClick={() => addToFortyMan(player)}
+                        onClick={() => setFreeAgentFilter(filter)}
+                        style={{ ...addTabButtonStyle(freeAgentFilter === filter), padding: "0.25rem 0.7rem", fontSize: "0.78rem" }}
+                      >
+                        {filter === "all" ? "All" : filter}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: "grid", gap: "0.5rem", maxHeight: "520px", overflowY: "auto" }}>
+                    {freeAgentPool.length === 0 ? (
+                      <p style={{ margin: 0, color: "var(--muted)" }}>No matching free agents found.</p>
+                    ) : (
+                      freeAgentPool.map((freeAgent) => (
+                        <div
+                          key={freeAgent.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            gap: "0.4rem 0.65rem",
+                            padding: "0.5rem 0.7rem",
+                            borderRadius: "12px",
+                            border: "1px solid var(--line)",
+                            background: "rgba(15,31,61,0.02)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "34px",
+                              height: "34px",
+                              borderRadius: "50%",
+                              overflow: "hidden",
+                              flexShrink: 0,
+                              background: "rgba(15,31,61,.08)",
+                              border: "1px solid var(--line)",
+                            }}
+                          >
+                            <PlayerHeadshot
+                              src={playerHeadshotUrl(freeAgent.id, 68)}
+                              alt={freeAgent.fullName}
+                              style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+                            />
+                          </div>
+                          <div style={{ display: "grid", gap: "0.1rem", minWidth: 0, flex: "1 1 220px" }}>
+                            <span style={{ fontSize: "0.9rem" }}>
+                              <span style={{ fontWeight: 700 }}>{freeAgent.fullName}</span>
+                              <span style={{ color: "var(--muted)", marginLeft: "0.5rem", fontSize: "0.8rem" }}>
+                                {freeAgent.groups.join("/")} · Age {freeAgent.age} in {CONTRACT_SEASON} ·{" "}
+                                {getTeamAbbreviation(freeAgent.teamId)}
+                              </span>
+                            </span>
+                            {freeAgent.note && (
+                              <span style={{ color: "var(--muted)", fontSize: "0.75rem" }}>{freeAgent.note}</span>
+                            )}
+                          </div>
+                          <div style={{ marginLeft: "auto" }}>
+                            <SignForm submitLabel="Sign" onSign={(signing) => signFreeAgent(freeAgent, signing)} />
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  {addTab === "trades" && !addQuery.trim() ? (
+                    <p style={{ margin: 0, color: "var(--muted)" }}>
+                      Type a name to search players under contract with other teams. Set their salary from the payroll
+                      table once they&apos;re added.
+                    </p>
+                  ) : addPool.length === 0 ? (
+                    <p style={{ margin: 0, color: "var(--muted)" }}>No matching players found.</p>
+                  ) : (
+                    addPool.map((player) => (
+                      <div
+                        key={player.id}
                         style={{
-                          marginLeft: "auto",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.65rem",
+                          padding: "0.5rem 0.7rem",
+                          borderRadius: "12px",
                           border: "1px solid var(--line)",
-                          background: "var(--panel)",
-                          color: "var(--text)",
-                          fontWeight: 700,
-                          borderRadius: "999px",
-                          padding: "0.35rem 0.8rem",
-                          cursor: "pointer",
-                          fontSize: "0.8rem",
+                          background: "rgba(15,31,61,0.02)",
                         }}
                       >
-                        Add
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
+                        <div
+                          style={{
+                            width: "34px",
+                            height: "34px",
+                            borderRadius: "50%",
+                            overflow: "hidden",
+                            flexShrink: 0,
+                            background: "rgba(15,31,61,.08)",
+                            border: "1px solid var(--line)",
+                          }}
+                        >
+                          <PlayerHeadshot
+                            src={playerHeadshotUrl(player.id, 68)}
+                            alt={player.fullName}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+                          />
+                        </div>
+                        <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>{player.fullName}</span>
+                        {player.level && <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>{player.level}</span>}
+                        <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{player.position}</span>
+                        <button
+                          type="button"
+                          onClick={() => addToFortyMan(player)}
+                          style={{
+                            marginLeft: "auto",
+                            border: "1px solid var(--line)",
+                            background: "var(--panel)",
+                            color: "var(--text)",
+                            fontWeight: 700,
+                            borderRadius: "999px",
+                            padding: "0.35rem 0.8rem",
+                            cursor: "pointer",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>

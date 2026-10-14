@@ -46,10 +46,15 @@
       "Bash(pkill -f \"next dev -p 3468\")",
       "Bash(nohup npx next dev -p 3469)",
       "Bash(curl -s \"http://localhost:3469/roster\" -o /tmp/roster_26_v2.html)",
-      "Bash(curl -s \"http://localhost:3469/roster?type=40man\" -o /tmp/roster_40_v2.html)"
+      "Bash(curl -s \"http://localhost:3469/roster?type=40man\" -o /tmp/roster_40_v2.html)",
+      "Bash(git commit -m ' *)",
+      "Bash(pkill -f \"next dev\" 2>/dev/null; rm -f /tmp/arenado.html /tmp/gray.html /tmp/savant*.json /tmp/savant*.csv /tmp/savant2.html /tmp/dtc-dev.log; echo done)",
+      "Bash(node -e ' *)",
+      "Bash(md5 /tmp/wetherholt.png /tmp/silhouette.png)"
     ],
     "additionalDirectories": [
-      "/Users/andrewwang/dtc_site/components"
+      "/Users/andrewwang/dtc_site/components",
+      "/tmp"
     ]
   }
 }

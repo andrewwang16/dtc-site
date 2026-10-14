@@ -156,6 +156,7 @@ export type RosterEntry = {
   // spaces can't recover those.
   lastName?: string;
   position: string;
+  debutDate?: string;
   jerseyNumber?: string;
   status?: string;
 };
@@ -191,7 +192,7 @@ export async function getCardinalsRoster(
 ): Promise<RosterEntry[]> {
   const data = await fetchJson<{
     roster?: Array<{
-      person: { id: number; fullName: string; useLastName?: string };
+      person: { id: number; fullName: string; useLastName?: string; mlbDebutDate?: string };
       position: { abbreviation: string };
       jerseyNumber?: string;
       status?: { description?: string };
@@ -206,6 +207,7 @@ export async function getCardinalsRoster(
     fullName: entry.person.fullName,
     lastName: entry.person.useLastName,
     position: entry.position.abbreviation,
+    debutDate: entry.person.mlbDebutDate,
     jerseyNumber: entry.jerseyNumber,
     status: entry.status?.description,
   }));
