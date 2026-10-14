@@ -806,55 +806,46 @@ export default function RosterBuilder({
           {fortyMan.length === 0 ? (
             <p style={{ margin: 0, color: "var(--muted)" }}>No players on the 40-man roster.</p>
           ) : (
-            fortyMan.map((player) => {
-              const contract = contractFor(player);
-
-              return (
-                <span
-                  key={player.id}
-                  draggable
-                  onDragStart={(event) => handleDragStart(event, player.id)}
+            fortyMan.map((player) => (
+              <span
+                key={player.id}
+                draggable
+                onDragStart={(event) => handleDragStart(event, player.id)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.3rem 0.3rem 0.3rem 0.7rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--line)",
+                  background: assignedIds.has(player.id) ? "rgba(196,30,58,0.08)" : "rgba(15,31,61,0.02)",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  cursor: "grab",
+                }}
+              >
+                {player.fullName}
+                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFromFortyMan(player.id)}
+                  aria-label={`Remove ${player.fullName} from the 40-man roster`}
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.4rem",
-                    padding: "0.3rem 0.3rem 0.3rem 0.7rem",
-                    borderRadius: "999px",
-                    border: "1px solid var(--line)",
-                    background: assignedIds.has(player.id) ? "rgba(196,30,58,0.08)" : "rgba(15,31,61,0.02)",
-                    fontSize: "0.85rem",
-                    fontWeight: 700,
-                    cursor: "grab",
+                    width: "1.3rem",
+                    height: "1.3rem",
+                    borderRadius: "50%",
+                    border: "none",
+                    background: "rgba(180,35,24,0.12)",
+                    color: "#b42318",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    lineHeight: 1,
                   }}
                 >
-                  {player.fullName}
-                  <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
-                  {contract && (
-                    <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: "0.75rem" }}>
-                      {formatSalary(contract.salary)}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeFromFortyMan(player.id)}
-                    aria-label={`Remove ${player.fullName} from the 40-man roster`}
-                    style={{
-                      width: "1.3rem",
-                      height: "1.3rem",
-                      borderRadius: "50%",
-                      border: "none",
-                      background: "rgba(180,35,24,0.12)",
-                      color: "#b42318",
-                      fontWeight: 800,
-                      cursor: "pointer",
-                      lineHeight: 1,
-                    }}
-                  >
-                    ×
-                  </button>
-                </span>
-              );
-            })
+                  ×
+                </button>
+              </span>
+            ))
           )}
         </div>
       </div>
