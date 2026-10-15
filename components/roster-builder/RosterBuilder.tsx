@@ -23,6 +23,7 @@ import {
   type Signing,
 } from "@/lib/contracts";
 import { FREE_AGENTS, type FreeAgent, type FreeAgentGroup } from "@/lib/free-agents";
+import { renderRosterGraphic, type GraphicRow, type GraphicPlayer } from "./rosterGraphic";
 
 type SlotGroup = "diamond" | "bench" | "rotation" | "bullpen";
 
@@ -81,11 +82,14 @@ const OTHER_TEAM_IDS = MLB_TEAM_IDS.filter((id) => id !== CARDINALS_TEAM_ID).sor
 );
 const INJURED_LEVEL = "60-day IL";
 
-type TransactionKind = "trade" | "signing" | "option" | "non-tender" | "dfa";
+type TransactionKind = "trade" | "signing" | "selection" | "activation" | "option" | "non-tender" | "dfa";
 
+// Hex colors (not CSS variables) so the roster graphic's canvas can use them.
 const TRANSACTION_LABELS: Record<TransactionKind, { label: string; color: string }> = {
-  trade: { label: "Trade", color: "var(--accent)" },
+  trade: { label: "Trade", color: "#c41e3a" },
   signing: { label: "Signing", color: "#0f7a38" },
+  selection: { label: "Contract selected", color: "#0f2a52" },
+  activation: { label: "Activated", color: "#0f7a38" },
   option: { label: "Option declined", color: "#8a5a00" },
   "non-tender": { label: "Non-tender", color: "#8a5a00" },
   dfa: { label: "DFA", color: "#5b3fa0" },
@@ -106,6 +110,8 @@ type Transaction = {
   outgoingInjured?: SimplePlayer[];
   outgoingProspects?: SystemPlayer[];
   incomingProspects?: SystemPlayer[];
+  // Activations: players who came off the 60-day IL onto the 40-man.
+  fromIL?: SimplePlayer[];
 };
 
 const LINEUP_SPOTS = 9;
@@ -555,6 +561,104 @@ function SlotCell({
   );
 }
 
+const removeChipButtonStyle: React.CSSProperties = {
+  width: "1.2rem",
+  height: "1.2rem",
+  borderRadius: "50%",
+  border: "none",
+  background: "rgba(180,35,24,0.12)",
+  color: "#b42318",
+  fontWeight: 800,
+  cursor: "pointer",
+  lineHeight: 1,
+};
+
+// A player already in the trade, on either side.
+function TradeChip({
+  player,
+  meta,
+  removeLabel,
+  onRemove,
+}: {
+  player: SimplePlayer;
+  meta: (string | null | undefined)[];
+  removeLabel: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.35rem",
+        padding: "0.25rem 0.3rem 0.25rem 0.65rem",
+        borderRadius: "999px",
+        border: "1px solid var(--line)",
+        background: "var(--panel)",
+        fontSize: "0.82rem",
+        fontWeight: 700,
+      }}
+    >
+      <PlayerName player={player} />
+      <span style={{ color: "var(--muted)", fontWeight: 400 }}>{meta.filter(Boolean).join(" · ")}</span>
+      <button type="button" onClick={onRemove} aria-label={removeLabel} style={removeChipButtonStyle}>
+        ×
+      </button>
+    </span>
+  );
+}
+
+// A searchable player who can be added to one side of the trade.
+function TradeResultRow({ player, inTrade, onAdd }: { player: SystemPlayer; inTrade: boolean; onAdd: () => void }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.55rem",
+        padding: "0.4rem 0.6rem",
+        borderRadius: "12px",
+        border: "1px solid var(--line)",
+        background: "var(--panel)",
+      }}
+    >
+      <div
+        style={{
+          width: "30px",
+          height: "30px",
+          borderRadius: "50%",
+          overflow: "hidden",
+          flexShrink: 0,
+          background: "rgba(15,31,61,.08)",
+          border: "1px solid var(--line)",
+        }}
+      >
+        <PlayerHeadshot
+          src={playerHeadshotUrl(player.id, 60)}
+          alt={player.fullName}
+          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+        />
+      </div>
+      <span style={{ display: "grid", minWidth: 0 }}>
+        <span style={{ fontWeight: 700, fontSize: "0.86rem" }}>
+          <PlayerName player={player} />
+        </span>
+        <span style={{ color: "var(--muted)", fontSize: "0.74rem" }} title={handTitle(player)}>
+          {positionLabel(player)} · {player.level}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onAdd}
+        disabled={inTrade}
+        style={{ ...smallButtonStyle, marginLeft: "auto", opacity: inTrade ? 0.5 : 1, cursor: inTrade ? "default" : "pointer" }}
+      >
+        {inTrade ? "In trade" : "Add"}
+      </button>
+    </div>
+  );
+}
+
 export default function RosterBuilder({
   roster,
   prospects,
@@ -947,7 +1051,7 @@ export default function RosterBuilder({
     return cardinalsSystem
       .filter((player) => !tradeOutgoingIds.includes(player.id))
       .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
-      .slice(0, 10);
+      .slice(0, 40);
   }, [cardinalsSystem, tradeOutgoingIds, tradeQuery]);
 
   function describeTradePiece(player: SystemPlayer & { teamId?: number }) {
@@ -1053,7 +1157,7 @@ export default function RosterBuilder({
     const incomingProspectIds = new Set((transaction.incomingProspects ?? []).map((player) => player.id));
 
     setFortyMan((current) => [...current.filter((player) => !incomingIds.has(player.id)), ...transaction.outgoing]);
-    setReserveIL((current) => [...current, ...(transaction.outgoingInjured ?? [])]);
+    setReserveIL((current) => [...current, ...(transaction.outgoingInjured ?? []), ...(transaction.fromIL ?? [])]);
     setSystemProspects((current) => [
       ...current.filter((player) => !incomingProspectIds.has(player.id)),
       ...(transaction.outgoingProspects ?? []),
@@ -1125,7 +1229,31 @@ export default function RosterBuilder({
   function activateFromIL(player: SimplePlayer) {
     if (addToFortyMan(player)) {
       setReserveIL((current) => current.filter((p) => p.id !== player.id));
+      logTransaction({
+        kind: "activation",
+        summary: `Activated ${player.fullName} (${positionLabel(player)}) from the 60-day IL`,
+        incoming: [toSimplePlayer(player)],
+        outgoing: [],
+        signingsBefore: {},
+        fromIL: [toSimplePlayer(player)],
+      });
     }
+  }
+
+  // Adding a minor leaguer to the 40-man. They stay in `systemProspects`,
+  // so undoing this just takes them back off the 40-man.
+  function selectContract(player: SimplePlayer) {
+    if (fortyManIds.has(player.id) || !addToFortyMan(player)) {
+      return;
+    }
+
+    logTransaction({
+      kind: "selection",
+      summary: `Selected the contract of ${player.fullName} (${[positionLabel(player), player.level].filter(Boolean).join(", ")})`,
+      incoming: [toSimplePlayer(player)],
+      outgoing: [],
+      signingsBefore: {},
+    });
   }
 
   // Dropping a player is a logged (and undoable) move whose meaning depends
@@ -1165,6 +1293,62 @@ export default function RosterBuilder({
     });
   }
 
+  const [graphicStatus, setGraphicStatus] = useState<"idle" | "working" | "error">("idle");
+
+  async function downloadGraphic() {
+    const toGraphic = (player: SimplePlayer): GraphicPlayer => ({
+      id: player.id,
+      name: player.fullName,
+      hand: player.position === "P" ? undefined : player.bats,
+    });
+    const slotRows = (slots: SlotDef[], badge: (index: number) => string | undefined): GraphicRow[] =>
+      slots.map((slot, index) => {
+        const player = playerInSlot(slot.id);
+        return { badge: badge(index), player: player && toGraphic(player), tag: player ? positionLabel(player) : undefined };
+      });
+
+    const lineupRows: GraphicRow[] = Array.from({ length: LINEUP_SPOTS }, (_, index) => {
+      const starter = index < lineup.length ? starterById.get(lineup[index]) : undefined;
+      return { badge: String(index + 1), player: starter ? toGraphic(starter.player) : null, tag: starter?.slot.label };
+    });
+
+    setGraphicStatus("working");
+    try {
+      const blob = await renderRosterGraphic({
+        season: CONTRACT_SEASON,
+        left: [
+          { title: "Lineup", rows: lineupRows },
+          { title: "Bench", rows: slotRows(BENCH_SLOTS, () => undefined) },
+        ],
+        right: [
+          { title: "Rotation", rows: slotRows(ROTATION_SLOTS, (index) => String(index + 1)) },
+          { title: "Bullpen", rows: slotRows(BULLPEN_SLOTS, () => undefined) },
+        ],
+        stats: [
+          { label: `${CONTRACT_SEASON} Payroll`, value: formatSalary(payroll.total) },
+          { label: "40-Man", value: `${fortyMan.length} / ${FORTY_MAN_LIMIT}` },
+          { label: "Active", value: `${filledCount} / ${TOTAL_SLOTS}` },
+        ],
+        transactions: transactions.map((transaction) => ({
+          label: TRANSACTION_LABELS[transaction.kind].label,
+          color: TRANSACTION_LABELS[transaction.kind].color,
+          summary: transaction.summary,
+          detail: transaction.detail,
+        })),
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `cardinals-${CONTRACT_SEASON}-roster.png`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setGraphicStatus("idle");
+    } catch {
+      setGraphicStatus("error");
+    }
+  }
+
   const addTabButtonStyle = (isActive: boolean): React.CSSProperties => ({
     display: "inline-flex",
     alignItems: "center",
@@ -1193,9 +1377,32 @@ export default function RosterBuilder({
         <div onClick={() => setOpenSlotId(null)} style={{ position: "fixed", inset: 0, zIndex: 10 }} />
       )}
 
-      <p style={{ margin: 0, color: "var(--muted)", fontWeight: 700 }}>
-        {filledCount} / {TOTAL_SLOTS} roster spots filled
-      </p>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <p style={{ margin: 0, color: "var(--muted)", fontWeight: 700 }}>
+          {filledCount} / {TOTAL_SLOTS} roster spots filled
+        </p>
+        {graphicStatus === "error" && (
+          <span style={{ marginLeft: "auto", fontSize: "0.8rem", color: "#b42318" }}>
+            Couldn&apos;t create the graphic — try again.
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={downloadGraphic}
+          disabled={graphicStatus === "working"}
+          style={{
+            ...smallButtonStyle,
+            marginLeft: graphicStatus === "error" ? 0 : "auto",
+            background: "var(--accent)",
+            borderColor: "var(--accent)",
+            color: "#fff",
+            padding: "0.45rem 1rem",
+            opacity: graphicStatus === "working" ? 0.6 : 1,
+          }}
+        >
+          {graphicStatus === "working" ? "Creating graphic…" : "Download roster graphic"}
+        </button>
+      </div>
 
       <div
         className="roster-builder-field"
@@ -1828,178 +2035,7 @@ export default function RosterBuilder({
             </form>
           ) : addTab === "trades" ? (
             <div style={{ display: "grid", gap: "0.75rem" }}>
-              {(tradeIncoming.length > 0 || tradeOutgoing.length > 0) && (
-                <div
-                  style={{
-                    border: "2px solid var(--accent)",
-                    borderRadius: "14px",
-                    padding: "0.85rem",
-                    display: "grid",
-                    gap: "0.6rem",
-                    background: "rgba(196,30,58,0.05)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <strong>Trade in progress</strong>
-                    <button type="button" onClick={cancelTrade} style={{ ...smallButtonStyle, marginLeft: "auto" }}>
-                      Cancel
-                    </button>
-                  </div>
-
-                  <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--muted)" }}>
-                    RECEIVING ({tradeIncoming.length})
-                  </span>
-                  <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-                    {tradeIncoming.length === 0 ? (
-                      <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
-                        No one yet — pick a team below and add players.
-                      </span>
-                    ) : (
-                      tradeIncoming.map((player) => (
-                        <span key={player.id} style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "0.35rem",
-                          padding: "0.25rem 0.3rem 0.25rem 0.65rem",
-                          borderRadius: "999px",
-                          border: "1px solid var(--line)",
-                          background: "var(--panel)",
-                          fontSize: "0.82rem",
-                          fontWeight: 700,
-                        }}>
-                          <PlayerName player={player} />
-                          <span style={{ color: "var(--muted)", fontWeight: 400 }}>
-                            {positionLabel(player)} · {getTeamAbbreviation(player.teamId)}
-                            {player.level !== FORTY_MAN_LEVEL ? ` · ${player.level}` : ""}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setTradeIncoming((current) => current.filter((piece) => piece.id !== player.id))}
-                            aria-label={`Take ${player.fullName} out of the trade`}
-                            style={{
-                            width: "1.2rem",
-                            height: "1.2rem",
-                            borderRadius: "50%",
-                            border: "none",
-                            background: "rgba(180,35,24,0.12)",
-                            color: "#b42318",
-                            fontWeight: 800,
-                            cursor: "pointer",
-                            lineHeight: 1,
-                          }}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))
-                    )}
-                  </div>
-
-                  <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--muted)" }}>
-                    SENDING OUT ({tradeOutgoing.length})
-                  </span>
-                  <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-                    {tradeOutgoing.length === 0 ? (
-                      <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
-                        No one yet — search the Cardinals system below.
-                      </span>
-                    ) : (
-                      tradeOutgoing.map((player) => {
-                        const contract = contractFor(player);
-                        return (
-                          <span key={player.id} style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "0.35rem",
-                          padding: "0.25rem 0.3rem 0.25rem 0.65rem",
-                          borderRadius: "999px",
-                          border: "1px solid var(--line)",
-                          background: "var(--panel)",
-                          fontSize: "0.82rem",
-                          fontWeight: 700,
-                        }}>
-                            <PlayerName player={player} />
-                            <span style={{ color: "var(--muted)", fontWeight: 400 }}>
-                              {positionLabel(player)}
-                              {player.level !== FORTY_MAN_LEVEL ? ` · ${player.level}` : ""}
-                              {contract && player.level !== FORTY_MAN_LEVEL && player.level !== INJURED_LEVEL
-                                ? ""
-                                : contract
-                                  ? ` · ${formatSalary(contract.salary)}`
-                                  : ""}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setTradeOutgoingIds((current) => current.filter((id) => id !== player.id))}
-                              aria-label={`Keep ${player.fullName}`}
-                              style={{
-                            width: "1.2rem",
-                            height: "1.2rem",
-                            borderRadius: "50%",
-                            border: "none",
-                            background: "rgba(180,35,24,0.12)",
-                            color: "#b42318",
-                            fontWeight: 800,
-                            cursor: "pointer",
-                            lineHeight: 1,
-                          }}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  <input
-                    type="text"
-                    value={tradeQuery}
-                    onChange={(event) => setTradeQuery(event.target.value)}
-                    placeholder="Add Cardinals players to send out (40-man, IL, or minors)..."
-                    aria-label="Search Cardinals players to send out"
-                    style={{ ...createFieldStyle, width: "100%" }}
-                  />
-                  <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-                    {tradeCandidates.map((player) => (
-                      <button
-                        key={player.id}
-                        type="button"
-                        onClick={() => setTradeOutgoingIds((current) => [...current, player.id])}
-                        style={smallButtonStyle}
-                      >
-                        + <PlayerName player={player} />{" "}
-                        <span style={{ color: "var(--muted)", fontWeight: 400 }}>
-                          {positionLabel(player)}
-                          {player.level !== FORTY_MAN_LEVEL ? ` · ${player.level}` : ""}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={completeTrade}
-                      style={{
-                        ...smallButtonStyle,
-                        background: "var(--accent)",
-                        borderColor: "var(--accent)",
-                        color: "#fff",
-                        padding: "0.45rem 1rem",
-                      }}
-                    >
-                      Complete trade
-                    </button>
-                    <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                      Incoming 40-man players join the 40-man; minor leaguers join the system. Set incoming salaries from the
-                      payroll table.
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--muted)" }}>PICK A TEAM</span>
+              <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--muted)" }}>PICK A TRADE PARTNER</span>
               <div
                 role="radiogroup"
                 aria-label="Team to trade with"
@@ -2040,86 +2076,174 @@ export default function RosterBuilder({
                 })}
               </div>
 
-              {tradeTeamId !== null && (
-                <>
-                  <input
-                    type="text"
-                    value={addQuery}
-                    onChange={(event) => setAddQuery(event.target.value)}
-                    placeholder={`Search the ${getTeamAbbreviation(tradeTeamId)} system (40-man and minors)...`}
-                    aria-label="Search players in the selected team's system"
-                    style={{
-                      width: "100%",
-                      padding: "0.65rem 0.9rem",
-                      borderRadius: "999px",
-                      border: "1px solid var(--line)",
-                      background: "var(--bg-soft)",
-                      color: "var(--text)",
-                      fontSize: "0.95rem",
-                    }}
-                  />
-                  <div style={{ display: "grid", gap: "0.5rem", maxHeight: "520px", overflowY: "auto" }}>
-                    {tradeTeamPlayers === "loading" || tradeTeamPlayers === undefined ? (
-                      <p style={{ margin: 0, color: "var(--muted)" }}>Loading the {getTeamAbbreviation(tradeTeamId)} system…</p>
-                    ) : tradeTeamPlayers === "error" ? (
-                      <p style={{ margin: 0, color: "var(--muted)" }}>Couldn&apos;t load that system — try again later.</p>
-                    ) : tradeTeamResults.length === 0 ? (
-                      <p style={{ margin: 0, color: "var(--muted)" }}>No matching players.</p>
-                    ) : (
-                      tradeTeamResults.map((player) => {
-                        const inTrade = tradeIncoming.some((piece) => piece.id === player.id);
-                        return (
-                          <div
+              <div
+                style={{
+                  border: `2px solid ${tradeIncoming.length > 0 || tradeOutgoing.length > 0 ? "var(--accent)" : "var(--line)"}`,
+                  borderRadius: "14px",
+                  padding: "0.85rem",
+                  display: "grid",
+                  gap: "0.85rem",
+                  background: "rgba(196,30,58,0.03)",
+                }}
+              >
+                <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+                  <div style={{ display: "grid", gap: "0.5rem", alignContent: "start" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
+                      <TeamLogo
+                        src={teamLogoUrl(CARDINALS_TEAM_ID)}
+                        alt=""
+                        style={{ width: "26px", height: "26px", objectFit: "contain" }}
+                      />
+                      <strong style={{ fontSize: "0.9rem" }}>STL sends ({tradeOutgoing.length})</strong>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", minHeight: "1.9rem" }}>
+                      {tradeOutgoing.length === 0 ? (
+                        <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>No one yet.</span>
+                      ) : (
+                        tradeOutgoing.map((player) => {
+                          const contract = contractFor(player);
+                          const paid = player.level === FORTY_MAN_LEVEL || player.level === INJURED_LEVEL;
+                          return (
+                            <TradeChip
+                              key={player.id}
+                              player={player}
+                              meta={[
+                                positionLabel(player),
+                                player.level !== FORTY_MAN_LEVEL ? player.level : null,
+                                paid && contract ? formatSalary(contract.salary) : null,
+                              ]}
+                              removeLabel={`Keep ${player.fullName}`}
+                              onRemove={() => setTradeOutgoingIds((current) => current.filter((id) => id !== player.id))}
+                            />
+                          );
+                        })
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={tradeQuery}
+                      onChange={(event) => setTradeQuery(event.target.value)}
+                      placeholder="Search the Cardinals system (40-man, IL, minors)..."
+                      aria-label="Search Cardinals players to send out"
+                      style={{ ...createFieldStyle, width: "100%", fontSize: "0.88rem" }}
+                    />
+                    <div style={{ display: "grid", gap: "0.35rem", maxHeight: "360px", overflowY: "auto" }}>
+                      {tradeCandidates.length === 0 ? (
+                        <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>No matching players.</p>
+                      ) : (
+                        tradeCandidates.map((player) => (
+                          <TradeResultRow
                             key={player.id}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "0.65rem",
-                              padding: "0.5rem 0.7rem",
-                              borderRadius: "12px",
-                              border: "1px solid var(--line)",
-                              background: "rgba(15,31,61,0.02)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: "34px",
-                                height: "34px",
-                                borderRadius: "50%",
-                                overflow: "hidden",
-                                flexShrink: 0,
-                                background: "rgba(15,31,61,.08)",
-                                border: "1px solid var(--line)",
-                              }}
-                            >
-                              <PlayerHeadshot
-                                src={playerHeadshotUrl(player.id, 68)}
-                                alt={player.fullName}
-                                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+                            player={player}
+                            inTrade={false}
+                            onAdd={() => setTradeOutgoingIds((current) => [...current, player.id])}
+                          />
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: "0.5rem", alignContent: "start" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
+                      {tradeTeamId !== null && (
+                        <TeamLogo
+                          src={teamLogoUrl(tradeTeamId)}
+                          alt=""
+                          style={{ width: "26px", height: "26px", objectFit: "contain" }}
+                        />
+                      )}
+                      <strong style={{ fontSize: "0.9rem" }}>
+                        {tradeTeamId !== null ? getTeamAbbreviation(tradeTeamId) : "Partner"} sends ({tradeIncoming.length})
+                      </strong>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", minHeight: "1.9rem" }}>
+                      {tradeIncoming.length === 0 ? (
+                        <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>No one yet.</span>
+                      ) : (
+                        tradeIncoming.map((player) => (
+                          <TradeChip
+                            key={player.id}
+                            player={player}
+                            meta={[
+                              positionLabel(player),
+                              // Only worth labeling when pieces come from more than one club.
+                              player.teamId !== tradeTeamId ? getTeamAbbreviation(player.teamId) : null,
+                              player.level !== FORTY_MAN_LEVEL ? player.level : null,
+                            ]}
+                            removeLabel={`Take ${player.fullName} out of the trade`}
+                            onRemove={() => setTradeIncoming((current) => current.filter((piece) => piece.id !== player.id))}
+                          />
+                        ))
+                      )}
+                    </div>
+                    {tradeTeamId === null ? (
+                      <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
+                        Pick a team above to browse their 40-man and minor leaguers.
+                      </p>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          value={addQuery}
+                          onChange={(event) => setAddQuery(event.target.value)}
+                          placeholder={`Search the ${getTeamAbbreviation(tradeTeamId)} system (40-man and minors)...`}
+                          aria-label="Search players in the selected team's system"
+                          style={{ ...createFieldStyle, width: "100%", fontSize: "0.88rem" }}
+                        />
+                        <div style={{ display: "grid", gap: "0.35rem", maxHeight: "360px", overflowY: "auto" }}>
+                          {tradeTeamPlayers === "loading" || tradeTeamPlayers === undefined ? (
+                            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
+                              Loading the {getTeamAbbreviation(tradeTeamId)} system…
+                            </p>
+                          ) : tradeTeamPlayers === "error" ? (
+                            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
+                              Couldn&apos;t load that system — try again later.
+                            </p>
+                          ) : tradeTeamResults.length === 0 ? (
+                            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>No matching players.</p>
+                          ) : (
+                            tradeTeamResults.map((player) => (
+                              <TradeResultRow
+                                key={player.id}
+                                player={player}
+                                inTrade={tradeIncoming.some((piece) => piece.id === player.id)}
+                                onAdd={() => addToTrade(player)}
                               />
-                            </div>
-                            <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>
-                              <PlayerName player={player} />
-                            </span>
-                            <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>{player.level}</span>
-                            <span style={{ color: "var(--muted)", fontSize: "0.85rem" }} title={handTitle(player)}>
-                              {positionLabel(player)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => addToTrade(player)}
-                              disabled={inTrade}
-                              style={{ ...smallButtonStyle, marginLeft: "auto", opacity: inTrade ? 0.5 : 1 }}
-                            >
-                              {inTrade ? "In trade" : "Add to trade"}
-                            </button>
-                          </div>
-                        );
-                      })
+                            ))
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
-                </>
-              )}
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={completeTrade}
+                    disabled={tradeIncoming.length === 0 && tradeOutgoing.length === 0}
+                    style={{
+                      ...smallButtonStyle,
+                      background: "var(--accent)",
+                      borderColor: "var(--accent)",
+                      color: "#fff",
+                      padding: "0.45rem 1rem",
+                      opacity: tradeIncoming.length === 0 && tradeOutgoing.length === 0 ? 0.5 : 1,
+                    }}
+                  >
+                    Complete trade ({tradeOutgoing.length} for {tradeIncoming.length})
+                  </button>
+                  {(tradeIncoming.length > 0 || tradeOutgoing.length > 0) && (
+                    <button type="button" onClick={cancelTrade} style={smallButtonStyle}>
+                      Clear
+                    </button>
+                  )}
+                  <span style={{ fontSize: "0.75rem", color: "var(--muted)", flex: "1 1 240px" }}>
+                    Add as many players as you like to each side. Incoming 40-man players join the 40-man; minor
+                    leaguers join the system. Set incoming salaries from the payroll table.
+                  </span>
+                </div>
+              </div>
             </div>
           ) : (
             <>
@@ -2258,7 +2382,7 @@ export default function RosterBuilder({
                         </span>
                         <button
                           type="button"
-                          onClick={() => addToFortyMan(player)}
+                          onClick={() => selectContract(player)}
                           style={{
                             marginLeft: "auto",
                             border: "1px solid var(--line)",
@@ -2271,7 +2395,7 @@ export default function RosterBuilder({
                             fontSize: "0.8rem",
                           }}
                         >
-                          Add
+                          Select contract
                         </button>
                       </div>
                     ))
@@ -2299,7 +2423,8 @@ export default function RosterBuilder({
         >
           {transactions.length === 0 ? (
             <p style={{ margin: 0, color: "var(--muted)" }}>
-              No moves yet. Trades, signings, and players removed from the 40-man show up here and can be undone.
+              No moves yet. Trades, signings, selected contracts, IL activations, and players removed from the 40-man
+              show up here and can be undone.
             </p>
           ) : (
             transactions.map((transaction) => {

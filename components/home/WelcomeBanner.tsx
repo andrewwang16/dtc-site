@@ -20,16 +20,7 @@ export default async function WelcomeBanner() {
         </h1>
         <p style={{ marginTop: "0.75rem", color: "var(--muted)", lineHeight: 1.6, maxWidth: "72ch" }}>
           Dealin&apos; the Cards is your one stop shop for St. Louis Cardinals content. Find our podcasts and
-          the latest information you need about Cardinals stats, news, rumors, and prospects! Check out{" "}
-          <a
-            href="https://cardinalsprospects.com"
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: "var(--accent-soft)", fontWeight: 700 }}
-          >
-            cardinalsprospects.com
-          </a>{" "}
-          for premier coverage of the Cardinals&apos; farm system.
+          the latest information you need about Cardinals stats, news, rumors, and prospects!
         </p>
       </div>
     </section>
