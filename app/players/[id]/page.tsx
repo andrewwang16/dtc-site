@@ -28,6 +28,7 @@ import { getArticlesForPlayer } from "@/lib/articles";
 import { getPlayerGrades } from "@/lib/grades";
 import { getPodcastMentionsForPlayer } from "@/lib/podcast-mentions";
 import { getStatcastPercentiles, isAmericanLeagueTeam, isNationalLeagueTeam } from "@/lib/statcast";
+import { computeEraPlus, computeWrcPlus, formatPlusStat, getSeasonEnvironment } from "@/lib/park-adjusted";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
@@ -128,6 +129,13 @@ function PlayerPageTopBar({ roster }: { roster: RosterEntry[] }) {
   );
 }
 
+// Park-adjusted stats only make sense on a full season (or team stint)
+// line, so they're added to the season cells but not the split tables.
+function withColumnAfter(columns: readonly string[], after: string, column: string) {
+  const index = columns.indexOf(after);
+  return [...columns.slice(0, index + 1), column, ...columns.slice(index + 1)];
+}
+
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -206,13 +214,14 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
   const statcastType = role === "Pitcher" ? "pitcher" : "batter";
 
-  const [yearStats, handednessSplits, playerGrades, podcastMentions, statcastMetrics] =
+  const [yearStats, handednessSplits, playerGrades, podcastMentions, statcastMetrics, seasonEnvironment] =
     await Promise.all([
       getPlayerYearStats(playerId, selectedYear, group),
       getPlayerHandednessSplits(playerId, selectedYear, group),
       getPlayerGrades(bio.fullName),
       getPodcastMentionsForPlayer(bio.fullName),
       getStatcastPercentiles(playerId, selectedYear, statcastType),
+      getSeasonEnvironment(selectedYear),
     ]);
 
   // Below this, the Statcast card looks sparse/awkward if stretched to
@@ -268,6 +277,19 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         : "-";
 
   const seasonRow = buildStatRow(role, seasonStat);
+
+  const seasonStints = selectedTeamStint ? [selectedTeamStint] : yearStats.seasonTeams;
+  const plusColumn = role === "Pitcher" ? "ERA+" : "wRC+";
+  const seasonColumns =
+    role === "Pitcher" ? withColumnAfter(columns, "ERA", plusColumn) : withColumnAfter(columns, "OPS", plusColumn);
+
+  seasonRow[plusColumn] = seasonEnvironment
+    ? formatPlusStat(
+        role === "Pitcher"
+          ? computeEraPlus(seasonStat, seasonStints, seasonEnvironment)
+          : computeWrcPlus(seasonStat, seasonStints, seasonEnvironment)
+      )
+    : "-";
 
   const monthRows = yearStats.months.map((month) => ({
     label: month.month,
@@ -494,7 +516,10 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             <p style={{ margin: "0 0 0.85rem", color: "var(--muted)", fontSize: "0.85rem" }}>
               {selectedYear} · {seasonTeamLabel}
             </p>
-            <SeasonStatCells columns={columns} row={seasonRow} ranks={columnRanks} scope={rankScope} />
+            <SeasonStatCells columns={seasonColumns} row={seasonRow} ranks={columnRanks} scope={rankScope} />
+            <p style={{ margin: "0.85rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>
+              {plusColumn} adjusts for ballpark and league; 100 is league average and higher is better.
+            </p>
           </div>
 
           <div

@@ -107,6 +107,7 @@ export type StatLine = {
   rbi?: number;
   stolenBases?: number;
   baseOnBalls?: number;
+  intentionalWalks?: number;
   strikeOuts?: number;
   hitByPitch?: number;
   sacFlies?: number;
@@ -605,7 +606,8 @@ export function formatPercent(value: number | null): string {
 // No OPS+/ERA+ here — a real park-factor adjustment isn't available at
 // every granularity these columns are used at (season, month, handedness
 // split, rolling window), and showing a non-park-adjusted number under
-// that name would misrepresent it.
+// that name would misrepresent it. Season lines get park-adjusted wRC+ /
+// ERA+ separately, from lib/park-adjusted.ts.
 export const HITTER_COLUMNS = [
   "G",
   "PA",
