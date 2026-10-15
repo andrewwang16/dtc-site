@@ -107,10 +107,6 @@ export default function StatcastPercentiles({ metrics }: { metrics: StatcastPerc
 
   return (
     <div className="statcast-percentiles" style={{ display: "grid", gap: "1rem" }}>
-      <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
-        Actual value on the right; percentile rank in the circle — red is elite, blue is below average, gray
-        hasn&apos;t qualified yet.
-      </p>
       {/* At most four tiles per row (three when the card is narrower). */}
       <div
         style={{

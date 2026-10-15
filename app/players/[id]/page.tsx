@@ -302,23 +302,36 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
   seasonRow.WAR = formatWar(role === "Pitcher" ? pitcherWar?.war : positionPlayerWar?.war);
 
+  // Shown on hover over the WAR cell.
   const warBreakdown = positionPlayerWar
     ? [
-        `Batting ${formatRuns(positionPlayerWar.batting)}`,
-        `Baserunning ${formatRuns(positionPlayerWar.baserunning)}`,
-        positionPlayerWar.hasStatcast ? `Fielding ${formatRuns(positionPlayerWar.fielding)}` : "Fielding n/a",
-        `Positional ${formatRuns(positionPlayerWar.positional)}`,
-        `League ${formatRuns(positionPlayerWar.league)}`,
-        `Replacement ${formatRuns(positionPlayerWar.replacement)}`,
-      ].join(" · ") + " runs"
+        `Batting ${formatRuns(positionPlayerWar.batting)} runs`,
+        `Baserunning ${formatRuns(positionPlayerWar.baserunning)} runs`,
+        positionPlayerWar.hasStatcast
+          ? `Fielding ${formatRuns(positionPlayerWar.fielding)} runs`
+          : "Fielding n/a (Statcast starts in 2016)",
+        `Positional ${formatRuns(positionPlayerWar.positional)} runs`,
+        `League ${formatRuns(positionPlayerWar.league)} runs`,
+        `Replacement ${formatRuns(positionPlayerWar.replacement)} runs`,
+      ]
     : pitcherWar
       ? [
           `RA9 ${pitcherWar.ra9.toFixed(2)}`,
-          `park-adjusted ${pitcherWar.parkAdjustedRa9.toFixed(2)}`,
-          `league ${pitcherWar.leagueRa9.toFixed(2)}`,
-          ...(pitcherWar.gmLI !== null ? [`est. leverage ${pitcherWar.gmLI.toFixed(2)}`] : []),
-        ].join(" · ")
-      : null;
+          `Park-adjusted RA9 ${pitcherWar.parkAdjustedRa9.toFixed(2)}`,
+          `League RA9 ${pitcherWar.leagueRa9.toFixed(2)}`,
+          ...(pitcherWar.gmLI !== null ? [`Est. leverage ${pitcherWar.gmLI.toFixed(2)}`] : []),
+        ]
+      : [];
+
+  const featuredTooltips: Record<string, string> = {
+    WAR: [
+      role === "Pitcher"
+        ? "Wins above replacement, based on runs allowed (RA9), park- and league-adjusted."
+        : "Wins above replacement, park- and league-adjusted, FanGraphs-style.",
+      ...warBreakdown,
+    ].join("\n"),
+    [plusColumn]: "Adjusts for ballpark and league; 100 is league average and higher is better.",
+  };
 
   seasonRow[plusColumn] = seasonEnvironment
     ? formatPlusStat(
@@ -559,19 +572,8 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               ranks={columnRanks}
               scope={rankScope}
               highlighted={featuredColumns}
+              tooltips={featuredTooltips}
             />
-            <p style={{ margin: "0.85rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>
-              {plusColumn} adjusts for ballpark and league; 100 is league average and higher is better.
-              {role === "Pitcher"
-                ? " WAR is based on runs allowed (RA9), park- and league-adjusted."
-                : " WAR is park- and league-adjusted, FanGraphs-style."}
-            </p>
-            {warBreakdown && (
-              <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>
-                WAR: {warBreakdown}
-                {positionPlayerWar && !positionPlayerWar.hasStatcast && " (Statcast fielding/baserunning starts in 2016)"}
-              </p>
-            )}
           </div>
 
           <div
