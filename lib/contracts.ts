@@ -175,6 +175,10 @@ export function signedContract({ salaries }: Signing): ContractInfo {
 // $30M, $7.5M, $2.75M, $780K — only trailing zeros after a decimal point are
 // trimmed (a bare "30" must stay "30").
 export function formatSalary(amount: number): string {
+  if (amount === 0) {
+    return "$0";
+  }
+
   if (Math.abs(amount) >= 1_000_000) {
     const millions = (amount / 1_000_000).toFixed(2).replace(/\.?0+$/, "");
     return `$${millions}M`;

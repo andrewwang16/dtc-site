@@ -71,6 +71,12 @@ type Transaction = {
   kind: "trade" | "signing";
   summary: string;
   detail?: string;
+  // What the move changed, so it can be undone: players it put on and took
+  // off the 40-man, and each touched player's builder contract beforehand
+  // (null = none).
+  incoming: SimplePlayer[];
+  outgoing: SimplePlayer[];
+  signingsBefore: Record<number, Signing | null>;
 };
 
 // Seasons after CONTRACT_SEASON shown as future payroll commitments.
@@ -476,7 +482,7 @@ export default function RosterBuilder({
   const [editingContractId, setEditingContractId] = useState<number | null>(null);
   const [payrollOpen, setPayrollOpen] = useState(false);
   // An in-progress trade: the player coming back and who's being sent out.
-  const [tradeTarget, setTradeTarget] = useState<ExternalPlayer | null>(null);
+  const [tradeIncomingIds, setTradeIncomingIds] = useState<number[]>([]);
   const [tradeOutgoingIds, setTradeOutgoingIds] = useState<number[]>([]);
   const [tradeQuery, setTradeQuery] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -716,31 +722,49 @@ export default function RosterBuilder({
   }
 
   function signFreeAgent(freeAgent: FreeAgent, signing: Signing) {
+    const signingBefore = signings[freeAgent.id] ?? null;
+
     if (addToFortyMan(freeAgent)) {
       setSigning(freeAgent.id, signing);
       logTransaction({
         kind: "signing",
         summary: `Signed ${freeAgent.fullName} (${freeAgent.groups.join("/")}, ${getTeamAbbreviation(freeAgent.teamId)})`,
         detail: signedContract(signing).detail,
+        incoming: [toSimplePlayer(freeAgent)],
+        outgoing: [],
+        signingsBefore: { [freeAgent.id]: signingBefore },
       });
     }
   }
 
-  function startTrade(player: SimplePlayer) {
-    const target = externalById.get(player.id);
-    if (!target) {
+  function toSimplePlayer(player: SimplePlayer): SimplePlayer {
+    return {
+      id: player.id,
+      fullName: player.fullName,
+      lastName: player.lastName,
+      position: player.position,
+      debutDate: player.debutDate,
+    };
+  }
+
+  // Adds a player to the incoming side of the trade being built (starting
+  // one if none is open).
+  function addToTrade(player: SimplePlayer) {
+    if (!externalById.has(player.id)) {
       return;
     }
-    setTradeTarget(target);
+    setTradeIncomingIds((current) => (current.includes(player.id) ? current : [...current, player.id]));
+  }
+
+  function cancelTrade() {
+    setTradeIncomingIds([]);
     setTradeOutgoingIds([]);
     setTradeQuery("");
   }
 
-  function cancelTrade() {
-    setTradeTarget(null);
-    setTradeOutgoingIds([]);
-    setTradeQuery("");
-  }
+  const tradeIncoming = tradeIncomingIds
+    .map((id) => externalById.get(id))
+    .filter((player): player is ExternalPlayer => player !== undefined);
 
   const tradeOutgoing = tradeOutgoingIds
     .map((id) => fortyManById.get(id))
@@ -754,14 +778,20 @@ export default function RosterBuilder({
       .slice(0, 8);
   }, [fortyMan, tradeOutgoingIds, tradeQuery]);
 
-  // The acquired player joins the 40-man and everyone sent out leaves it
+  function describePlayers(players: ExternalPlayer[]) {
+    return players
+      .map((player) => `${player.fullName} (${player.position}${player.teamId ? `, ${getTeamAbbreviation(player.teamId)}` : ""})`)
+      .join(", ");
+  }
+
+  // The acquired players join the 40-man and everyone sent out leaves it
   // (no buyout or dead money — their contracts go with them).
   function completeTrade() {
-    if (!tradeTarget) {
+    if (tradeIncoming.length === 0) {
       return;
     }
 
-    const projected = fortyMan.length + 1 - tradeOutgoing.length;
+    const projected = fortyMan.length + tradeIncoming.length - tradeOutgoing.length;
     if (
       projected > FORTY_MAN_LIMIT &&
       !window.confirm(
@@ -771,36 +801,69 @@ export default function RosterBuilder({
       return;
     }
 
+    const incoming = tradeIncoming.map(toSimplePlayer);
+    const incomingIds = new Set(incoming.map((player) => player.id));
     const outgoingIds = new Set(tradeOutgoing.map((player) => player.id));
     const outgoingSalary = tradeOutgoing.reduce((sum, player) => sum + (contractFor(player)?.salary ?? 0), 0);
-    const team = tradeTarget.teamId ? getTeamAbbreviation(tradeTarget.teamId) : "another team";
 
-    setFortyMan((current) => [
-      ...current.filter((player) => !outgoingIds.has(player.id)),
-      {
-        id: tradeTarget.id,
-        fullName: tradeTarget.fullName,
-        lastName: tradeTarget.lastName,
-        position: tradeTarget.position,
-      },
-    ]);
-    setRemovedPlayers((current) => current.filter((player) => player.id !== tradeTarget.id));
+    setFortyMan((current) => [...current.filter((player) => !outgoingIds.has(player.id)), ...incoming]);
+    setRemovedPlayers((current) => current.filter((player) => !incomingIds.has(player.id)));
     for (const id of outgoingIds) {
       unassignPlayer(id);
     }
 
     logTransaction({
       kind: "trade",
-      summary: `Acquired ${tradeTarget.fullName} (${tradeTarget.position}, ${team}) for ${
+      summary: `Acquired ${describePlayers(tradeIncoming)} for ${
         tradeOutgoing.length > 0 ? tradeOutgoing.map((player) => player.fullName).join(", ") : "nothing"
       }`,
-      detail:
-        tradeOutgoing.length > 0
-          ? `${formatSalary(outgoingSalary)} in ${CONTRACT_SEASON} salary sent out`
-          : undefined,
+      // Players without a known contract don't add anything here.
+      detail: outgoingSalary > 0 ? `${formatSalary(outgoingSalary)} in ${CONTRACT_SEASON} salary sent out` : undefined,
+      incoming,
+      outgoing: tradeOutgoing.map(toSimplePlayer),
+      signingsBefore: {},
     });
 
     cancelTrade();
+  }
+
+  // A move can be undone as long as nothing later has built on it: everyone
+  // it brought in is still on the 40-man and nobody it sent out is back.
+  function undoBlockedReason(transaction: Transaction): string | null {
+    if (transaction.incoming.some((player) => !fortyManIds.has(player.id))) {
+      return "A player from this move has since left the 40-man — undo that move first.";
+    }
+    if (transaction.outgoing.some((player) => fortyManIds.has(player.id))) {
+      return "A player sent out in this move is back on the 40-man.";
+    }
+    return null;
+  }
+
+  function undoTransaction(transaction: Transaction) {
+    if (undoBlockedReason(transaction)) {
+      return;
+    }
+
+    const incomingIds = new Set(transaction.incoming.map((player) => player.id));
+
+    setFortyMan((current) => [...current.filter((player) => !incomingIds.has(player.id)), ...transaction.outgoing]);
+    for (const id of incomingIds) {
+      unassignPlayer(id);
+    }
+
+    setSignings((current) => {
+      const next = { ...current };
+      for (const [id, signing] of Object.entries(transaction.signingsBefore)) {
+        if (signing) {
+          next[Number(id)] = signing;
+        } else {
+          delete next[Number(id)];
+        }
+      }
+      return next;
+    });
+
+    setTransactions((current) => current.filter((entry) => entry.id !== transaction.id));
   }
 
   // A created player's contract is optional, but if either contract field
@@ -832,6 +895,9 @@ export default function RosterBuilder({
           kind: "signing",
           summary: `Signed ${player.fullName} (${player.position}, created player)`,
           detail: signedContract(createSigning).detail,
+          incoming: [player],
+          outgoing: [],
+          signingsBefore: { [player.id]: null },
         });
       }
 
@@ -1554,7 +1620,7 @@ export default function RosterBuilder({
                 </>
               ) : (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
-                  {addTab === "trades" && tradeTarget && (
+                  {addTab === "trades" && tradeIncoming.length > 0 && (
                     <div
                       style={{
                         border: "2px solid var(--accent)",
@@ -1566,17 +1632,61 @@ export default function RosterBuilder({
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                        <strong>
-                          Trade for {tradeTarget.fullName}
-                          <span style={{ color: "var(--muted)", fontWeight: 400 }}>
-                            {" "}
-                            · {tradeTarget.position}
-                            {tradeTarget.teamId ? ` · ${getTeamAbbreviation(tradeTarget.teamId)}` : ""}
-                          </span>
-                        </strong>
+                        <strong>Trade in progress</strong>
                         <button type="button" onClick={cancelTrade} style={{ ...smallButtonStyle, marginLeft: "auto" }}>
                           Cancel
                         </button>
+                      </div>
+
+                      <div style={{ display: "grid", gap: "0.35rem" }}>
+                        <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--muted)" }}>
+                          RECEIVING ({tradeIncoming.length})
+                        </span>
+                        <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                          {tradeIncoming.map((player) => (
+                            <span
+                              key={player.id}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.35rem",
+                                padding: "0.25rem 0.3rem 0.25rem 0.65rem",
+                                borderRadius: "999px",
+                                border: "1px solid var(--line)",
+                                background: "var(--panel)",
+                                fontSize: "0.82rem",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {player.fullName}
+                              <span style={{ color: "var(--muted)", fontWeight: 400 }}>
+                                {player.position}
+                                {player.teamId ? ` · ${getTeamAbbreviation(player.teamId)}` : ""}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setTradeIncomingIds((current) => current.filter((id) => id !== player.id))}
+                                aria-label={`Take ${player.fullName} out of the trade`}
+                                style={{
+                                  width: "1.2rem",
+                                  height: "1.2rem",
+                                  borderRadius: "50%",
+                                  border: "none",
+                                  background: "rgba(180,35,24,0.12)",
+                                  color: "#b42318",
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                  lineHeight: 1,
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                        <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                          Search above and use &ldquo;Add to trade&rdquo; to bring back more players.
+                        </span>
                       </div>
 
                       <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -1669,7 +1779,7 @@ export default function RosterBuilder({
                           Complete trade
                         </button>
                         <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                          Set {tradeTarget.fullName}&apos;s salary from the payroll table after the trade.
+                          Set incoming salaries from the payroll table after the trade.
                         </span>
                       </div>
                     </div>
@@ -1717,8 +1827,10 @@ export default function RosterBuilder({
                         <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{player.position}</span>
                         <button
                           type="button"
-                          onClick={() => (addTab === "trades" ? startTrade(player) : addToFortyMan(player))}
+                          onClick={() => (addTab === "trades" ? addToTrade(player) : addToFortyMan(player))}
+                          disabled={addTab === "trades" && tradeIncomingIds.includes(player.id)}
                           style={{
+                            opacity: addTab === "trades" && tradeIncomingIds.includes(player.id) ? 0.5 : 1,
                             marginLeft: "auto",
                             border: "1px solid var(--line)",
                             background: "var(--panel)",
@@ -1730,7 +1842,13 @@ export default function RosterBuilder({
                             fontSize: "0.8rem",
                           }}
                         >
-                          {addTab === "trades" ? "Trade for" : "Add"}
+                          {addTab !== "trades"
+                            ? "Add"
+                            : tradeIncomingIds.includes(player.id)
+                              ? "In trade"
+                              : tradeIncomingIds.length > 0
+                                ? "Add to trade"
+                                : "Trade for"}
                         </button>
                       </div>
                     ))
@@ -1759,30 +1877,56 @@ export default function RosterBuilder({
           {transactions.length === 0 ? (
             <p style={{ margin: 0, color: "var(--muted)" }}>No trades or signings yet.</p>
           ) : (
-            transactions.map((transaction) => (
-              <div
-                key={transaction.id}
-                style={{ display: "grid", gap: "0.15rem", paddingBottom: "0.6rem", borderBottom: "1px solid var(--line)" }}
-              >
-                <span style={{ fontSize: "0.9rem" }}>
-                  <span
+            transactions.map((transaction) => {
+              const blockedReason = undoBlockedReason(transaction);
+
+              return (
+                <div
+                  key={transaction.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto",
+                    alignItems: "center",
+                    columnGap: "0.75rem",
+                    rowGap: "0.15rem",
+                    paddingBottom: "0.6rem",
+                    borderBottom: "1px solid var(--line)",
+                  }}
+                >
+                  <span style={{ fontSize: "0.9rem" }}>
+                    <span
+                      style={{
+                        fontSize: "0.68rem",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        color: transaction.kind === "trade" ? "var(--accent)" : "#0f7a38",
+                        marginRight: "0.5rem",
+                      }}
+                    >
+                      {transaction.kind}
+                    </span>
+                    <strong>{transaction.summary}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => undoTransaction(transaction)}
+                    disabled={!!blockedReason}
+                    title={blockedReason ?? `Undo this ${transaction.kind}`}
                     style={{
-                      fontSize: "0.68rem",
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                      color: transaction.kind === "trade" ? "var(--accent)" : "#0f7a38",
-                      marginRight: "0.5rem",
+                      ...smallButtonStyle,
+                      gridRow: "span 2",
+                      opacity: blockedReason ? 0.45 : 1,
+                      cursor: blockedReason ? "not-allowed" : "pointer",
                     }}
                   >
-                    {transaction.kind}
-                  </span>
-                  <strong>{transaction.summary}</strong>
-                </span>
-                {transaction.detail && (
-                  <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{transaction.detail}</span>
-                )}
-              </div>
-            ))
+                    Undo
+                  </button>
+                  {transaction.detail && (
+                    <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{transaction.detail}</span>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>
