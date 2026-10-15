@@ -292,17 +292,16 @@ textarea {
     padding: 0.5rem !important;
   }
 
-  .statcast-row {
-    grid-template-columns: 105px 46px 1fr !important;
-    gap: 0.4rem !important;
+  .statcast-tile {
+    padding: 0.5rem 0.55rem 0.6rem !important;
   }
 
   .statcast-label {
-    font-size: 0.74rem !important;
+    font-size: 0.68rem !important;
   }
 
   .statcast-value {
-    font-size: 0.72rem !important;
+    font-size: 0.85rem !important;
   }
 
   .statcast-marker {

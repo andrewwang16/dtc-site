@@ -1,7 +1,9 @@
 export type StatcastPercentile = {
   key: string;
   label: string;
-  percentile: number;
+  // Null when the player hasn't reached Savant's qualifying threshold for
+  // this metric yet — the value still shows, just without a ranking.
+  percentile: number | null;
   value?: string;
 };
 
@@ -98,20 +100,14 @@ function formatRawValue(field: string, raw: string): string {
     return num.toFixed(2);
   }
 
-  if (PERCENT_FIELDS.has(field)) {
-    return `${num.toFixed(1)}%`;
-  }
-
-  if (MPH_FIELDS.has(field)) {
-    return `${num.toFixed(1)} mph`;
+  // No units — the metric label already says what it is ("Hard Hit %",
+  // "Avg Exit Velocity"), matching how Savant shows the numbers.
+  if (PERCENT_FIELDS.has(field) || MPH_FIELDS.has(field) || field === "sprint_speed") {
+    return num.toFixed(1);
   }
 
   if (SPIN_FIELDS.has(field)) {
-    return `${Math.round(num)} rpm`;
-  }
-
-  if (field === "sprint_speed") {
-    return `${num.toFixed(1)} ft/s`;
+    return String(Math.round(num));
   }
 
   return raw;
@@ -208,22 +204,11 @@ export async function getStatcastPercentiles(
     fetchRawValueLeaderboard(year, type, rawFields),
   ]);
 
-  if (!csv) {
-    return [];
-  }
-
-  const { header, rows } = parseCsv(csv);
-
-  if (rows.length === 0) {
-    return [];
-  }
-
+  const { header, rows } = csv ? parseCsv(csv) : { header: [] as string[], rows: [] as string[][] };
   const yearIndex = header.indexOf("year");
+  // A player with too small a sample can be missing from the percentile
+  // export entirely; their raw values can still show as not qualified.
   const row = rows.find((cells) => cells[yearIndex] === String(year));
-
-  if (!row) {
-    return [];
-  }
 
   const rawIdIndex = rawLeaderboard.header.indexOf("player_id");
   const rawRow = rawLeaderboard.rows.find((cells) => cells[rawIdIndex] === String(playerId));
@@ -231,17 +216,9 @@ export async function getStatcastPercentiles(
   return metrics
     .map(({ key, label, rawField }): StatcastPercentile | null => {
       const index = header.indexOf(key);
-      const raw = index >= 0 ? row[index] : "";
-
-      if (raw === "") {
-        return null;
-      }
-
-      const percentile = Number(raw);
-
-      if (!Number.isFinite(percentile)) {
-        return null;
-      }
+      const rawPercentile = row && index >= 0 ? row[index] : "";
+      const parsed = rawPercentile === "" ? null : Number(rawPercentile);
+      const percentile = parsed !== null && Number.isFinite(parsed) ? parsed : null;
 
       let value: string | undefined;
 
@@ -249,6 +226,13 @@ export async function getStatcastPercentiles(
         const rawIndex = rawLeaderboard.header.indexOf(rawField);
         const rawValue = rawIndex >= 0 ? rawRow[rawIndex] : "";
         value = rawValue !== "" ? formatRawValue(rawField, rawValue) : undefined;
+      }
+
+      // Savant leaves a percentile blank both when a player isn't qualified
+      // yet and when the metric doesn't apply (e.g. curveball spin for a
+      // pitcher without one). Only a real value says it's the former.
+      if (percentile === null && value === undefined) {
+        return null;
       }
 
       return { key, label, percentile, value };
