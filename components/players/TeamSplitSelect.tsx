@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { statsViewQuery } from "@/components/players/PlayerStatsPanel";
 
 const COMBINED_VALUE = "combined";
 
@@ -27,7 +28,7 @@ export default function TeamSplitSelect({
         const viewQuery = view ? `&view=${view}` : "";
         const teamQuery = value === COMBINED_VALUE ? "" : `&team=${value}`;
 
-        router.push(`/players/${playerId}?year=${year}${viewQuery}${teamQuery}`);
+        router.push(`/players/${playerId}?year=${year}${viewQuery}${teamQuery}${statsViewQuery()}`);
       }}
       style={{
         padding: "0.6rem 1rem",

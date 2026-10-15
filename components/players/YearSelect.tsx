@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { statsViewQuery } from "@/components/players/PlayerStatsPanel";
 
 export default function YearSelect({
   playerId,
@@ -20,7 +21,7 @@ export default function YearSelect({
       value={selectedYear}
       onChange={(event) => {
         const viewQuery = view ? `&view=${view}` : "";
-        router.push(`/players/${playerId}?year=${event.target.value}${viewQuery}`);
+        router.push(`/players/${playerId}?year=${event.target.value}${viewQuery}${statsViewQuery()}`);
       }}
       style={{
         padding: "0.6rem 1rem",
