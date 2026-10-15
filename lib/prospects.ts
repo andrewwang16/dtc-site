@@ -33,10 +33,10 @@ type RosterEntry = {
   position: { abbreviation: string };
 };
 
-async function fetchAffiliateTeams(year: number): Promise<AffiliateTeam[]> {
+async function fetchAffiliateTeams(parentTeamId: number, year: number): Promise<AffiliateTeam[]> {
   try {
     const response = await fetch(
-      `https://statsapi.mlb.com/api/v1/teams/affiliates?teamIds=${CARDINALS_TEAM_ID}&season=${year}`,
+      `https://statsapi.mlb.com/api/v1/teams/affiliates?teamIds=${parentTeamId}&season=${year}`,
       { next: { revalidate: 21_600 } }
     );
 
@@ -79,12 +79,25 @@ async function fetchAffiliateRoster(teamId: number, year: number): Promise<Roste
   }
 }
 
-// Minor league players across every Cardinals affiliate, deduped (a rehab
-// assignment or optioned player can show up on more than one affiliate's
-// roster in a season) and sorted level-first (majors-adjacent first), then
-// by name within each level.
-export async function getCardinalsProspects(year: number): Promise<ProspectPlayer[]> {
-  const affiliateTeams = await fetchAffiliateTeams(year);
+function toProspectPlayer(entry: RosterEntry, level: string): ProspectPlayer {
+  return {
+    id: entry.person.id,
+    fullName: entry.person.fullName,
+    lastName: entry.person.useLastName,
+    position: entry.position.abbreviation,
+    debutDate: entry.person.mlbDebutDate,
+    bats: entry.person.batSide?.code,
+    throws: entry.person.pitchHand?.code,
+    level,
+  };
+}
+
+// Minor league players across every one of an organization's affiliates,
+// deduped (a rehab assignment or optioned player can show up on more than
+// one affiliate's roster in a season) and sorted level-first
+// (majors-adjacent first), then by name within each level.
+export async function getOrganizationProspects(parentTeamId: number, year: number): Promise<ProspectPlayer[]> {
+  const affiliateTeams = await fetchAffiliateTeams(parentTeamId, year);
 
   const rostersByTeam = await Promise.all(
     affiliateTeams.map(async (team) => ({
@@ -103,16 +116,7 @@ export async function getCardinalsProspects(year: number): Promise<ProspectPlaye
       }
 
       seen.add(entry.person.id);
-      prospects.push({
-        id: entry.person.id,
-        fullName: entry.person.fullName,
-        lastName: entry.person.useLastName,
-        position: entry.position.abbreviation,
-        debutDate: entry.person.mlbDebutDate,
-        bats: entry.person.batSide?.code,
-        throws: entry.person.pitchHand?.code,
-        level,
-      });
+      prospects.push(toProspectPlayer(entry, level));
     }
   }
 
@@ -122,4 +126,37 @@ export async function getCardinalsProspects(year: number): Promise<ProspectPlaye
   });
 
   return prospects;
+}
+
+export function getCardinalsProspects(year: number): Promise<ProspectPlayer[]> {
+  return getOrganizationProspects(CARDINALS_TEAM_ID, year);
+}
+
+// Level for players on an organization's 40-man roster.
+export const FORTY_MAN_LEVEL = "40-man";
+
+// An organization's whole system: its 40-man roster first, then every
+// minor leaguer not on it — for building trades with any club.
+export async function getOrganizationPlayers(teamId: number, year: number): Promise<ProspectPlayer[]> {
+  const [fortyMan, prospects] = await Promise.all([
+    (async () => {
+      try {
+        const response = await fetch(
+          `https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=40Man&season=${year}&hydrate=person`,
+          { next: { revalidate: 21_600 } }
+        );
+        const data: { roster?: RosterEntry[] } = response.ok ? await response.json() : {};
+        return (data.roster ?? []).map((entry) => toProspectPlayer(entry, FORTY_MAN_LEVEL));
+      } catch (error) {
+        console.error("getOrganizationPlayers 40-man failed", teamId, error);
+        return [];
+      }
+    })(),
+    getOrganizationProspects(teamId, year),
+  ]);
+
+  const fortyManIds = new Set(fortyMan.map((player) => player.id));
+  fortyMan.sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+  return [...fortyMan, ...prospects.filter((player) => !fortyManIds.has(player.id))];
 }

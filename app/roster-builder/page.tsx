@@ -1,17 +1,16 @@
 import { auth } from "@/auth";
 import { hasPremiumAccess } from "@/lib/access";
 import { PremiumBadge, PremiumLockCard } from "@/components/shared/PremiumLock";
-import { getFortyManSplit, getAllMlbPlayers } from "@/lib/mlb";
+import { getFortyManSplit } from "@/lib/mlb";
 import { getCardinalsProspects } from "@/lib/prospects";
 import RosterBuilder from "@/components/roster-builder/RosterBuilder";
 
 export default async function RosterBuilderPage() {
   const year = new Date().getFullYear();
 
-  const [{ active: roster, sixtyDayIL }, prospects, externalPlayers, session] = await Promise.all([
+  const [{ active: roster, sixtyDayIL }, prospects, session] = await Promise.all([
     getFortyManSplit(year),
     getCardinalsProspects(year),
-    getAllMlbPlayers(year),
     auth(),
   ]);
 
@@ -36,7 +35,6 @@ export default async function RosterBuilderPage() {
           <RosterBuilder
             roster={roster}
             prospects={prospects}
-            externalPlayers={externalPlayers}
             sixtyDayIL={sixtyDayIL}
           />
         ) : (

@@ -124,31 +124,14 @@ export function getContract(
 // CONTRACT_SEASON.
 export type Signing = { salaries: number[] };
 
-export type SalaryStructure = "even" | "front" | "back";
+const SALARY_ROUNDING = 1_000;
 
-// How far a front- or back-loaded deal swings from its AAV in the first and
-// last seasons (±30%), stepping evenly in between.
-const LOADING_SWING = 0.3;
-const SALARY_ROUNDING = 100_000;
-
-// Spread a deal's total (AAV × years) across its seasons. Each season is
-// rounded to $0.1M, with the last season absorbing the rounding so the
-// total stays exact.
-export function structuredSalaries(aav: number, years: number, structure: SalaryStructure): number[] {
-  const total = aav * years;
-
-  if (years <= 1 || structure === "even") {
-    return Array.from({ length: years }, () => aav);
-  }
-
-  const salaries = Array.from({ length: years }, (_, index) => {
-    const position = (years - 1 - 2 * index) / (years - 1); // 1 → −1
-    const tilt = structure === "front" ? position : -position;
-    return Math.round((aav * (1 + LOADING_SWING * tilt)) / SALARY_ROUNDING) * SALARY_ROUNDING;
-  });
-
-  const assigned = salaries.slice(0, -1).reduce((sum, salary) => sum + salary, 0);
-  salaries[years - 1] = total - assigned;
+// A flat deal: the total split evenly across its seasons (to the nearest
+// $1K, with the last season absorbing the remainder so the total is exact).
+export function flatSalaries(total: number, years: number): number[] {
+  const perSeason = Math.round(total / years / SALARY_ROUNDING) * SALARY_ROUNDING;
+  const salaries = Array.from({ length: years }, () => perSeason);
+  salaries[years - 1] = total - perSeason * (years - 1);
   return salaries;
 }
 

@@ -773,3 +773,9 @@ textarea {
   outline-offset: 2px;
 }
 
+/* Roster builder: stack the field and the pitching staff on phones. */
+@media (max-width: 740px) {
+  .roster-builder-field {
+    grid-template-columns: 1fr !important;
+  }
+}

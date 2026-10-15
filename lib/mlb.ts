@@ -48,6 +48,9 @@ const TEAM_ABBREVIATIONS: Record<number, string> = {
   158: "MIL",
 };
 
+// All 30 MLB team ids.
+export const MLB_TEAM_IDS = Object.keys(TEAM_ABBREVIATIONS).map(Number);
+
 export function getTeamAbbreviation(teamId: number, fallbackName?: string): string {
   return (
     TEAM_ABBREVIATIONS[teamId] ??
