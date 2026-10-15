@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Anton&family=Roboto+Condensed:wght@400;500;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Roboto+Condensed:wght@400;500;700;800&display=swap");
 
 :root {
   --bg: #f7f4ee;
@@ -26,7 +26,8 @@ body {
 
 body {
   color: var(--text);
-  font-family: "Space Grotesk", sans-serif;
+  /* Baseball Savant's typeface, with the same fallbacks. */
+  font-family: "Roboto Condensed", "Helvetica Neue", Helvetica, Arial, sans-serif;
   background:
     radial-gradient(circle at 12% -8%, rgba(196, 30, 58, 0.12), transparent 36%),
     radial-gradient(circle at 102% 16%, rgba(15, 42, 82, 0.1), transparent 34%),
@@ -45,10 +46,17 @@ a {
   width: min(1440px, 94vw);
 }
 
+/* Form controls don't inherit the page font by default. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 .section-title {
-  font-family: "Anton", sans-serif;
   font-size: clamp(1.85rem, 3.1vw, 2.75rem);
-  letter-spacing: 0.03em;
+  font-weight: 700;
   margin: 0;
 }
 
@@ -728,20 +736,4 @@ a {
 
 .box-score-team-panel.active {
   display: block;
-}
-
-/*
- * Player pages use Baseball Savant's typeface (Roboto Condensed, with the
- * same Helvetica/Arial fallbacks) everywhere inside the page — headings,
- * stat cells, tables, and form controls — while the site navbar/footer
- * keep the site-wide fonts.
- */
-.player-page-root,
-.player-page-root * {
-  font-family: "Roboto Condensed", "Helvetica Neue", Helvetica, Arial, sans-serif;
-}
-
-.player-page-root .section-title {
-  font-weight: 700;
-  letter-spacing: 0;
 }

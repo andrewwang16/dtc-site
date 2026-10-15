@@ -22,7 +22,7 @@ export default function StandingsPreview() {
         {metrics.map((metric) => (
           <article key={metric.label} style={{ border: "1px solid var(--line)", borderRadius: "18px", background: "var(--panel)", padding: "1rem" }}>
             <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.93rem" }}>{metric.label}</p>
-            <h3 style={{ margin: "0.4rem 0 0", fontFamily: "Anton, sans-serif", fontSize: "2rem", letterSpacing: "0.02em" }}>
+            <h3 style={{ margin: "0.4rem 0 0", fontSize: "2rem", fontWeight: 700 }}>
               {metric.score}
             </h3>
             <p style={{ margin: "0.2rem 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>{metric.notes}</p>

@@ -6,7 +6,7 @@ import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import { getDepthChart } from "@/lib/depth-chart";
 
 const TABS: Array<{ slug: string; label: string; rosterType?: RosterType }> = [
-  { slug: "26man", label: "26-Man Roster", rosterType: "active" },
+  { slug: "26man", label: "Active Roster", rosterType: "active" },
   { slug: "40man", label: "40-Man Roster", rosterType: "40Man" },
   { slug: "depth", label: "Depth Chart" },
 ];
