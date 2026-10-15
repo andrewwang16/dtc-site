@@ -55,6 +55,8 @@ const ALL_SLOTS: SlotDef[] = [...DIAMOND_SLOTS, ...BENCH_SLOTS, ...ROTATION_SLOT
 const TOTAL_SLOTS = ALL_SLOTS.length;
 const FORTY_MAN_LIMIT = 40;
 const PLAYER_ID_DRAG_TYPE = "text/plain";
+// Separate type so dragging a batting-order row never drops onto a field slot.
+const LINEUP_SPOT_DRAG_TYPE = "application/x-lineup-spot";
 
 type SimplePlayer = {
   id: number;
@@ -62,13 +64,25 @@ type SimplePlayer = {
   lastName?: string;
   position: string;
   debutDate?: string;
+  bats?: string;
+  throws?: string;
   level?: string;
 };
 type AddTab = "prospects" | "free-agents" | "trades" | "create";
 
+type TransactionKind = "trade" | "signing" | "option" | "non-tender" | "dfa";
+
+const TRANSACTION_LABELS: Record<TransactionKind, { label: string; color: string }> = {
+  trade: { label: "Trade", color: "var(--accent)" },
+  signing: { label: "Signing", color: "#0f7a38" },
+  option: { label: "Option declined", color: "#8a5a00" },
+  "non-tender": { label: "Non-tender", color: "#8a5a00" },
+  dfa: { label: "DFA", color: "#5b3fa0" },
+};
+
 type Transaction = {
   id: number;
-  kind: "trade" | "signing";
+  kind: TransactionKind;
   summary: string;
   detail?: string;
   // What the move changed, so it can be undone: players it put on and took
@@ -78,6 +92,8 @@ type Transaction = {
   outgoing: SimplePlayer[];
   signingsBefore: Record<number, Signing | null>;
 };
+
+const LINEUP_SPOTS = 9;
 
 // Seasons after CONTRACT_SEASON shown as future payroll commitments.
 const FUTURE_COMMITMENT_SEASONS = 4;
@@ -107,6 +123,45 @@ function displayLastName(player: SimplePlayer) {
   const parts = player.fullName.trim().split(/\s+/);
   return parts[parts.length - 1];
 }
+
+const HAND_NAMES: Record<string, string> = { L: "left", R: "right", S: "switch" };
+
+// Position plus handedness: throwing hand for pitchers ("RHP"), batting
+// side for everyone else ("CF · L").
+function positionWithHand(player: { position: string; bats?: string; throws?: string }) {
+  if (player.position === "P") {
+    return player.throws ? `${player.throws}HP` : "P";
+  }
+
+  return player.bats ? `${player.position} · ${player.bats}` : player.position;
+}
+
+function handTitle(player: { position: string; bats?: string; throws?: string }) {
+  if (player.position === "P") {
+    return player.throws ? `Throws ${HAND_NAMES[player.throws] ?? player.throws}` : undefined;
+  }
+
+  return player.bats ? `Bats ${HAND_NAMES[player.bats] ?? player.bats}` : undefined;
+}
+
+// What dropping a player from the 40-man means for their contract.
+function removalKind(contract: ContractInfo | null): "option" | "non-tender" | "dfa" {
+  if (contract?.status === "club-option") {
+    return "option";
+  }
+
+  if (contract?.status === "arbitration" || contract?.status === "pre-arb") {
+    return "non-tender";
+  }
+
+  return "dfa";
+}
+
+const REMOVAL_ACTIONS: Record<"option" | "non-tender" | "dfa", string> = {
+  option: "Decline option",
+  "non-tender": "Non-tender",
+  dfa: "Designate for assignment",
+};
 
 function parseMillions(text: string): number | null {
   const millions = Number(text);
@@ -440,7 +495,9 @@ function SlotCell({
                   }}
                 >
                   <span style={{ fontWeight: 700 }}>{eligible.fullName}</span>
-                  <span style={{ color: "var(--muted)", marginLeft: "auto" }}>{eligible.position}</span>
+                  <span style={{ color: "var(--muted)", marginLeft: "auto" }} title={handTitle(eligible)}>
+                    {positionWithHand(eligible)}
+                  </span>
                 </button>
               ))
             )}
@@ -464,8 +521,11 @@ export default function RosterBuilder({
 }) {
   const [fortyMan, setFortyMan] = useState<SimplePlayer[]>(roster);
   const [reserveIL, setReserveIL] = useState<SimplePlayer[]>(sixtyDayIL);
-  const [removedPlayers, setRemovedPlayers] = useState<SimplePlayer[]>([]);
   const [assignments, setAssignments] = useState<Record<string, number | null>>({});
+  const [positionView, setPositionView] = useState<"defense" | "lineup">("defense");
+  // Batting order by player id; only players currently in the defensive
+  // alignment count (see lineup below).
+  const [battingOrder, setBattingOrder] = useState<Array<number | null>>(() => Array(LINEUP_SPOTS).fill(null));
   const [addTab, setAddTab] = useState<AddTab>("prospects");
   const [addQuery, setAddQuery] = useState("");
   const [openSlotId, setOpenSlotId] = useState<string | null>(null);
@@ -506,16 +566,27 @@ export default function RosterBuilder({
     [signings, organizationalIds]
   );
 
-  // Everyone on the 40-man or the 60-day IL is paid. A removed player
-  // costs nothing (released / non-tendered) except a declined club
-  // option, which still owes the buyout.
+  // Players designated for assignment whose deals are guaranteed (real
+  // multi-year contracts and builder signings) — that money is still owed.
+  const deadMoneyContracts = useMemo(
+    () =>
+      transactions
+        .filter((transaction) => transaction.kind === "dfa")
+        .flatMap((transaction) => transaction.outgoing)
+        .map((player) => ({ player, contract: contractFor(player) }))
+        .filter(({ contract }) => contract?.status === "guaranteed" || contract?.status === "signed"),
+    [transactions, contractFor]
+  );
+
+  // Everyone on the 40-man or the 60-day IL is paid. Non-tendered players
+  // and declined options cost nothing; DFA'd guaranteed deals are dead money.
   const payroll = useMemo(() => {
     const paidPlayers = [...fortyMan, ...reserveIL];
     const rows = paidPlayers
       .map((player) => ({ player, contract: contractFor(player) }))
       .sort((a, b) => (b.contract?.salary ?? -1) - (a.contract?.salary ?? -1));
 
-    const totals = { guaranteed: 0, arbitration: 0, preArb: 0, buyouts: 0, unknownCount: 0 };
+    const totals = { guaranteed: 0, arbitration: 0, preArb: 0, deadMoney: 0, unknownCount: 0 };
 
     for (const { contract } of rows) {
       if (!contract) {
@@ -529,23 +600,26 @@ export default function RosterBuilder({
       }
     }
 
-    for (const player of removedPlayers) {
-      totals.buyouts += contractFor(player)?.buyout ?? 0;
+    for (const { contract } of deadMoneyContracts) {
+      totals.deadMoney += contract?.salary ?? 0;
     }
 
-    const total = totals.guaranteed + totals.arbitration + totals.preArb + totals.buyouts;
+    const total = totals.guaranteed + totals.arbitration + totals.preArb + totals.deadMoney;
 
     // Later seasons only count money that's actually guaranteed (real
-    // multi-year deals and builder signings) — arbitration and pre-arb
-    // salaries past next season aren't projected.
+    // multi-year deals and builder signings, including dead money) —
+    // arbitration and pre-arb salaries past next season aren't projected.
     const future = Array.from({ length: FUTURE_COMMITMENT_SEASONS }, (_, index) => {
       const season = CONTRACT_SEASON + 1 + index;
-      const committed = rows.reduce((sum, { contract }) => sum + (contract?.salaryBySeason?.[season] ?? 0), 0);
+      const committed = [...rows, ...deadMoneyContracts].reduce(
+        (sum, { contract }) => sum + (contract?.salaryBySeason?.[season] ?? 0),
+        0
+      );
       return { season, committed };
     });
 
     return { rows, totals, total, future };
-  }, [fortyMan, reserveIL, removedPlayers, contractFor]);
+  }, [fortyMan, reserveIL, deadMoneyContracts, contractFor]);
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
   const externalById = useMemo(() => new Map(externalPlayers.map((player) => [player.id, player])), [externalPlayers]);
@@ -610,6 +684,45 @@ export default function RosterBuilder({
   function playerInSlot(slotId: string) {
     const playerId = assignments[slotId];
     return playerId == null ? null : fortyManById.get(playerId) ?? null;
+  }
+
+  // The lineup draws from whoever is in the defensive alignment right now.
+  const starters = DIAMOND_SLOTS.flatMap((slot) => {
+    const player = playerInSlot(slot.id);
+    return player ? [{ slot, player }] : [];
+  });
+  const starterById = new Map(starters.map((starter) => [starter.player.id, starter]));
+  const lineup = battingOrder.map((id) => (id !== null && starterById.has(id) ? id : null));
+  const lineupFilled = lineup.filter((id) => id !== null).length;
+  const startersOutOfLineup = starters.filter((starter) => !lineup.includes(starter.player.id));
+
+  function setLineupSpot(index: number, playerId: number | null) {
+    setBattingOrder(() => {
+      const next = lineup.map((id) => (id === playerId ? null : id));
+      next[index] = playerId;
+      return next;
+    });
+  }
+
+  function swapLineupSpots(from: number, to: number) {
+    setBattingOrder(() => {
+      const next = [...lineup];
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
+  }
+
+  function fillLineupFromDefense() {
+    setBattingOrder(() => {
+      const next = [...lineup];
+      const remaining = startersOutOfLineup.map((starter) => starter.player.id);
+      for (let index = 0; index < next.length && remaining.length > 0; index += 1) {
+        if (next[index] === null) {
+          next[index] = remaining.shift() ?? null;
+        }
+      }
+      return next;
+    });
   }
 
   function clearSlot(slot: SlotDef) {
@@ -705,9 +818,10 @@ export default function RosterBuilder({
         lastName: player.lastName,
         position: player.position,
         debutDate: player.debutDate,
+        bats: player.bats,
+        throws: player.throws,
       },
     ]);
-    setRemovedPlayers((current) => current.filter((p) => p.id !== player.id));
     return true;
   }
 
@@ -744,6 +858,8 @@ export default function RosterBuilder({
       lastName: player.lastName,
       position: player.position,
       debutDate: player.debutDate,
+      bats: player.bats,
+      throws: player.throws,
     };
   }
 
@@ -807,7 +923,6 @@ export default function RosterBuilder({
     const outgoingSalary = tradeOutgoing.reduce((sum, player) => sum + (contractFor(player)?.salary ?? 0), 0);
 
     setFortyMan((current) => [...current.filter((player) => !outgoingIds.has(player.id)), ...incoming]);
-    setRemovedPlayers((current) => current.filter((player) => !incomingIds.has(player.id)));
     for (const id of outgoingIds) {
       unassignPlayer(id);
     }
@@ -915,13 +1030,41 @@ export default function RosterBuilder({
     }
   }
 
+  // Dropping a player is a logged (and undoable) move whose meaning depends
+  // on their contract: a declined club option, a non-tender, or a DFA.
   function removeFromFortyMan(playerId: number) {
     const player = fortyManById.get(playerId);
+    if (!player) {
+      return;
+    }
+
+    const contract = contractFor(player);
+    const kind = removalKind(contract);
+    const guaranteed = contract?.status === "guaranteed" || contract?.status === "signed";
+
     setFortyMan((current) => current.filter((p) => p.id !== playerId));
     unassignPlayer(playerId);
-    if (player) {
-      setRemovedPlayers((current) => [...current, player]);
-    }
+
+    logTransaction({
+      kind,
+      summary:
+        kind === "option"
+          ? `Declined ${player.fullName}'s club option`
+          : kind === "non-tender"
+            ? `Non-tendered ${player.fullName}`
+            : `Designated ${player.fullName} for assignment`,
+      detail:
+        kind === "option" && contract
+          ? `${formatSalary(contract.salary)} option comes off the payroll`
+          : kind === "non-tender" && contract
+            ? `${formatSalary(contract.salary)} projected salary comes off the payroll`
+            : guaranteed && contract
+              ? `${formatSalary(contract.salary)} in ${CONTRACT_SEASON} stays on the payroll as dead money`
+              : undefined,
+      incoming: [],
+      outgoing: [toSimplePlayer(player)],
+      signingsBefore: {},
+    });
   }
 
   const addTabButtonStyle = (isActive: boolean): React.CSSProperties => ({
@@ -958,35 +1101,168 @@ export default function RosterBuilder({
 
       <div style={{ display: "grid", gap: "1.5rem", gridTemplateColumns: "minmax(280px, 420px) 1fr" }}>
         <div>
-          <p className="kicker" style={{ marginBottom: "0.6rem" }}>
-            Position Players
-          </p>
-          <div
-            style={{
-              position: "relative",
-              aspectRatio: "1 / 1.15",
-              borderRadius: "18px",
-              border: "1px solid var(--line)",
-              background: "var(--panel)",
-            }}
-          >
-            {DIAMOND_SLOTS.map((slot) => (
-              <SlotCell
-                key={slot.id}
-                slot={slot}
-                player={playerInSlot(slot.id)}
-                isOpen={openSlotId === slot.id}
-                onToggleOpen={toggleSlotOpen}
-                onDrop={handleDropOnSlot}
-                onDragStart={handleDragStart}
-                onClear={clearSlot}
-                query={slotQuery}
-                onQueryChange={setSlotQuery}
-                eligiblePlayers={slotEligiblePlayers}
-                onSelect={selectForSlot}
-              />
-            ))}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.6rem" }}>
+            <p className="kicker" style={{ margin: 0 }}>
+              {positionView === "defense" ? "Position Players" : `Lineup (${lineupFilled} / ${LINEUP_SPOTS})`}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setOpenSlotId(null);
+                setPositionView((view) => (view === "defense" ? "lineup" : "defense"));
+              }}
+              style={{
+                ...smallButtonStyle,
+                marginLeft: "auto",
+                padding: "0.3rem 0.85rem",
+                fontSize: "0.75rem",
+                fontWeight: 800,
+                letterSpacing: "0.06em",
+                border: "1px solid #8a1024",
+                background: "rgba(196,30,58,0.12)",
+              }}
+            >
+              {positionView === "defense" ? "LINEUP" : "DEFENSE"}
+            </button>
           </div>
+          {positionView === "lineup" ? (
+            <div
+              style={{
+                borderRadius: "18px",
+                border: "1px solid var(--line)",
+                background: "var(--panel)",
+                padding: "0.85rem",
+                display: "grid",
+                gap: "0.4rem",
+              }}
+            >
+              {starters.length === 0 ? (
+                <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
+                  Fill out the defense first — the lineup is built from the players in the field and at DH.
+                </p>
+              ) : (
+                lineup.map((playerId, index) => {
+                  const starter = playerId !== null ? starterById.get(playerId) : undefined;
+
+                  return (
+                    <div
+                      key={index}
+                      draggable={!!starter}
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData(LINEUP_SPOT_DRAG_TYPE, String(index));
+                        event.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const from = Number(event.dataTransfer.getData(LINEUP_SPOT_DRAG_TYPE));
+                        if (event.dataTransfer.getData(LINEUP_SPOT_DRAG_TYPE) !== "" && from !== index) {
+                          swapLineupSpots(from, index);
+                        }
+                      }}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1.6rem 1fr auto auto",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        minHeight: "2.6rem",
+                        padding: "0.3rem 0.55rem",
+                        borderRadius: "10px",
+                        border: "1px solid var(--line)",
+                        background: starter ? "rgba(196,30,58,0.08)" : "transparent",
+                        cursor: starter ? "grab" : "default",
+                      }}
+                    >
+                      <span style={{ fontWeight: 800, color: "var(--muted)", textAlign: "center" }}>{index + 1}</span>
+                      {starter ? (
+                        <>
+                          <span style={{ fontWeight: 700, fontSize: "0.88rem" }}>{starter.player.fullName}</span>
+                          <span style={{ fontSize: "0.78rem", color: "var(--muted)", whiteSpace: "nowrap" }}>
+                            {starter.slot.label}
+                            {starter.player.bats ? ` · Bats ${starter.player.bats}` : ""}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setLineupSpot(index, null)}
+                            aria-label={`Take ${starter.player.fullName} out of the ${index + 1} spot`}
+                            style={{
+                              width: "1.3rem",
+                              height: "1.3rem",
+                              borderRadius: "50%",
+                              border: "none",
+                              background: "rgba(180,35,24,0.12)",
+                              color: "#b42318",
+                              fontWeight: 800,
+                              cursor: "pointer",
+                              lineHeight: 1,
+                            }}
+                          >
+                            ×
+                          </button>
+                        </>
+                      ) : (
+                        <select
+                          value=""
+                          onChange={(event) => setLineupSpot(index, Number(event.target.value))}
+                          disabled={startersOutOfLineup.length === 0}
+                          aria-label={`Batting ${index + 1}`}
+                          style={{ ...contractFieldStyle, gridColumn: "2 / span 3", width: "100%" }}
+                        >
+                          <option value="" disabled>
+                            {startersOutOfLineup.length === 0 ? "Add more players to the defense" : "Choose a starter…"}
+                          </option>
+                          {startersOutOfLineup.map(({ slot, player }) => (
+                            <option key={player.id} value={player.id}>
+                              {player.fullName} — {slot.label}
+                              {player.bats ? ` (${player.bats})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+
+              {starters.length > 0 && startersOutOfLineup.length > 0 && lineup.includes(null) && (
+                <button type="button" onClick={fillLineupFromDefense} style={{ ...smallButtonStyle, justifySelf: "start" }}>
+                  Fill from defense
+                </button>
+              )}
+              {starters.length > 0 && (
+                <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)" }}>
+                  Drag a hitter onto another spot to swap them.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div
+              style={{
+                position: "relative",
+                aspectRatio: "1 / 1.15",
+                borderRadius: "18px",
+                border: "1px solid var(--line)",
+                background: "var(--panel)",
+              }}
+            >
+              {DIAMOND_SLOTS.map((slot) => (
+                <SlotCell
+                  key={slot.id}
+                  slot={slot}
+                  player={playerInSlot(slot.id)}
+                  isOpen={openSlotId === slot.id}
+                  onToggleOpen={toggleSlotOpen}
+                  onDrop={handleDropOnSlot}
+                  onDragStart={handleDragStart}
+                  onClear={clearSlot}
+                  query={slotQuery}
+                  onQueryChange={setSlotQuery}
+                  eligiblePlayers={slotEligiblePlayers}
+                  onSelect={selectForSlot}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <div>
@@ -1097,11 +1373,14 @@ export default function RosterBuilder({
                 }}
               >
                 {player.fullName}
-                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                <span style={{ color: "var(--muted)", fontWeight: 400 }} title={handTitle(player)}>
+                  {positionWithHand(player)}
+                </span>
                 <button
                   type="button"
                   onClick={() => removeFromFortyMan(player.id)}
                   aria-label={`Remove ${player.fullName} from the 40-man roster`}
+                  title={REMOVAL_ACTIONS[removalKind(contractFor(player))]}
                   style={{
                     width: "1.3rem",
                     height: "1.3rem",
@@ -1158,7 +1437,9 @@ export default function RosterBuilder({
                 }}
               >
                 {player.fullName}
-                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                <span style={{ color: "var(--muted)", fontWeight: 400 }} title={handTitle(player)}>
+                  {positionWithHand(player)}
+                </span>
                 <button
                   type="button"
                   onClick={() => activateFromIL(player)}
@@ -1233,7 +1514,7 @@ export default function RosterBuilder({
                 { label: "Signed / options", value: payroll.totals.guaranteed },
                 { label: "Arbitration (proj.)", value: payroll.totals.arbitration },
                 { label: "Pre-arb (est.)", value: payroll.totals.preArb },
-                ...(payroll.totals.buyouts > 0 ? [{ label: "Option buyouts", value: payroll.totals.buyouts }] : []),
+                ...(payroll.totals.deadMoney > 0 ? [{ label: "Dead money (DFA)", value: payroll.totals.deadMoney }] : []),
               ].map((item) => (
                 <div key={item.label}>
                   <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
@@ -1339,74 +1620,15 @@ export default function RosterBuilder({
               Includes the 40-man and 60-day IL. Arbitration figures are MLB Trade Rumors projections; pre-arb
               salaries use the {CONTRACT_SEASON - 1} league minimum. Pre-arb free-agency years come from FanGraphs
               where listed; years marked &ldquo;est.&rdquo; are the earliest possible, based on MLB debut date.
-              Removing an arbitration player counts as a non-tender, and removing a club-option player counts as
-              declining the option (buyout still owed). Players traded away take their full contracts with them. Later-season
-              commitments only include guaranteed money (multi-year deals and builder signings).
+              Removing a player from the 40-man declines a club option or non-tenders an arbitration/pre-arb player (both
+              come off the payroll); anyone else is designated for assignment, and a guaranteed deal stays on as dead money.
+              Players traded away take their full contracts with them. Later-season commitments only include guaranteed
+              money (multi-year deals, builder signings, and dead money).
               {payroll.totals.unknownCount > 0 &&
                 ` ${payroll.totals.unknownCount} player${payroll.totals.unknownCount === 1 ? " has" : "s have"} no contract set and ${payroll.totals.unknownCount === 1 ? "isn't" : "aren't"} counted.`}
             </p>
           </div>
         )}
-      </div>
-
-      <div>
-        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
-          Removed From 40-Man
-        </p>
-        <div
-          style={{
-            border: "1px solid var(--line)",
-            borderRadius: "18px",
-            background: "var(--panel)",
-            padding: "1.15rem",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.5rem",
-          }}
-        >
-          {removedPlayers.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--muted)" }}>No players have been removed from the 40-man.</p>
-          ) : (
-            removedPlayers.map((player) => (
-              <span
-                key={player.id}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.4rem",
-                  padding: "0.3rem 0.3rem 0.3rem 0.7rem",
-                  borderRadius: "999px",
-                  border: "1px solid var(--line)",
-                  background: "rgba(15,31,61,0.02)",
-                  fontSize: "0.85rem",
-                  fontWeight: 700,
-                }}
-              >
-                {player.fullName}
-                <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
-                <button
-                  type="button"
-                  onClick={() => addToFortyMan(player)}
-                  aria-label={`Add ${player.fullName} back to the 40-man roster`}
-                  title="Add back to 40-man"
-                  style={{
-                    width: "1.3rem",
-                    height: "1.3rem",
-                    borderRadius: "50%",
-                    border: "none",
-                    background: "rgba(15,122,56,0.15)",
-                    color: "#0f7a38",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    lineHeight: 1,
-                  }}
-                >
-                  +
-                </button>
-              </span>
-            ))
-          )}
-        </div>
       </div>
 
       <div>
@@ -1602,7 +1824,11 @@ export default function RosterBuilder({
                             <span style={{ fontSize: "0.9rem" }}>
                               <span style={{ fontWeight: 700 }}>{freeAgent.fullName}</span>
                               <span style={{ color: "var(--muted)", marginLeft: "0.5rem", fontSize: "0.8rem" }}>
-                                {freeAgent.groups.join("/")} · Age {freeAgent.age} in {CONTRACT_SEASON} ·{" "}
+                                {freeAgent.groups.join("/")} ·{" "}
+                                <span title={handTitle(freeAgent)}>
+                                  {freeAgent.position === "P" ? `${freeAgent.throws}HP` : `Bats ${freeAgent.bats}`}
+                                </span>{" "}
+                                · Age {freeAgent.age} in {CONTRACT_SEASON} ·{" "}
                                 {getTeamAbbreviation(freeAgent.teamId)}
                               </span>
                             </span>
@@ -1659,8 +1885,8 @@ export default function RosterBuilder({
                               }}
                             >
                               {player.fullName}
-                              <span style={{ color: "var(--muted)", fontWeight: 400 }}>
-                                {player.position}
+                              <span style={{ color: "var(--muted)", fontWeight: 400 }} title={handTitle(player)}>
+                                {positionWithHand(player)}
                                 {player.teamId ? ` · ${getTeamAbbreviation(player.teamId)}` : ""}
                               </span>
                               <button
@@ -1759,7 +1985,9 @@ export default function RosterBuilder({
                             style={smallButtonStyle}
                           >
                             + {player.fullName}{" "}
-                            <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                            <span style={{ color: "var(--muted)", fontWeight: 400 }} title={handTitle(player)}>
+                              {positionWithHand(player)}
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -1824,7 +2052,9 @@ export default function RosterBuilder({
                         </div>
                         <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>{player.fullName}</span>
                         {player.level && <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>{player.level}</span>}
-                        <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{player.position}</span>
+                        <span style={{ color: "var(--muted)", fontSize: "0.85rem" }} title={handTitle(player)}>
+                          {positionWithHand(player)}
+                        </span>
                         <button
                           type="button"
                           onClick={() => (addTab === "trades" ? addToTrade(player) : addToFortyMan(player))}
@@ -1875,7 +2105,9 @@ export default function RosterBuilder({
           }}
         >
           {transactions.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--muted)" }}>No trades or signings yet.</p>
+            <p style={{ margin: 0, color: "var(--muted)" }}>
+              No moves yet. Trades, signings, and players removed from the 40-man show up here and can be undone.
+            </p>
           ) : (
             transactions.map((transaction) => {
               const blockedReason = undoBlockedReason(transaction);
@@ -1899,11 +2131,11 @@ export default function RosterBuilder({
                         fontSize: "0.68rem",
                         fontWeight: 800,
                         textTransform: "uppercase",
-                        color: transaction.kind === "trade" ? "var(--accent)" : "#0f7a38",
+                        color: TRANSACTION_LABELS[transaction.kind].color,
                         marginRight: "0.5rem",
                       }}
                     >
-                      {transaction.kind}
+                      {TRANSACTION_LABELS[transaction.kind].label}
                     </span>
                     <strong>{transaction.summary}</strong>
                   </span>
@@ -1911,7 +2143,7 @@ export default function RosterBuilder({
                     type="button"
                     onClick={() => undoTransaction(transaction)}
                     disabled={!!blockedReason}
-                    title={blockedReason ?? `Undo this ${transaction.kind}`}
+                    title={blockedReason ?? `Undo: ${transaction.summary}`}
                     style={{
                       ...smallButtonStyle,
                       gridRow: "span 2",

@@ -162,6 +162,9 @@ export type RosterEntry = {
   lastName?: string;
   position: string;
   debutDate?: string;
+  // Batting side (L/R/S) and throwing hand (L/R).
+  bats?: string;
+  throws?: string;
   jerseyNumber?: string;
   status?: string;
 };
@@ -197,7 +200,14 @@ export async function getCardinalsRoster(
 ): Promise<RosterEntry[]> {
   const data = await fetchJson<{
     roster?: Array<{
-      person: { id: number; fullName: string; useLastName?: string; mlbDebutDate?: string };
+      person: {
+        id: number;
+        fullName: string;
+        useLastName?: string;
+        mlbDebutDate?: string;
+        batSide?: { code?: string };
+        pitchHand?: { code?: string };
+      };
       position: { abbreviation: string };
       jerseyNumber?: string;
       status?: { description?: string };
@@ -213,6 +223,8 @@ export async function getCardinalsRoster(
     lastName: entry.person.useLastName,
     position: entry.position.abbreviation,
     debutDate: entry.person.mlbDebutDate,
+    bats: entry.person.batSide?.code,
+    throws: entry.person.pitchHand?.code,
     jerseyNumber: entry.jerseyNumber,
     status: entry.status?.description,
   }));
@@ -250,6 +262,8 @@ export type ExternalPlayer = {
   fullName: string;
   lastName?: string;
   position: string;
+  bats?: string;
+  throws?: string;
   teamId?: number;
 };
 
@@ -262,6 +276,8 @@ export async function getAllMlbPlayers(year: number): Promise<ExternalPlayer[]> 
       id: number;
       fullName: string;
       useLastName?: string;
+      batSide?: { code?: string };
+      pitchHand?: { code?: string };
       primaryPosition?: { abbreviation?: string };
       currentTeam?: { id?: number };
     }>;
@@ -271,6 +287,8 @@ export async function getAllMlbPlayers(year: number): Promise<ExternalPlayer[]> 
     id: person.id,
     fullName: person.fullName,
     lastName: person.useLastName,
+    bats: person.batSide?.code,
+    throws: person.pitchHand?.code,
     position: person.primaryPosition?.abbreviation ?? "",
     teamId: person.currentTeam?.id,
   }));

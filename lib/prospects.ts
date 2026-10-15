@@ -6,6 +6,8 @@ export type ProspectPlayer = {
   lastName?: string;
   position: string;
   debutDate?: string;
+  bats?: string;
+  throws?: string;
   level: string;
 };
 
@@ -20,7 +22,14 @@ type AffiliateTeam = {
 };
 
 type RosterEntry = {
-  person: { id: number; fullName: string; useLastName?: string; mlbDebutDate?: string };
+  person: {
+    id: number;
+    fullName: string;
+    useLastName?: string;
+    mlbDebutDate?: string;
+    batSide?: { code?: string };
+    pitchHand?: { code?: string };
+  };
   position: { abbreviation: string };
 };
 
@@ -100,6 +109,8 @@ export async function getCardinalsProspects(year: number): Promise<ProspectPlaye
         lastName: entry.person.useLastName,
         position: entry.position.abbreviation,
         debutDate: entry.person.mlbDebutDate,
+        bats: entry.person.batSide?.code,
+        throws: entry.person.pitchHand?.code,
         level,
       });
     }

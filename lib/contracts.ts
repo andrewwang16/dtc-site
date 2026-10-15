@@ -28,8 +28,6 @@ export type ContractInfo = {
   // True when freeAgentAfter is the earliest possible year, estimated from
   // the MLB debut date rather than taken from a source.
   freeAgentEstimated?: boolean;
-  // Owed if the club declines the option (player removed from the 40-man).
-  buyout?: number;
   // Salary for every guaranteed season, CONTRACT_SEASON on — used for
   // future-year payroll commitments. Absent for one-season figures
   // (arbitration, pre-arb, options).
@@ -60,7 +58,6 @@ const CONTRACTS: Record<number, ContractInfo> = {
     salary: 6_000_000,
     detail: "$6M club option, $1M buyout",
     freeAgentAfter: 2027,
-    buyout: 1_000_000,
   },
   669467: { status: "arbitration", salary: 7_500_000, detail: "Arb 2 · MLBTR projection", freeAgentAfter: 2028 },
   669357: { status: "arbitration", salary: 3_400_000, detail: "Arb 2 · MLBTR projection", freeAgentAfter: 2028 },
