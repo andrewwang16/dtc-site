@@ -644,6 +644,26 @@ export const PITCHER_COLUMNS = [
   "HR/9",
 ] as const;
 
+// Handedness splits: games played isn't meaningful for a hitter's split,
+// and for pitchers the opponent slash line replaces the role/run-based
+// columns (GS, W-L, SV, ERA, WHIP), which don't split by batter hand.
+export const HITTER_HANDEDNESS_COLUMNS = HITTER_COLUMNS.filter((column) => column !== "G");
+
+export const PITCHER_HANDEDNESS_COLUMNS = [
+  "G",
+  "IP",
+  "AVG",
+  "OBP",
+  "SLG",
+  "OPS",
+  "K",
+  "BB",
+  "K%",
+  "BB%",
+  "K-BB%",
+  "HR/9",
+] as const;
+
 export type HitterColumn = (typeof HITTER_COLUMNS)[number];
 export type PitcherColumn = (typeof PITCHER_COLUMNS)[number];
 export type StatRow = Record<string, string>;
@@ -693,6 +713,11 @@ export function buildPitcherRow(stat: StatLine | null): StatRow {
     "W-L": `${stat.wins ?? 0}-${stat.losses ?? 0}`,
     SV: String(stat.saves ?? 0),
     IP: stat.inningsPitched ?? "-",
+    // Opponents' slash line, used by the handedness splits.
+    AVG: stat.avg ?? "-",
+    OBP: stat.obp ?? "-",
+    SLG: stat.slg ?? "-",
+    OPS: stat.ops ?? "-",
     ERA: stat.era ?? "-",
     WHIP: stat.whip ?? "-",
     K: String(k),

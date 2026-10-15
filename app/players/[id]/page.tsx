@@ -17,8 +17,10 @@ import {
   getPlayerYearStats,
   getTeamAbbreviation,
   HITTER_COLUMNS,
+  HITTER_HANDEDNESS_COLUMNS,
   NL_LEAGUE_ID,
   PITCHER_COLUMNS,
+  PITCHER_HANDEDNESS_COLUMNS,
   playerHeadshotUrl,
   teamLogoUrl,
   type RosterEntry,
@@ -57,7 +59,7 @@ function StatTable({
   const stickyFirstColStyle: React.CSSProperties = {
     position: "sticky",
     left: 0,
-    background: "var(--bg)",
+    background: "var(--panel)",
     borderRight: "1px solid var(--line)",
     zIndex: 1,
   };
@@ -188,6 +190,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     : determinePlayerRole(bio);
   const group = role === "Pitcher" ? "pitching" : "hitting";
   const columns = role === "Pitcher" ? PITCHER_COLUMNS : HITTER_COLUMNS;
+  const handednessColumns = role === "Pitcher" ? PITCHER_HANDEDNESS_COLUMNS : HITTER_HANDEDNESS_COLUMNS;
 
   const currentYear = new Date().getFullYear();
   // Fall back to a wide, fixed range when a debut date isn't on file, rather
@@ -602,11 +605,21 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         style={{ animationDelay: "0.11s" }}
       >
         <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Splits by Month</h2>
-        {monthRows.length === 0 ? (
-          <p style={{ color: "var(--muted)" }}>No monthly data for {selectedYear}.</p>
-        ) : (
-          <StatTable columns={columns} rows={monthRows} />
-        )}
+        <article
+          className="split-table-card"
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            background: "var(--panel)",
+            padding: "1.15rem",
+          }}
+        >
+          {monthRows.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--muted)" }}>No monthly data for {selectedYear}.</p>
+          ) : (
+            <StatTable columns={columns} rows={monthRows} />
+          )}
+        </article>
       </section>
 
       <section
@@ -614,11 +627,21 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         style={{ animationDelay: "0.14s" }}
       >
         <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Splits by Handedness</h2>
-        {handednessRows.length === 0 ? (
-          <p style={{ color: "var(--muted)" }}>No handedness splits for {selectedYear}.</p>
-        ) : (
-          <StatTable columns={columns} rows={handednessRows} />
-        )}
+        <article
+          className="split-table-card"
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            background: "var(--panel)",
+            padding: "1.15rem",
+          }}
+        >
+          {handednessRows.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--muted)" }}>No handedness splits for {selectedYear}.</p>
+          ) : (
+            <StatTable columns={handednessColumns} rows={handednessRows} />
+          )}
+        </article>
       </section>
 
       <section
@@ -669,7 +692,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           className="container fade-up player-page-section"
           style={{ animationDelay: "0.21s", minWidth: 0 }}
         >
-          <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Player Grades</h2>
+          <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Monthly Grades</h2>
           <PlayerGrades grades={playerGrades} />
         </section>
       )}
@@ -723,7 +746,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           className="container fade-up player-page-section"
           style={{ animationDelay: "0.26s", minWidth: 0 }}
         >
-          <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Podcast Mentions</h2>
+          <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Podcast Features</h2>
           <PodcastMentions mentions={podcastMentions} />
         </section>
       )}

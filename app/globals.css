@@ -365,7 +365,8 @@ a {
   }
 
   .rolling-trend-card,
-  .game-log-card {
+  .game-log-card,
+  .split-table-card {
     padding: 0.5rem !important;
   }
 
