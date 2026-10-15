@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Anton&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Anton&family=Roboto+Condensed:wght@400;500;700;800&display=swap");
 
 :root {
   --bg: #f7f4ee;
@@ -728,4 +728,20 @@ a {
 
 .box-score-team-panel.active {
   display: block;
+}
+
+/*
+ * Player pages use Baseball Savant's typeface (Roboto Condensed, with the
+ * same Helvetica/Arial fallbacks) everywhere inside the page — headings,
+ * stat cells, tables, and form controls — while the site navbar/footer
+ * keep the site-wide fonts.
+ */
+.player-page-root,
+.player-page-root * {
+  font-family: "Roboto Condensed", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.player-page-root .section-title {
+  font-weight: 700;
+  letter-spacing: 0;
 }
