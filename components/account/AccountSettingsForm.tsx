@@ -39,8 +39,8 @@ const buttonStyle = (disabled: boolean): React.CSSProperties => ({
   fontSize: "1rem",
 });
 
-function MembershipBadge({ isAdmin, isSubscriber }: { isAdmin: boolean; isSubscriber: boolean }) {
-  const label = isAdmin ? "Admin" : isSubscriber ? "Subscriber" : "Free";
+function MembershipBadge({ isAdmin }: { isAdmin: boolean }) {
+  const label = isAdmin ? "Admin" : "Member";
 
   return (
     <span
@@ -64,12 +64,10 @@ export default function AccountSettingsForm({
   email,
   displayName,
   isAdmin,
-  isSubscriber,
 }: {
   email: string;
   displayName: string;
   isAdmin: boolean;
-  isSubscriber: boolean;
 }) {
   const { update } = useSession();
   const [isNamePending, startNameTransition] = useTransition();
@@ -141,7 +139,7 @@ export default function AccountSettingsForm({
           <p className="kicker" style={{ marginBottom: "0.4rem" }}>
             Membership
           </p>
-          <MembershipBadge isAdmin={isAdmin} isSubscriber={isSubscriber} />
+          <MembershipBadge isAdmin={isAdmin} />
         </div>
       </div>
 

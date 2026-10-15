@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import PlayerPicker from "@/components/articles/PlayerPicker";
+import PlayerPicker from "@/components/shared/PlayerPicker";
 import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import TeamLogo from "@/components/shared/TeamLogo";
 import {

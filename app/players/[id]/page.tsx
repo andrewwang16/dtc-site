@@ -1,7 +1,4 @@
 import Link from "next/link";
-import { auth } from "@/auth";
-import { hasPremiumAccess } from "@/lib/access";
-import { PremiumBadge, PremiumLockCard } from "@/components/shared/PremiumLock";
 import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
 import TeamLogo from "@/components/shared/TeamLogo";
 import {
@@ -26,7 +23,6 @@ import {
   type RosterEntry,
   type StatRow,
 } from "@/lib/mlb";
-import { getArticlesForPlayer } from "@/lib/articles";
 import { getPlayerGrades } from "@/lib/grades";
 import { getPodcastMentionsForPlayer } from "@/lib/podcast-mentions";
 import { getStatcastPercentiles, isAmericanLeagueTeam, isNationalLeagueTeam } from "@/lib/statcast";
@@ -148,26 +144,12 @@ function InfoTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatArticleDate(date: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(`${date}T12:00:00Z`));
-}
-
 export default async function PlayerPage({ params, searchParams }: PlayerPageProps) {
   const { id } = await params;
   const { year: yearParam, view: viewParam, team: teamParam } = await searchParams;
   const playerId = Number.parseInt(id, 10);
 
-  const [bio, roster, playerArticles, session] = await Promise.all([
-    getPlayerBio(playerId),
-    getCardinalsRoster(new Date().getFullYear()),
-    getArticlesForPlayer(playerId),
-    auth(),
-  ]);
-
-  const hasAccess = hasPremiumAccess(session?.user);
+  const [bio, roster] = await Promise.all([getPlayerBio(playerId), getCardinalsRoster(new Date().getFullYear())]);
 
   if (!bio) {
     return (
@@ -650,31 +632,24 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         className="container fade-up player-page-section"
         style={{ animationDelay: "0.17s" }}
       >
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "1rem" }}>
-          <h2 className="player-section-title" style={{ margin: 0 }}>Rolling Trend</h2>
-          {!hasAccess && <PremiumBadge />}
-        </div>
-        {hasAccess ? (
-          <article
-            className="rolling-trend-card"
-            style={{
-              border: "1px solid var(--line)",
-              borderRadius: "18px",
-              // Same red as the home page scoreboard.
-              background: "linear-gradient(155deg, #c8253f 0%, #7d0f1f 100%)",
-              color: "#fdfaf3",
-              padding: "1.15rem",
-            }}
-          >
-            <RollingTrendChart
-              gameLog={yearStats.gameLog}
-              role={role}
-              rollingContext={positionPlayerWar?.rollingContext ?? pitcherWar?.rollingContext ?? null}
-            />
-          </article>
-        ) : (
-          <PremiumLockCard message="Subscribe to see rolling trend charts." />
-        )}
+        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Rolling Trend</h2>
+        <article
+          className="rolling-trend-card"
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            // Same red as the home page scoreboard.
+            background: "linear-gradient(155deg, #c8253f 0%, #7d0f1f 100%)",
+            color: "#fdfaf3",
+            padding: "1.15rem",
+          }}
+        >
+          <RollingTrendChart
+            gameLog={yearStats.gameLog}
+            role={role}
+            rollingContext={positionPlayerWar?.rollingContext ?? pitcherWar?.rollingContext ?? null}
+          />
+        </article>
       </section>
 
       <section
@@ -702,50 +677,6 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         >
           <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Monthly Grades</h2>
           <PlayerGrades grades={playerGrades} />
-        </section>
-      )}
-
-      {playerArticles.length > 0 && (
-        <section
-          className="container fade-up player-page-section"
-          style={{ animationDelay: "0.23s", minWidth: 0 }}
-        >
-          <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Related Articles</h2>
-          <div
-            style={{
-              display: "grid",
-              gap: "1rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            }}
-          >
-            {playerArticles.map((article) => (
-              <Link
-                key={article.slug}
-                href={`/articles/${article.slug}`}
-                style={{
-                  display: "grid",
-                  border: "1px solid var(--line)",
-                  borderRadius: "18px",
-                  background: "var(--panel)",
-                  overflow: "hidden",
-                  color: "inherit",
-                }}
-              >
-                <div style={{ padding: "1.15rem", display: "grid", gap: "0.5rem" }}>
-                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
-                    <p className="kicker" style={{ margin: 0 }}>
-                      {formatArticleDate(article.date)} · {article.author}
-                    </p>
-                    {article.isPremium && !hasAccess && <PremiumBadge />}
-                  </div>
-                  <h3 style={{ margin: 0, fontSize: "1.1rem" }}>{article.title}</h3>
-                  <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.55 }}>
-                    {article.excerpt}
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
         </section>
       )}
 

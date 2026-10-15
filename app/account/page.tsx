@@ -27,7 +27,6 @@ export default async function AccountPage() {
           email={session.user.email}
           displayName={user?.displayName ?? ""}
           isAdmin={Boolean(session.user.isAdmin)}
-          isSubscriber={Boolean(session.user.isSubscriber)}
         />
       </section>
     </div>

@@ -1,4 +1,3 @@
-import LatestArticles from "../../components/home/LatestArticles";
 import LatestVideos from "../../components/home/LatestVideos";
 import PlayerSpotlight from "../../components/home/PlayerSpotlight";
 import ProspectSection from "../../components/home/ProspectSection";
@@ -17,8 +16,6 @@ export default function ShowsPage() {
       <PlayerSpotlight />
 
       <ProspectSection />
-
-      <LatestArticles />
 
       <LatestVideos />
     </div>

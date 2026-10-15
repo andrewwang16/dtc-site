@@ -40,7 +40,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email,
             name: user.displayName?.trim() || email.split("@")[0],
             isAdmin: user.isAdmin,
-            isSubscriber: user.isSubscriber,
           };
         } catch (error) {
           console.error("Sign-in lookup failed", error);
@@ -54,9 +53,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user, trigger, session }) {
       if (user) {
-        const typedUser = user as { isAdmin?: boolean; isSubscriber?: boolean };
+        const typedUser = user as { isAdmin?: boolean };
         token.isAdmin = Boolean(typedUser.isAdmin);
-        token.isSubscriber = Boolean(typedUser.isSubscriber);
       }
 
       // Lets the account settings page refresh the session's display name
@@ -70,7 +68,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       session.user.isAdmin = Boolean(token.isAdmin);
-      session.user.isSubscriber = Boolean(token.isSubscriber);
 
       return session;
     },

@@ -9,7 +9,7 @@ export default function PlayerPicker({
   selected,
   onSelect,
   onClear,
-  placeholder = "Search Cardinals players to attach...",
+  placeholder = "Search Cardinals players...",
 }: {
   roster: RosterEntry[];
   selected: RosterEntry | null;

@@ -1,5 +1,4 @@
 import ProspectSection from "../../components/home/ProspectSection";
-import LatestArticles from "../../components/home/LatestArticles";
 
 export default function ProspectsPage() {
   return (

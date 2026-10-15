@@ -47,7 +47,7 @@ function getPool(): Pool {
 /**
  * Tagged-template query helper, e.g. `sql\`SELECT * FROM t WHERE id = ${id}\``.
  * Kept as a tagged template (rather than switching every call site to
- * pool.query(text, params)) so lib/articles.ts and lib/users.ts didn't
+ * pool.query(text, params)) so call sites like lib/users.ts didn't
  * need to change when the underlying driver did.
  */
 export async function sql<T = Record<string, unknown>>(
