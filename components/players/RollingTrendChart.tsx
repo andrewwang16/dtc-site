@@ -10,7 +10,24 @@ import {
   type PlayerRole,
 } from "@/lib/mlb";
 
-const WINDOW_SIZES = [3, 5, 7, 10, 15, 20, 30] as const;
+type GroupBy = "games" | "plateAppearances";
+
+const GAME_WINDOWS = [3, 5, 7, 10, 15, 20, 30];
+const PLATE_APPEARANCE_WINDOWS = [25, 50, 75, 100, 150, 200];
+const DEFAULT_WINDOW: Record<GroupBy, number> = { games: 10, plateAppearances: 100 };
+
+// Colors for the red card (same gradient as the home page scoreboard).
+const CHART = {
+  text: "rgba(255, 255, 255, 0.9)",
+  mutedText: "rgba(255, 255, 255, 0.72)",
+  axis: "rgba(255, 255, 255, 0.45)",
+  grid: "rgba(255, 255, 255, 0.14)",
+  line: "#ffffff",
+  dot: "#4a0812",
+  average: "#f6d58e",
+  crosshair: "rgba(255, 255, 255, 0.6)",
+  tooltipBackground: "#1a1416",
+};
 
 function formatChartDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -37,29 +54,77 @@ export default function RollingTrendChart({
   gameLog: GameLogEntry[];
   role: PlayerRole;
 }) {
-  const columns = role === "Pitcher" ? PITCHER_COLUMNS : HITTER_COLUMNS;
-  const defaultStat = role === "Pitcher" ? "ERA" : "OPS";
-  const playingTimeKey = role === "Pitcher" ? "IP" : "PA";
+  const isPitcher = role === "Pitcher";
+  const columns = isPitcher ? PITCHER_COLUMNS : HITTER_COLUMNS;
+  const defaultStat = isPitcher ? "ERA" : "OPS";
+  const playingTimeKey = isPitcher ? "IP" : "PA";
+  // For a pitcher, plate appearances are batters faced.
+  const plateAppearanceLabel = isPitcher ? "BF" : "PA";
+  const plateAppearancesOf = (entry: GameLogEntry) =>
+    (isPitcher ? entry.stat.battersFaced : entry.stat.plateAppearances) ?? 0;
 
-  const [windowSize, setWindowSize] = useState<number>(10);
+  const [groupBy, setGroupBy] = useState<GroupBy>("games");
+  const [windowSize, setWindowSize] = useState<number>(DEFAULT_WINDOW.games);
   const [statKey, setStatKey] = useState<string>(defaultStat);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const points = useMemo(() => {
-    const results: Array<{ date: string; value: number; playingTime: number }> = [];
+  const windowSizes = groupBy === "games" ? GAME_WINDOWS : PLATE_APPEARANCE_WINDOWS;
+  const windowUnit = groupBy === "games" ? "G" : ` ${plateAppearanceLabel}`;
 
-    for (let i = windowSize - 1; i < gameLog.length; i += 1) {
-      const window = gameLog.slice(i - windowSize + 1, i + 1);
+  function changeGroupBy(next: GroupBy) {
+    setGroupBy(next);
+    setWindowSize(DEFAULT_WINDOW[next]);
+    setHoveredIndex(null);
+  }
+
+  const points = useMemo(() => {
+    const results: Array<{
+      date: string;
+      value: number;
+      playingTime: number;
+      games: number;
+      plateAppearances: number;
+    }> = [];
+
+    for (let i = 0; i < gameLog.length; i += 1) {
+      let start: number;
+
+      if (groupBy === "games") {
+        start = i - windowSize + 1;
+      } else {
+        // Per-game data can't be split mid-game, so a "last N PA" window is
+        // the most recent games that add up to at least N.
+        let total = 0;
+        start = i;
+        while (start >= 0 && total < windowSize) {
+          total += plateAppearancesOf(gameLog[start]);
+          start -= 1;
+        }
+        start = total >= windowSize ? start + 1 : -1;
+      }
+
+      if (start < 0) {
+        continue;
+      }
+
+      const window = gameLog.slice(start, i + 1);
       const value = computeRollingValue(window, statKey, role);
-      const playingTime = computeRollingValue(window, playingTimeKey, role);
 
       if (value !== null && Number.isFinite(value)) {
-        results.push({ date: gameLog[i].date, value, playingTime: playingTime ?? 0 });
+        results.push({
+          date: gameLog[i].date,
+          value,
+          playingTime: computeRollingValue(window, playingTimeKey, role) ?? 0,
+          games: window.length,
+          plateAppearances: window.reduce((sum, entry) => sum + plateAppearancesOf(entry), 0),
+        });
       }
     }
 
     return results;
-  }, [gameLog, windowSize, statKey, playingTimeKey, role]);
+    // plateAppearancesOf only depends on isPitcher, which follows role.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameLog, groupBy, windowSize, statKey, playingTimeKey, role]);
 
   const seasonAverage = useMemo(
     () => computeRollingValue(gameLog, statKey, role),
@@ -109,7 +174,9 @@ export default function RollingTrendChart({
     const averageY =
       seasonAverage !== null && Number.isFinite(seasonAverage) ? toY(seasonAverage) : null;
 
-    return { coords, path, minValue, maxValue, averageY, plotWidth };
+    const gridYs = [0.25, 0.5, 0.75].map((fraction) => paddingTop + plotHeight * fraction);
+
+    return { coords, path, minValue, maxValue, averageY, plotWidth, gridYs };
   }, [points, seasonAverage]);
 
   const hovered =
@@ -157,11 +224,32 @@ export default function RollingTrendChart({
     updateHoveredFromClientX(event.currentTarget.ownerSVGElement, touch.clientX);
   }
 
+  const selectStyle: React.CSSProperties = {
+    padding: "0.5rem 0.9rem",
+    borderRadius: "999px",
+    border: "1px solid rgba(255,255,255,0.5)",
+    background: "#fdfaf3",
+    color: "#2a0a10",
+    fontWeight: 700,
+  };
+
   return (
     <div className="rolling-trend-root" style={{ display: "grid", gap: "1rem" }}>
-      <div className="rolling-trend-controls" style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap", alignItems: "center" }}>
+      <div className="rolling-trend-controls" style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+        <select
+          value={groupBy}
+          onChange={(event) => changeGroupBy(event.target.value as GroupBy)}
+          aria-label="Group rolling window by"
+          style={selectStyle}
+        >
+          <option value="games">Last X games</option>
+          <option value="plateAppearances">
+            {isPitcher ? "Last X batters faced" : "Last X plate appearances"}
+          </option>
+        </select>
+
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-          {WINDOW_SIZES.map((size) => {
+          {windowSizes.map((size) => {
             const isActive = size === windowSize;
 
             return (
@@ -169,12 +257,11 @@ export default function RollingTrendChart({
                 key={size}
                 type="button"
                 onClick={() => setWindowSize(size)}
+                aria-pressed={isActive}
                 style={{
-                  border: `1px solid ${isActive ? "#8a1024" : "var(--line)"}`,
-                  background: isActive
-                    ? "rgba(194,30,58,0.12)"
-                    : "rgba(15,31,61,0.02)",
-                  color: "var(--text)",
+                  border: `1px solid ${isActive ? "#ffffff" : "rgba(255,255,255,0.4)"}`,
+                  background: isActive ? "#fdfaf3" : "rgba(255,255,255,0.1)",
+                  color: isActive ? "#8a1024" : "#ffffff",
                   borderRadius: "999px",
                   padding: "0.45rem 0.85rem",
                   fontWeight: 800,
@@ -182,7 +269,8 @@ export default function RollingTrendChart({
                   cursor: "pointer",
                 }}
               >
-                {size}G
+                {size}
+                {windowUnit}
               </button>
             );
           })}
@@ -191,14 +279,8 @@ export default function RollingTrendChart({
         <select
           value={statKey}
           onChange={(event) => setStatKey(event.target.value)}
-          style={{
-            padding: "0.5rem 0.9rem",
-            borderRadius: "999px",
-            border: "1px solid var(--line)",
-            background: "var(--panel)",
-            color: "var(--text)",
-            fontWeight: 700,
-          }}
+          aria-label="Stat"
+          style={selectStyle}
         >
           {columns.map((column) => (
             <option key={column} value={column}>
@@ -209,8 +291,10 @@ export default function RollingTrendChart({
       </div>
 
       {!chart ? (
-        <p style={{ color: "var(--muted)" }}>
-          Not enough games this season for a {windowSize}-game rolling average.
+        <p style={{ margin: 0, color: CHART.mutedText }}>
+          Not enough {groupBy === "games" ? "games" : isPitcher ? "batters faced" : "plate appearances"} this
+          season for a rolling {windowSize}
+          {windowUnit} trend.
         </p>
       ) : (
         <div className="rolling-trend-scroll">
@@ -218,36 +302,41 @@ export default function RollingTrendChart({
           viewBox={`0 0 ${width} ${height}`}
           style={{ width: "100%", height: "auto", display: "block" }}
         >
+          {chart.gridYs.map((y) => (
+            <line key={y} x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke={CHART.grid} />
+          ))}
+
           <line
             x1={paddingLeft}
             y1={paddingTop}
             x2={paddingLeft}
             y2={height - paddingBottom}
-            stroke="var(--line)"
+            stroke={CHART.axis}
           />
           <line
             x1={paddingLeft}
             y1={height - paddingBottom}
             x2={width - paddingRight}
             y2={height - paddingBottom}
-            stroke="var(--line)"
+            stroke={CHART.axis}
           />
 
-          <text x={4} y={paddingTop + 4} fill="var(--muted)" fontSize="11">
+          <text x={4} y={paddingTop + 4} fill={CHART.text} fontSize="11" fontWeight={600}>
             {formatRollingValue(statKey, chart.maxValue)}
           </text>
-          <text x={4} y={height - paddingBottom} fill="var(--muted)" fontSize="11">
+          <text x={4} y={height - paddingBottom} fill={CHART.text} fontSize="11" fontWeight={600}>
             {formatRollingValue(statKey, chart.minValue)}
           </text>
 
-          <text x={paddingLeft} y={height - 8} fill="var(--muted)" fontSize="11">
+          <text x={paddingLeft} y={height - 8} fill={CHART.text} fontSize="11" fontWeight={600}>
             {formatChartDate(points[0].date)}
           </text>
           <text
             x={width - paddingRight}
             y={height - 8}
-            fill="var(--muted)"
+            fill={CHART.text}
             fontSize="11"
+            fontWeight={600}
             textAnchor="end"
           >
             {formatChartDate(points[points.length - 1].date)}
@@ -260,15 +349,14 @@ export default function RollingTrendChart({
                 y1={chart.averageY}
                 x2={width - paddingRight}
                 y2={chart.averageY}
-                stroke="#f2e3c7"
+                stroke={CHART.average}
                 strokeWidth={1.5}
                 strokeDasharray="5,4"
-                opacity={0.85}
               />
               <text
                 x={4}
                 y={chart.averageY + 3.5}
-                fill="#f2e3c7"
+                fill={CHART.average}
                 fontSize="11"
                 fontWeight={700}
               >
@@ -277,16 +365,16 @@ export default function RollingTrendChart({
             </>
           )}
 
-          <path d={chart.path} fill="none" stroke="#c41e3a" strokeWidth={2.5} />
+          <path d={chart.path} fill="none" stroke={CHART.line} strokeWidth={2.5} strokeLinejoin="round" />
 
           {chart.coords.map((coord, index) => (
             <circle
               key={index}
               cx={coord.x}
               cy={coord.y}
-              r={hoveredIndex === index ? 5 : 3}
-              fill="#f2e3c7"
-              stroke="#c41e3a"
+              r={hoveredIndex === index ? 4 : 2}
+              fill={CHART.dot}
+              stroke={CHART.line}
               strokeWidth={hoveredIndex === index ? 1.5 : 0}
               style={{ transition: "r 0.1s ease" }}
             />
@@ -298,7 +386,7 @@ export default function RollingTrendChart({
               y1={paddingTop}
               x2={hovered.x}
               y2={height - paddingBottom}
-              stroke="rgba(15,31,61,0.35)"
+              stroke={CHART.crosshair}
               strokeWidth={1}
             />
           )}
@@ -326,7 +414,9 @@ export default function RollingTrendChart({
               const lines = [
                 formatChartDate(hovered.date),
                 `${statKey}: ${formatRollingValue(statKey, hovered.value)}`,
-                `${playingTimeKey}: ${formatRollingValue(playingTimeKey, hovered.playingTime)}`,
+                groupBy === "games"
+                  ? `${playingTimeKey}: ${formatRollingValue(playingTimeKey, hovered.playingTime)}`
+                  : `${plateAppearanceLabel}: ${hovered.plateAppearances} over ${hovered.games} G`,
                 `vs avg: ${formatDelta(statKey, hovered.value, seasonAverage)}`,
               ];
               const boxWidth = Math.max(96, Math.max(...lines.map((l) => l.length)) * 6 + 16);
@@ -345,17 +435,17 @@ export default function RollingTrendChart({
                     width={boxWidth}
                     height={boxHeight}
                     rx={6}
-                    fill="var(--panel)"
-                    stroke="var(--line)"
+                    fill={CHART.tooltipBackground}
+                    stroke="rgba(255,255,255,0.25)"
                   />
                   {lines.map((line, index) => (
                     <text
                       key={index}
                       x={boxX + boxWidth / 2}
                       y={boxY + 15 + index * 14}
-                      fill={index === 0 ? "var(--muted)" : "var(--text)"}
+                      fill={index === 0 ? CHART.mutedText : "#ffffff"}
                       fontSize="11"
-                      fontWeight={index === 0 ? 400 : 700}
+                      fontWeight={index === 0 ? 500 : 700}
                       textAnchor="middle"
                     >
                       {line}

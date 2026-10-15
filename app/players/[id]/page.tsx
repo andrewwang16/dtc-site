@@ -660,7 +660,9 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             style={{
               border: "1px solid var(--line)",
               borderRadius: "18px",
-              background: "var(--panel)",
+              // Same red as the home page scoreboard.
+              background: "linear-gradient(155deg, #c8253f 0%, #7d0f1f 100%)",
+              color: "#fdfaf3",
               padding: "1.15rem",
             }}
           >
