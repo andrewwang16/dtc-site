@@ -29,6 +29,7 @@ import { getPlayerGrades } from "@/lib/grades";
 import { getPodcastMentionsForPlayer } from "@/lib/podcast-mentions";
 import { getStatcastPercentiles, isAmericanLeagueTeam, isNationalLeagueTeam } from "@/lib/statcast";
 import { computeEraPlus, computeWrcPlus, formatPlusStat, getSeasonEnvironment } from "@/lib/park-adjusted";
+import { formatWar, getPitcherWar, getPositionPlayerWar } from "@/lib/war";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
@@ -134,6 +135,11 @@ function PlayerPageTopBar({ roster }: { roster: RosterEntry[] }) {
 function withColumnAfter(columns: readonly string[], after: string, column: string) {
   const index = columns.indexOf(after);
   return [...columns.slice(0, index + 1), column, ...columns.slice(index + 1)];
+}
+
+function formatRuns(value: number) {
+  const rounded = value.toFixed(1);
+  return value > 0 ? `+${rounded}` : rounded;
 }
 
 function InfoTile({ label, value }: { label: string; value: string }) {
@@ -280,8 +286,44 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
   const seasonStints = selectedTeamStint ? [selectedTeamStint] : yearStats.seasonTeams;
   const plusColumn = role === "Pitcher" ? "ERA+" : "wRC+";
-  const seasonColumns =
-    role === "Pitcher" ? withColumnAfter(columns, "ERA", plusColumn) : withColumnAfter(columns, "OPS", plusColumn);
+  const seasonColumns = withColumnAfter(
+    role === "Pitcher" ? withColumnAfter(columns, "ERA", plusColumn) : withColumnAfter(columns, "OPS", plusColumn),
+    plusColumn,
+    "WAR"
+  );
+
+  const [positionPlayerWar, pitcherWar] = await Promise.all([
+    role === "Pitcher"
+      ? null
+      : getPositionPlayerWar(
+          playerId,
+          selectedYear,
+          seasonStat,
+          seasonStints,
+          yearStats.season?.plateAppearances ?? 0
+        ),
+    role === "Pitcher" ? getPitcherWar(selectedYear, seasonStat, seasonStints) : null,
+  ]);
+
+  seasonRow.WAR = formatWar(role === "Pitcher" ? pitcherWar?.war : positionPlayerWar?.war);
+
+  const warBreakdown = positionPlayerWar
+    ? [
+        `Batting ${formatRuns(positionPlayerWar.batting)}`,
+        `Baserunning ${formatRuns(positionPlayerWar.baserunning)}`,
+        positionPlayerWar.hasStatcast ? `Fielding ${formatRuns(positionPlayerWar.fielding)}` : "Fielding n/a",
+        `Positional ${formatRuns(positionPlayerWar.positional)}`,
+        `League ${formatRuns(positionPlayerWar.league)}`,
+        `Replacement ${formatRuns(positionPlayerWar.replacement)}`,
+      ].join(" · ") + " runs"
+    : pitcherWar
+      ? [
+          `RA9 ${pitcherWar.ra9.toFixed(2)}`,
+          `park-adjusted ${pitcherWar.parkAdjustedRa9.toFixed(2)}`,
+          `league ${pitcherWar.leagueRa9.toFixed(2)}`,
+          ...(pitcherWar.gmLI !== null ? [`est. leverage ${pitcherWar.gmLI.toFixed(2)}`] : []),
+        ].join(" · ")
+      : null;
 
   seasonRow[plusColumn] = seasonEnvironment
     ? formatPlusStat(
@@ -519,7 +561,16 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             <SeasonStatCells columns={seasonColumns} row={seasonRow} ranks={columnRanks} scope={rankScope} />
             <p style={{ margin: "0.85rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>
               {plusColumn} adjusts for ballpark and league; 100 is league average and higher is better.
+              {role === "Pitcher"
+                ? " WAR is based on runs allowed (RA9), park- and league-adjusted."
+                : " WAR is park- and league-adjusted, FanGraphs-style."}
             </p>
+            {warBreakdown && (
+              <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>
+                WAR: {warBreakdown}
+                {positionPlayerWar && !positionPlayerWar.hasStatcast && " (Statcast fielding/baserunning starts in 2016)"}
+              </p>
+            )}
           </div>
 
           <div

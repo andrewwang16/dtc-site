@@ -106,6 +106,7 @@ export type StatLine = {
   homeRuns?: number;
   rbi?: number;
   stolenBases?: number;
+  caughtStealing?: number;
   baseOnBalls?: number;
   intentionalWalks?: number;
   strikeOuts?: number;
@@ -122,6 +123,9 @@ export type StatLine = {
   wins?: number;
   losses?: number;
   saves?: number;
+  holds?: number;
+  blownSaves?: number;
+  gamesFinished?: number;
   homeRunsPer9?: string;
   earnedRuns?: number;
   outs?: number;

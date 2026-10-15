@@ -21,8 +21,8 @@ import type { StatLine } from "@/lib/mlb";
 // numbers, wRC+ and ERA- came out within ~2 points for every player
 // spot-checked.
 
-const AL_LEAGUE_ID = 103;
-const NL_LEAGUE_ID = 104;
+export const AL_LEAGUE_ID = 103;
+export const NL_LEAGUE_ID = 104;
 const STATS_API = "https://statsapi.mlb.com/api/v1";
 
 // Home games of regression toward a neutral park — fit to minimize the gap
@@ -30,7 +30,7 @@ const STATS_API = "https://statsapi.mlb.com/api/v1";
 const PARK_FACTOR_REGRESSION_GAMES = 100;
 const PARK_FACTOR_SEASONS = 5;
 
-type Guts = {
+export type Guts = {
   woba: number;
   scale: number;
   bb: number;
@@ -40,36 +40,41 @@ type Guts = {
   triple: number;
   hr: number;
   runsPerPA: number;
+  // Run value of a caught stealing (a stolen base is always +0.2).
+  runCS: number;
+  runsPerWin: number;
 };
 
-// FanGraphs "Guts!" wOBA constants. Seasons outside this table fall back to
+// FanGraphs "Guts!" wOBA / baserunning / runs-per-win constants. Seasons outside this table fall back to
 // the nearest season's weights, rescaled to that year's league totals (see
 // deriveGuts).
 const GUTS: Record<number, Guts> = {
-  2026: { woba: 0.316, scale: 1.238, bb: 0.698, hbp: 0.729, single: 0.89, double: 1.261, triple: 1.596, hr: 2.049, runsPerPA: 0.118 },
-  2025: { woba: 0.313, scale: 1.232, bb: 0.691, hbp: 0.722, single: 0.882, double: 1.252, triple: 1.584, hr: 2.037, runsPerPA: 0.118 },
-  2024: { woba: 0.31, scale: 1.242, bb: 0.689, hbp: 0.72, single: 0.882, double: 1.254, triple: 1.59, hr: 2.05, runsPerPA: 0.117 },
-  2023: { woba: 0.318, scale: 1.204, bb: 0.696, hbp: 0.726, single: 0.883, double: 1.244, triple: 1.569, hr: 2.004, runsPerPA: 0.122 },
-  2022: { woba: 0.31, scale: 1.259, bb: 0.689, hbp: 0.72, single: 0.884, double: 1.261, triple: 1.601, hr: 2.072, runsPerPA: 0.114 },
-  2021: { woba: 0.314, scale: 1.209, bb: 0.692, hbp: 0.722, single: 0.879, double: 1.242, triple: 1.568, hr: 2.007, runsPerPA: 0.121 },
-  2020: { woba: 0.32, scale: 1.185, bb: 0.699, hbp: 0.728, single: 0.883, double: 1.238, triple: 1.558, hr: 1.979, runsPerPA: 0.125 },
-  2019: { woba: 0.32, scale: 1.157, bb: 0.69, hbp: 0.719, single: 0.87, double: 1.217, triple: 1.529, hr: 1.94, runsPerPA: 0.126 },
-  2018: { woba: 0.315, scale: 1.226, bb: 0.69, hbp: 0.72, single: 0.88, double: 1.247, triple: 1.578, hr: 2.031, runsPerPA: 0.117 },
-  2017: { woba: 0.321, scale: 1.185, bb: 0.693, hbp: 0.723, single: 0.877, double: 1.232, triple: 1.552, hr: 1.98, runsPerPA: 0.122 },
-  2016: { woba: 0.318, scale: 1.212, bb: 0.691, hbp: 0.721, single: 0.878, double: 1.242, triple: 1.569, hr: 2.015, runsPerPA: 0.118 },
-  2015: { woba: 0.313, scale: 1.251, bb: 0.687, hbp: 0.718, single: 0.881, double: 1.256, triple: 1.594, hr: 2.065, runsPerPA: 0.112 },
-  2014: { woba: 0.31, scale: 1.304, bb: 0.689, hbp: 0.722, single: 0.892, double: 1.283, triple: 1.635, hr: 2.135, runsPerPA: 0.107 },
-  2013: { woba: 0.314, scale: 1.277, bb: 0.69, hbp: 0.722, single: 0.888, double: 1.271, triple: 1.616, hr: 2.101, runsPerPA: 0.11 },
-  2012: { woba: 0.315, scale: 1.245, bb: 0.691, hbp: 0.722, single: 0.884, double: 1.257, triple: 1.593, hr: 2.058, runsPerPA: 0.114 },
-  2011: { woba: 0.316, scale: 1.264, bb: 0.694, hbp: 0.726, single: 0.89, double: 1.27, triple: 1.611, hr: 2.086, runsPerPA: 0.112 },
-  2010: { woba: 0.321, scale: 1.251, bb: 0.701, hbp: 0.732, single: 0.895, double: 1.27, triple: 1.608, hr: 2.072, runsPerPA: 0.115 },
+  2026: { woba: 0.316, scale: 1.238, bb: 0.698, hbp: 0.729, single: 0.89, double: 1.261, triple: 1.596, hr: 2.049, runsPerPA: 0.118, runCS: -0.412, runsPerWin: 9.822 },
+  2025: { woba: 0.313, scale: 1.232, bb: 0.691, hbp: 0.722, single: 0.882, double: 1.252, triple: 1.584, hr: 2.037, runsPerPA: 0.118, runCS: -0.41, runsPerWin: 9.774 },
+  2024: { woba: 0.31, scale: 1.242, bb: 0.689, hbp: 0.72, single: 0.882, double: 1.254, triple: 1.59, hr: 2.05, runsPerPA: 0.117, runCS: -0.405, runsPerWin: 9.683 },
+  2023: { woba: 0.318, scale: 1.204, bb: 0.696, hbp: 0.726, single: 0.883, double: 1.244, triple: 1.569, hr: 2.004, runsPerPA: 0.122, runCS: -0.422, runsPerWin: 10.028 },
+  2022: { woba: 0.31, scale: 1.259, bb: 0.689, hbp: 0.72, single: 0.884, double: 1.261, triple: 1.601, hr: 2.072, runsPerPA: 0.114, runCS: -0.397, runsPerWin: 9.524 },
+  2021: { woba: 0.314, scale: 1.209, bb: 0.692, hbp: 0.722, single: 0.879, double: 1.242, triple: 1.568, hr: 2.007, runsPerPA: 0.121, runCS: -0.419, runsPerWin: 9.973 },
+  2020: { woba: 0.32, scale: 1.185, bb: 0.699, hbp: 0.728, single: 0.883, double: 1.238, triple: 1.558, hr: 1.979, runsPerPA: 0.125, runCS: -0.435, runsPerWin: 10.282 },
+  2019: { woba: 0.32, scale: 1.157, bb: 0.69, hbp: 0.719, single: 0.87, double: 1.217, triple: 1.529, hr: 1.94, runsPerPA: 0.126, runCS: -0.435, runsPerWin: 10.296 },
+  2018: { woba: 0.315, scale: 1.226, bb: 0.69, hbp: 0.72, single: 0.88, double: 1.247, triple: 1.578, hr: 2.031, runsPerPA: 0.117, runCS: -0.407, runsPerWin: 9.714 },
+  2017: { woba: 0.321, scale: 1.185, bb: 0.693, hbp: 0.723, single: 0.877, double: 1.232, triple: 1.552, hr: 1.98, runsPerPA: 0.122, runCS: -0.423, runsPerWin: 10.048 },
+  2016: { woba: 0.318, scale: 1.212, bb: 0.691, hbp: 0.721, single: 0.878, double: 1.242, triple: 1.569, hr: 2.015, runsPerPA: 0.118, runCS: -0.41, runsPerWin: 9.778 },
+  2015: { woba: 0.313, scale: 1.251, bb: 0.687, hbp: 0.718, single: 0.881, double: 1.256, triple: 1.594, hr: 2.065, runsPerPA: 0.112, runCS: -0.392, runsPerWin: 9.421 },
+  2014: { woba: 0.31, scale: 1.304, bb: 0.689, hbp: 0.722, single: 0.892, double: 1.283, triple: 1.635, hr: 2.135, runsPerPA: 0.107, runCS: -0.377, runsPerWin: 9.117 },
+  2013: { woba: 0.314, scale: 1.277, bb: 0.69, hbp: 0.722, single: 0.888, double: 1.271, triple: 1.616, hr: 2.101, runsPerPA: 0.11, runCS: -0.384, runsPerWin: 9.264 },
+  2012: { woba: 0.315, scale: 1.245, bb: 0.691, hbp: 0.722, single: 0.884, double: 1.257, triple: 1.593, hr: 2.058, runsPerPA: 0.114, runCS: -0.398, runsPerWin: 9.544 },
+  2011: { woba: 0.316, scale: 1.264, bb: 0.694, hbp: 0.726, single: 0.89, double: 1.27, triple: 1.611, hr: 2.086, runsPerPA: 0.112, runCS: -0.394, runsPerWin: 9.454 },
+  2010: { woba: 0.321, scale: 1.251, bb: 0.701, hbp: 0.732, single: 0.895, double: 1.27, triple: 1.608, hr: 2.072, runsPerPA: 0.115, runCS: -0.403, runsPerWin: 9.643 },
 };
 
-type Totals = Record<string, number>;
+export type Totals = Record<string, number>;
 
-type LeagueEnvironment = {
+export type LeagueEnvironment = {
   wrcPerPA: number;
   era: number;
+  // Plate appearances by non-pitchers.
+  plateAppearances: number;
 };
 
 export type SeasonEnvironment = {
@@ -85,7 +90,7 @@ export type SeasonStint = {
   stat: StatLine;
 };
 
-async function fetchStatsApi<T>(path: string): Promise<T> {
+export async function fetchStatsApi<T>(path: string): Promise<T> {
   // Everything here is cached as one computed environment (see
   // getSeasonEnvironment), so skip the per-request data cache — the
   // schedules in particular are large.
@@ -98,7 +103,7 @@ async function fetchStatsApi<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-function sumStats(splits: Array<{ stat: Record<string, unknown> }>): Totals {
+export function sumStats(splits: Array<{ stat: Record<string, unknown> }>): Totals {
   const totals: Totals = {};
 
   for (const split of splits) {
@@ -134,7 +139,7 @@ type WobaInputs = {
   sacFlies?: number;
 };
 
-function wobaParts(stat: WobaInputs, weights: Omit<Guts, "woba" | "scale" | "runsPerPA">) {
+function wobaParts(stat: WobaInputs, weights: Pick<Guts, "bb" | "hbp" | "single" | "double" | "triple" | "hr">) {
   const doubles = stat.doubles ?? 0;
   const triples = stat.triples ?? 0;
   const homeRuns = stat.homeRuns ?? 0;
@@ -154,7 +159,7 @@ function wobaParts(stat: WobaInputs, weights: Omit<Guts, "woba" | "scale" | "run
   };
 }
 
-function computeWoba(stat: WobaInputs, guts: Guts): number | null {
+export function computeWoba(stat: WobaInputs, guts: Guts): number | null {
   const { numerator, denominator } = wobaParts(stat, guts);
   return denominator > 0 ? numerator / denominator : null;
 }
@@ -162,7 +167,7 @@ function computeWoba(stat: WobaInputs, guts: Guts): number | null {
 // For a season FanGraphs' table doesn't cover: take the nearest season's
 // weights, convert them back to raw run values, and rescale so league wOBA
 // equals league OBP — the same scaling FanGraphs applies.
-function deriveGuts(season: number, mlbTotals: Totals): Guts {
+function deriveGuts(season: number, mlbTotals: Totals, mlbPitching: Totals): Guts {
   const nearestSeason = Object.keys(GUTS)
     .map(Number)
     .reduce((best, year) => (Math.abs(year - season) < Math.abs(best - season) ? year : best));
@@ -183,6 +188,7 @@ function deriveGuts(season: number, mlbTotals: Totals): Guts {
     (mlbTotals.atBats ?? 0) + (mlbTotals.baseOnBalls ?? 0) + (mlbTotals.hitByPitch ?? 0) + (mlbTotals.sacFlies ?? 0);
   const leagueObp = onBase / obpDenominator;
   const scale = leagueObp / (numerator / denominator);
+  const runsPerOut = (mlbPitching.runs ?? 0) / (mlbPitching.outs ?? 1);
 
   return {
     woba: leagueObp,
@@ -194,6 +200,9 @@ function deriveGuts(season: number, mlbTotals: Totals): Guts {
     triple: raw.triple * scale,
     hr: raw.hr * scale,
     runsPerPA: (mlbTotals.runs ?? 0) / (mlbTotals.plateAppearances ?? 1),
+    // FanGraphs' own formulas for these two.
+    runCS: -(2 * runsPerOut + 0.075),
+    runsPerWin: 9 * (runsPerOut * 3) * 1.5 + 3,
   };
 }
 
@@ -290,11 +299,11 @@ function computeParkFactors(
   return factors;
 }
 
-type TeamStatsResponse = {
+export type TeamStatsResponse = {
   stats?: Array<{ splits?: Array<{ team: { id: number }; stat: Record<string, unknown> }> }>;
 };
 
-type PlayerStatsResponse = {
+export type PlayerStatsResponse = {
   stats?: Array<{ splits?: Array<{ stat: Record<string, unknown> }> }>;
 };
 
@@ -332,7 +341,7 @@ async function buildSeasonEnvironment(season: number): Promise<SeasonEnvironment
     throw new Error(`No team totals for ${season}`);
   }
 
-  const guts = GUTS[season] ?? deriveGuts(season, sumStats(hittingSplits));
+  const guts = GUTS[season] ?? deriveGuts(season, sumStats(hittingSplits), sumStats(pitchingSplits));
 
   const pitcherHitting: Record<number, Totals> = {
     [AL_LEAGUE_ID]: sumStats(alPitcherHitting.stats?.[0]?.splits ?? []),
@@ -354,6 +363,7 @@ async function buildSeasonEnvironment(season: number): Promise<SeasonEnvironment
     leagues[leagueId] = {
       wrcPerPA: (leagueWoba - guts.woba) / guts.scale + guts.runsPerPA,
       era: ((pitching.earnedRuns ?? 0) * 27) / pitching.outs,
+      plateAppearances: hitting.plateAppearances ?? 0,
     };
   }
 
@@ -363,7 +373,7 @@ async function buildSeasonEnvironment(season: number): Promise<SeasonEnvironment
   return { guts, leagues, teamLeague, parkFactors };
 }
 
-const getCachedSeasonEnvironment = unstable_cache(buildSeasonEnvironment, ["season-environment-v1"], {
+const getCachedSeasonEnvironment = unstable_cache(buildSeasonEnvironment, ["season-environment-v3"], {
   revalidate: 21_600,
 });
 
