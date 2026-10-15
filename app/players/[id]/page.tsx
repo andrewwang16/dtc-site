@@ -666,7 +666,11 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               padding: "1.15rem",
             }}
           >
-            <RollingTrendChart gameLog={yearStats.gameLog} role={role} />
+            <RollingTrendChart
+              gameLog={yearStats.gameLog}
+              role={role}
+              rollingContext={positionPlayerWar?.rollingContext ?? pitcherWar?.rollingContext ?? null}
+            />
           </article>
         ) : (
           <PremiumLockCard message="Subscribe to see rolling trend charts." />

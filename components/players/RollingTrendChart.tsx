@@ -2,13 +2,18 @@
 
 import { useMemo, useState, type MouseEvent, type TouchEvent } from "react";
 import {
-  HITTER_COLUMNS,
-  PITCHER_COLUMNS,
   computeRollingValue,
   formatRollingValue,
+  sumGameLogStats,
   type GameLogEntry,
   type PlayerRole,
 } from "@/lib/mlb";
+import { rollingEraPlus, rollingWrcPlus, type RollingContext } from "@/lib/rolling-advanced";
+
+// Rate stats only — counting stats (HR, K, WAR…) just track playing time
+// in a rolling window rather than how well a player is performing.
+const HITTER_RATE_STATS = ["AVG", "OBP", "SLG", "OPS", "ISO", "BB%", "K%"];
+const PITCHER_RATE_STATS = ["ERA", "WHIP", "K%", "BB%", "K-BB%", "HR/9", "AVG", "OBP", "SLG", "OPS"];
 
 type GroupBy = "games" | "plateAppearances";
 
@@ -23,7 +28,7 @@ const CHART = {
   axis: "rgba(255, 255, 255, 0.45)",
   grid: "rgba(255, 255, 255, 0.14)",
   line: "#ffffff",
-  dot: "#4a0812",
+  dot: "#f3e3c3",
   average: "#f6d58e",
   crosshair: "rgba(255, 255, 255, 0.6)",
   tooltipBackground: "#1a1416",
@@ -40,26 +45,46 @@ function formatDelta(statKey: string, value: number, average: number) {
   const delta = value - average;
   const formatted = formatRollingValue(statKey, Math.abs(delta));
 
-  if (formatted === "-") {
-    return "-";
+  // No sign on a difference that rounds to zero.
+  if (formatted === "-" || Number.parseFloat(formatted) === 0) {
+    return formatted;
   }
 
   return delta >= 0 ? `+${formatted}` : `-${formatted}`;
 }
 
+// wRC+/ERA+ need the season's park/league context; everything else comes
+// straight from the game log.
+function windowValue(
+  window: GameLogEntry[],
+  statKey: string,
+  role: PlayerRole,
+  context: RollingContext | null
+): number | null {
+  if (context && (statKey === "wRC+" || statKey === "ERA+")) {
+    const totals = sumGameLogStats(window);
+    return context.kind === "hitter" ? rollingWrcPlus(totals, context) : rollingEraPlus(totals, context);
+  }
+
+  return computeRollingValue(window, statKey, role);
+}
+
 export default function RollingTrendChart({
   gameLog,
   role,
+  rollingContext = null,
 }: {
   gameLog: GameLogEntry[];
   role: PlayerRole;
+  rollingContext?: RollingContext | null;
 }) {
   const isPitcher = role === "Pitcher";
-  const columns = isPitcher ? PITCHER_COLUMNS : HITTER_COLUMNS;
+  const rateStats = isPitcher ? PITCHER_RATE_STATS : HITTER_RATE_STATS;
+  const columns = rollingContext ? [isPitcher ? "ERA+" : "wRC+", ...rateStats] : rateStats;
   const defaultStat = isPitcher ? "ERA" : "OPS";
   const playingTimeKey = isPitcher ? "IP" : "PA";
-  // For a pitcher, plate appearances are batters faced.
-  const plateAppearanceLabel = isPitcher ? "BF" : "PA";
+  // For a pitcher, plate appearances are the batters faced.
+  const plateAppearanceLabel = "PA";
   const plateAppearancesOf = (entry: GameLogEntry) =>
     (isPitcher ? entry.stat.battersFaced : entry.stat.plateAppearances) ?? 0;
 
@@ -108,7 +133,7 @@ export default function RollingTrendChart({
       }
 
       const window = gameLog.slice(start, i + 1);
-      const value = computeRollingValue(window, statKey, role);
+      const value = windowValue(window, statKey, role, rollingContext);
 
       if (value !== null && Number.isFinite(value)) {
         results.push({
@@ -124,11 +149,11 @@ export default function RollingTrendChart({
     return results;
     // plateAppearancesOf only depends on isPitcher, which follows role.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameLog, groupBy, windowSize, statKey, playingTimeKey, role]);
+  }, [gameLog, groupBy, windowSize, statKey, playingTimeKey, role, rollingContext]);
 
   const seasonAverage = useMemo(
-    () => computeRollingValue(gameLog, statKey, role),
-    [gameLog, statKey, role]
+    () => windowValue(gameLog, statKey, role, rollingContext),
+    [gameLog, statKey, role, rollingContext]
   );
 
   const width = 640;
@@ -242,10 +267,8 @@ export default function RollingTrendChart({
           aria-label="Group rolling window by"
           style={selectStyle}
         >
-          <option value="games">Last X games</option>
-          <option value="plateAppearances">
-            {isPitcher ? "Last X batters faced" : "Last X plate appearances"}
-          </option>
+          <option value="games">G</option>
+          <option value="plateAppearances">PA</option>
         </select>
 
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
@@ -292,7 +315,7 @@ export default function RollingTrendChart({
 
       {!chart ? (
         <p style={{ margin: 0, color: CHART.mutedText }}>
-          Not enough {groupBy === "games" ? "games" : isPitcher ? "batters faced" : "plate appearances"} this
+          Not enough {groupBy === "games" ? "games" : "plate appearances"} this
           season for a rolling {windowSize}
           {windowUnit} trend.
         </p>
@@ -365,17 +388,17 @@ export default function RollingTrendChart({
             </>
           )}
 
-          <path d={chart.path} fill="none" stroke={CHART.line} strokeWidth={2.5} strokeLinejoin="round" />
+          <path d={chart.path} fill="none" stroke={CHART.line} strokeWidth={1.6} strokeLinejoin="round" />
 
           {chart.coords.map((coord, index) => (
             <circle
               key={index}
               cx={coord.x}
               cy={coord.y}
-              r={hoveredIndex === index ? 4 : 2}
+              r={hoveredIndex === index ? 3 : 1.3}
               fill={CHART.dot}
               stroke={CHART.line}
-              strokeWidth={hoveredIndex === index ? 1.5 : 0}
+              strokeWidth={hoveredIndex === index ? 1 : 0}
               style={{ transition: "r 0.1s ease" }}
             />
           ))}

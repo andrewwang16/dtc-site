@@ -13,6 +13,11 @@ import {
   type SeasonStint,
   type TeamStatsResponse,
 } from "@/lib/park-adjusted";
+import {
+  rawPitcherWar,
+  type HitterRollingContext,
+  type PitcherRollingContext,
+} from "@/lib/rolling-advanced";
 
 // Wins Above Replacement, following FanGraphs' published method — position
 // players the way fWAR is built, pitchers the way FanGraphs builds its
@@ -87,6 +92,7 @@ export type PositionPlayerWar = {
   league: number;
   replacement: number;
   hasStatcast: boolean;
+  rollingContext: HitterRollingContext;
 };
 
 export type PitcherWar = {
@@ -96,6 +102,7 @@ export type PitcherWar = {
   leagueRa9: number;
   // Estimated entry leverage, only for pitchers who mostly relieved.
   gmLI: number | null;
+  rollingContext: PitcherRollingContext;
 };
 
 export type FieldingSplit = {
@@ -220,68 +227,6 @@ async function fetchStatcastRuns(season: number) {
     console.error("fetchStatcastRuns failed", season, error);
     return { hasStatcast: false, fieldingRuns: {}, extraBaseRuns: {} };
   }
-}
-
-// FanGraphs' reliever leverage index (gmLI, leverage when entering) isn't
-// in the Stats API. Estimate it from how often a reliever's outings were
-// save/hold situations — fit to FanGraphs' gmLI for a set of relievers
-// (closers ~1.9–2.1, setup ~1.2, low-leverage ~0.65), so it's approximate.
-function estimateGmLI(stat: StatLine): number | null {
-  const reliefGames = (stat.gamesPitched ?? 0) - (stat.gamesStarted ?? 0);
-
-  if (reliefGames <= 0) {
-    return null;
-  }
-
-  const highLeverage = (stat.saves ?? 0) + (stat.holds ?? 0) + (stat.blownSaves ?? 0);
-  const estimate = 0.45 + (2.2 * highLeverage) / reliefGames;
-
-  return Math.min(2.5, Math.max(0.5, estimate));
-}
-
-type RawPitcherWar = {
-  war: number;
-  ra9: number;
-  parkAdjustedRa9: number;
-  gmLI: number | null;
-};
-
-// RA9-WAR before the league-wide 430-win correction.
-function rawPitcherWar(
-  stat: StatLine,
-  parkFactor: number,
-  leagueRa9: number
-): RawPitcherWar | null {
-  const outs = stat.outs ?? 0;
-  const games = stat.gamesPitched ?? 0;
-
-  if (outs <= 0 || games <= 0) {
-    return null;
-  }
-
-  const innings = outs / 3;
-  const starts = stat.gamesStarted ?? 0;
-  const ra9 = ((stat.runs ?? 0) * 27) / outs;
-  const parkAdjustedRa9 = ra9 / parkFactor;
-  const inningsPerGame = innings / games;
-
-  // FanGraphs' dynamic runs per win: a pitcher's own run environment
-  // changes how many runs a win costs.
-  const runsPerWin = (((18 - inningsPerGame) * leagueRa9 + inningsPerGame * parkAdjustedRa9) / 18 + 2) * 1.5;
-  const winsPerGameAboveAverage = (leagueRa9 - parkAdjustedRa9) / runsPerWin;
-  const startShare = starts / games;
-  const replacement = 0.03 * (1 - startShare) + 0.12 * startShare;
-
-  let war = (winsPerGameAboveAverage + replacement) * (innings / 9);
-
-  // Relief value is scaled by leverage, (1 + gmLI) / 2, for the share of
-  // outings that were in relief.
-  const gmLI = estimateGmLI(stat);
-  if (gmLI !== null) {
-    war *= 1 + (1 - startShare) * ((1 + gmLI) / 2 - 1);
-  }
-
-  return { war, ra9, parkAdjustedRa9, gmLI: startShare < 0.5 ? gmLI : null };
 }
 
 type TeamSplit = { team: { id: number }; stat: Record<string, unknown> };
@@ -538,16 +483,33 @@ function positionPlayerWar(
     league,
     replacement,
     hasStatcast: env.hasStatcast,
+    rollingContext: {
+      kind: "hitter",
+      weights: {
+        bb: guts.bb,
+        hbp: guts.hbp,
+        single: guts.single,
+        double: guts.double,
+        triple: guts.triple,
+        hr: guts.hr,
+      },
+      leagueWoba: guts.woba,
+      wobaScale: guts.scale,
+      runsPerPA: guts.runsPerPA,
+      parkFactor,
+      leagueWrcPerPA,
+    },
   };
 }
 
 function pitcherWar(stat: StatLine, stints: SeasonStint[], env: WarEnvironment): PitcherWar | null {
   const outs = (line: StatLine) => line.outs ?? 0;
-  const { parkFactors, teamLeague } = env.base;
+  const { parkFactors, teamLeague, leagues } = env.base;
   const parkFactor = weightedAverage(stints, outs, (stint) => parkFactors[stint.teamId]);
   const leagueRa9 = weightedAverage(stints, outs, (stint) => env.leagueRa9[teamLeague[stint.teamId]]);
+  const leagueEra = weightedAverage(stints, outs, (stint) => leagues[teamLeague[stint.teamId]]?.era);
 
-  if (parkFactor === null || leagueRa9 === null) {
+  if (parkFactor === null || leagueRa9 === null || leagueEra === null) {
     return null;
   }
 
@@ -563,6 +525,11 @@ function pitcherWar(stat: StatLine, stints: SeasonStint[], env: WarEnvironment):
     parkAdjustedRa9: raw.parkAdjustedRa9,
     leagueRa9,
     gmLI: raw.gmLI,
+    rollingContext: {
+      kind: "pitcher",
+      parkFactor,
+      leagueEra,
+    },
   };
 }
 

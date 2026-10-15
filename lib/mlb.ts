@@ -815,6 +815,22 @@ function sumWindow(games: GameLogEntry[], pick: (stat: StatLine) => number | und
   return games.reduce((total, game) => total + (pick(game.stat) ?? 0), 0);
 }
 
+// Every numeric stat summed across a stretch of games, for calculations
+// that need the whole line at once (e.g. rolling wRC+ / ERA+).
+export function sumGameLogStats(games: GameLogEntry[]): StatLine {
+  const totals: Record<string, number> = {};
+
+  for (const game of games) {
+    for (const [key, value] of Object.entries(game.stat)) {
+      if (typeof value === "number") {
+        totals[key] = (totals[key] ?? 0) + value;
+      }
+    }
+  }
+
+  return totals as StatLine;
+}
+
 export function computeRollingValue(
   window: GameLogEntry[],
   statKey: string,
@@ -939,7 +955,7 @@ export function formatRollingValue(statKey: string, value: number | null): strin
     return `${value.toFixed(1)}%`;
   }
 
-  if (["G", "GS", "HR", "XBH", "RBI", "SB", "K", "BB", "PA"].includes(statKey)) {
+  if (["G", "GS", "HR", "XBH", "RBI", "SB", "K", "BB", "PA", "wRC+", "ERA+"].includes(statKey)) {
     return String(Math.round(value));
   }
 
