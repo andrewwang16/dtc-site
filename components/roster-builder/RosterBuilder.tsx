@@ -157,15 +157,18 @@ function positionLabel(player: Handed) {
 }
 
 // "Alec Burleson (L)": a hitter's batting side follows the name in a lighter
-// color (a pitcher's hand is in their position label instead).
-function PlayerName({ player }: { player: Handed }) {
+// color. A pitcher's hand is usually in their position label ("RHP")
+// instead; `showThrows` puts it after the name for lists that don't use one.
+function PlayerName({ player, showThrows = false }: { player: Handed; showThrows?: boolean }) {
+  const hand = player.position === "P" ? (showThrows ? player.throws : undefined) : player.bats;
+
   return (
     <>
       {player.fullName}
-      {player.position !== "P" && player.bats && (
+      {hand && (
         <span style={{ color: "var(--muted)", fontWeight: 400 }} title={handTitle(player)}>
           {" "}
-          ({player.bats})
+          ({hand})
         </span>
       )}
     </>
@@ -2192,12 +2195,10 @@ export default function RosterBuilder({
                           <div style={{ display: "grid", gap: "0.1rem", minWidth: 0, flex: "1 1 220px" }}>
                             <span style={{ fontSize: "0.9rem" }}>
                               <span style={{ fontWeight: 700 }}>
-                                <PlayerName player={freeAgent} />
+                                <PlayerName player={freeAgent} showThrows />
                               </span>
                               <span style={{ color: "var(--muted)", marginLeft: "0.5rem", fontSize: "0.8rem" }}>
-                                {freeAgent.groups.join("/")}
-                                {freeAgent.position === "P" && freeAgent.throws ? ` · ${freeAgent.throws}HP` : ""} · Age{" "}
-                                {freeAgent.age} in {CONTRACT_SEASON} ·{" "}
+                                {freeAgent.groups.join("/")} · Age {freeAgent.age} in {CONTRACT_SEASON} ·{" "}
                                 {getTeamAbbreviation(freeAgent.teamId)}
                               </span>
                             </span>
