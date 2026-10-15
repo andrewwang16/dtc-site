@@ -130,13 +130,6 @@ function PlayerPageTopBar({ roster }: { roster: RosterEntry[] }) {
   );
 }
 
-// Park-adjusted stats only make sense on a full season (or team stint)
-// line, so they're added to the season cells but not the split tables.
-function withColumnAfter(columns: readonly string[], after: string, column: string) {
-  const index = columns.indexOf(after);
-  return [...columns.slice(0, index + 1), column, ...columns.slice(index + 1)];
-}
-
 function formatRuns(value: number) {
   const rounded = value.toFixed(1);
   return value > 0 ? `+${rounded}` : rounded;
@@ -286,11 +279,10 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
   const seasonStints = selectedTeamStint ? [selectedTeamStint] : yearStats.seasonTeams;
   const plusColumn = role === "Pitcher" ? "ERA+" : "wRC+";
-  const seasonColumns = withColumnAfter(
-    role === "Pitcher" ? withColumnAfter(columns, "ERA", plusColumn) : withColumnAfter(columns, "OPS", plusColumn),
-    plusColumn,
-    "WAR"
-  );
+  // Park-adjusted stats only make sense on a full season (or team stint)
+  // line, so they lead the season cells but stay out of the split tables.
+  const featuredColumns = ["WAR", plusColumn];
+  const seasonColumns = [...featuredColumns, ...columns];
 
   const [positionPlayerWar, pitcherWar] = await Promise.all([
     role === "Pitcher"
@@ -558,7 +550,13 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             <p style={{ margin: "0 0 0.85rem", color: "var(--muted)", fontSize: "0.85rem" }}>
               {selectedYear} · {seasonTeamLabel}
             </p>
-            <SeasonStatCells columns={seasonColumns} row={seasonRow} ranks={columnRanks} scope={rankScope} />
+            <SeasonStatCells
+              columns={seasonColumns}
+              row={seasonRow}
+              ranks={columnRanks}
+              scope={rankScope}
+              highlighted={featuredColumns}
+            />
             <p style={{ margin: "0.85rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>
               {plusColumn} adjusts for ballpark and league; 100 is league average and higher is better.
               {role === "Pitcher"

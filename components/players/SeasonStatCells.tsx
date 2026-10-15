@@ -31,11 +31,14 @@ export default function SeasonStatCells({
   row,
   ranks,
   scope,
+  highlighted = [],
 }: {
   columns: readonly string[];
   row: StatRow;
   ranks: Record<string, number>;
   scope: "NL" | "AL" | "MLB" | null;
+  // Columns to set apart with a light red tint (e.g. WAR, wRC+).
+  highlighted?: readonly string[];
 }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: "0.75rem" }}>
@@ -49,6 +52,7 @@ export default function SeasonStatCells({
             style={{
               border: `2px solid ${rankOutline(rank)}`,
               borderRadius: "14px",
+              background: highlighted.includes(column) ? "rgba(196,30,58,0.08)" : undefined,
               padding: "0.9rem 0.6rem",
               display: "grid",
               gap: "0.4rem",
