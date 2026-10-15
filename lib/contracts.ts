@@ -30,6 +30,10 @@ export type ContractInfo = {
   freeAgentEstimated?: boolean;
   // Owed if the club declines the option (player removed from the 40-man).
   buyout?: number;
+  // Salary for every guaranteed season, CONTRACT_SEASON on — used for
+  // future-year payroll commitments. Absent for one-season figures
+  // (arbitration, pre-arb, options).
+  salaryBySeason?: Record<number, number>;
 };
 
 // Keyed by MLB player id.
@@ -39,6 +43,17 @@ const CONTRACTS: Record<number, ContractInfo> = {
     salary: 2_750_000,
     detail: "8 yr / $112.5M (2027–34)",
     freeAgentAfter: 2034,
+    // FanGraphs lists 2027–33; 2034 is the remainder of the $112.5M.
+    salaryBySeason: {
+      2027: 2_750_000,
+      2028: 4_250_000,
+      2029: 7_750_000,
+      2030: 12_750_000,
+      2031: 17_250_000,
+      2032: 20_250_000,
+      2033: 22_250_000,
+      2034: 25_250_000,
+    },
   },
   592773: {
     status: "club-option",
@@ -108,24 +123,61 @@ export function getContract(
   return CONTRACTS[player.id] ?? (isOrganizational ? preArbContract(player.id, player.debutDate) : null);
 }
 
-export type Signing = { salary: number; years: number };
+// A deal made in the roster builder: one salary per season, starting with
+// CONTRACT_SEASON.
+export type Signing = { salaries: number[] };
 
-// A deal made in the roster builder: `salary` is the per-year amount.
-export function signedContract({ salary, years }: Signing): ContractInfo {
+export type SalaryStructure = "even" | "front" | "back";
+
+// How far a front- or back-loaded deal swings from its AAV in the first and
+// last seasons (±30%), stepping evenly in between.
+const LOADING_SWING = 0.3;
+const SALARY_ROUNDING = 100_000;
+
+// Spread a deal's total (AAV × years) across its seasons. Each season is
+// rounded to $0.1M, with the last season absorbing the rounding so the
+// total stays exact.
+export function structuredSalaries(aav: number, years: number, structure: SalaryStructure): number[] {
+  const total = aav * years;
+
+  if (years <= 1 || structure === "even") {
+    return Array.from({ length: years }, () => aav);
+  }
+
+  const salaries = Array.from({ length: years }, (_, index) => {
+    const position = (years - 1 - 2 * index) / (years - 1); // 1 → −1
+    const tilt = structure === "front" ? position : -position;
+    return Math.round((aav * (1 + LOADING_SWING * tilt)) / SALARY_ROUNDING) * SALARY_ROUNDING;
+  });
+
+  const assigned = salaries.slice(0, -1).reduce((sum, salary) => sum + salary, 0);
+  salaries[years - 1] = total - assigned;
+  return salaries;
+}
+
+export function signedContract({ salaries }: Signing): ContractInfo {
+  const years = salaries.length;
+  const total = salaries.reduce((sum, salary) => sum + salary, 0);
   const lastSeason = CONTRACT_SEASON + years - 1;
   const seasons = years === 1 ? `${CONTRACT_SEASON}` : `${CONTRACT_SEASON}–${String(lastSeason).slice(2)}`;
+  const isEven = salaries.every((salary) => salary === salaries[0]);
+  const schedule = isEven ? "" : ` · ${salaries.map((salary) => formatSalary(salary).replace(/^\$|M$/g, "")).join("/")}`;
 
   return {
     status: "signed",
-    salary,
-    detail: `${years} yr / ${formatSalary(salary * years)} (${seasons})`,
+    salary: salaries[0],
+    detail: `${years} yr / ${formatSalary(total)} (${seasons})${schedule}`,
     freeAgentAfter: lastSeason,
+    salaryBySeason: Object.fromEntries(salaries.map((salary, index) => [CONTRACT_SEASON + index, salary])),
   };
 }
 
+// $30M, $7.5M, $2.75M, $780K — only trailing zeros after a decimal point are
+// trimmed (a bare "30" must stay "30").
 export function formatSalary(amount: number): string {
-  if (amount >= 1_000_000) {
-    return `$${(amount / 1_000_000).toFixed(amount % 1_000_000 === 0 ? 0 : 2).replace(/0$/, "")}M`;
+  if (Math.abs(amount) >= 1_000_000) {
+    const millions = (amount / 1_000_000).toFixed(2).replace(/\.?0+$/, "");
+    return `$${millions}M`;
   }
 
   return `$${Math.round(amount / 1_000)}K`;

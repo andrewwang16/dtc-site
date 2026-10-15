@@ -16,7 +16,9 @@ import {
   formatSalary,
   getContract,
   signedContract,
+  structuredSalaries,
   type ContractInfo,
+  type SalaryStructure,
   type Signing,
 } from "@/lib/contracts";
 import { FREE_AGENTS, type FreeAgent, type FreeAgentGroup } from "@/lib/free-agents";
@@ -63,6 +65,16 @@ type SimplePlayer = {
   level?: string;
 };
 type AddTab = "prospects" | "free-agents" | "trades" | "create";
+
+type Transaction = {
+  id: number;
+  kind: "trade" | "signing";
+  summary: string;
+  detail?: string;
+};
+
+// Seasons after CONTRACT_SEASON shown as future payroll commitments.
+const FUTURE_COMMITMENT_SEASONS = 4;
 type FreeAgentFilter = "all" | FreeAgentGroup;
 
 const FREE_AGENT_FILTERS: FreeAgentFilter[] = ["all", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF", "DH", "SP", "RP"];
@@ -90,22 +102,32 @@ function displayLastName(player: SimplePlayer) {
   return parts[parts.length - 1];
 }
 
-// Salary is entered in millions per year. Returns null until both fields
-// hold a usable deal.
-function parseSigning(salaryText: string, yearsText: string): Signing | null {
-  const millions = Number(salaryText);
-  const years = Number(yearsText);
-
-  if (!salaryText.trim() || !Number.isFinite(millions) || millions <= 0) {
-    return null;
-  }
-
-  if (!Number.isInteger(years) || years < 1 || years > MAX_CONTRACT_YEARS) {
-    return null;
-  }
-
-  return { salary: Math.round(millions * 1_000_000), years };
+function parseMillions(text: string): number | null {
+  const millions = Number(text);
+  return text.trim() && Number.isFinite(millions) && millions > 0 ? Math.round(millions * 1_000_000) : null;
 }
+
+function parseYears(text: string): number | null {
+  const years = Number(text);
+  return Number.isInteger(years) && years >= 1 && years <= MAX_CONTRACT_YEARS ? years : null;
+}
+
+// Salary is entered in millions per year (AAV). Returns null until both
+// fields hold a usable deal; the salary is the same every season.
+function parseSigning(salaryText: string, yearsText: string): Signing | null {
+  const aav = parseMillions(salaryText);
+  const years = parseYears(yearsText);
+  return aav !== null && years !== null ? { salaries: structuredSalaries(aav, years, "even") } : null;
+}
+
+type StructureChoice = SalaryStructure | "custom";
+
+const STRUCTURE_LABELS: Record<StructureChoice, string> = {
+  even: "Same each year",
+  front: "Front-loaded",
+  back: "Back-loaded",
+  custom: "Custom by year",
+};
 
 function formatFreeAgentAfter(contract: ContractInfo | null) {
   if (!contract?.freeAgentAfter) {
@@ -137,7 +159,9 @@ const smallButtonStyle: React.CSSProperties = {
 };
 
 // Salary ($M per year) + years, used to sign a free agent or set a
-// contract on a created or traded-for player.
+// contract on a created or traded-for player. A multi-year deal can
+// optionally be structured (front-/back-loaded, or set season by season);
+// left alone, every season pays the same AAV.
 function SignForm({
   submitLabel,
   initial,
@@ -147,46 +171,119 @@ function SignForm({
   initial?: Signing;
   onSign: (signing: Signing) => void;
 }) {
-  const [salary, setSalary] = useState(initial ? String(initial.salary / 1_000_000) : "");
-  const [years, setYears] = useState(initial ? String(initial.years) : "1");
-  const signing = parseSigning(salary, years);
+  const initialEven = initial ? initial.salaries.every((salary) => salary === initial.salaries[0]) : true;
+  const initialAav = initial ? initial.salaries.reduce((sum, salary) => sum + salary, 0) / initial.salaries.length : 0;
+
+  const [salary, setSalary] = useState(initial ? String(Math.round(initialAav / 100_000) / 10) : "");
+  const [years, setYears] = useState(initial ? String(initial.salaries.length) : "1");
+  const [structure, setStructure] = useState<StructureChoice>(initialEven ? "even" : "custom");
+  const [customSalaries, setCustomSalaries] = useState<string[]>(
+    initial && !initialEven ? initial.salaries.map((amount) => String(amount / 1_000_000)) : []
+  );
+
+  const yearCount = parseYears(years);
+  const aav = parseMillions(salary);
+
+  let salaries: number[] | null = null;
+  if (yearCount !== null) {
+    if (structure === "custom") {
+      // A blank season falls back to the AAV.
+      const perSeason = Array.from({ length: yearCount }, (_, index) => parseMillions(customSalaries[index] ?? "") ?? aav);
+      salaries = perSeason.every((amount): amount is number => amount !== null) ? perSeason : null;
+    } else if (aav !== null) {
+      salaries = structuredSalaries(aav, yearCount, structure);
+    }
+  }
+
+  const total = salaries?.reduce((sum, amount) => sum + amount, 0) ?? 0;
+  const showStructure = yearCount !== null && yearCount > 1;
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (signing) {
-          onSign(signing);
+        if (salaries) {
+          onSign({ salaries });
         }
       }}
-      style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}
+      style={{ display: "grid", gap: "0.35rem", justifyItems: "end" }}
     >
-      <input
-        type="number"
-        min="0"
-        step="0.1"
-        inputMode="decimal"
-        value={salary}
-        onChange={(event) => setSalary(event.target.value)}
-        placeholder="$M / yr"
-        aria-label="Salary in millions per year"
-        style={{ ...contractFieldStyle, width: "6.5rem" }}
-      />
-      <input
-        type="number"
-        min="1"
-        max={MAX_CONTRACT_YEARS}
-        step="1"
-        inputMode="numeric"
-        value={years}
-        onChange={(event) => setYears(event.target.value)}
-        aria-label="Contract years"
-        style={{ ...contractFieldStyle, width: "4rem" }}
-      />
-      <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>yr</span>
-      <button type="submit" disabled={!signing} style={{ ...smallButtonStyle, opacity: signing ? 1 : 0.5 }}>
-        {submitLabel}
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          inputMode="decimal"
+          value={salary}
+          onChange={(event) => setSalary(event.target.value)}
+          placeholder="$M / yr"
+          aria-label="Salary in millions per year"
+          style={{ ...contractFieldStyle, width: "6.5rem" }}
+        />
+        <input
+          type="number"
+          min="1"
+          max={MAX_CONTRACT_YEARS}
+          step="1"
+          inputMode="numeric"
+          value={years}
+          onChange={(event) => setYears(event.target.value)}
+          aria-label="Contract years"
+          style={{ ...contractFieldStyle, width: "4rem" }}
+        />
+        <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>yr</span>
+        {showStructure && (
+          <select
+            value={structure}
+            onChange={(event) => setStructure(event.target.value as StructureChoice)}
+            aria-label="Salary structure (optional)"
+            title="Salary structure (optional)"
+            style={{ ...contractFieldStyle, width: "auto" }}
+          >
+            {(Object.keys(STRUCTURE_LABELS) as StructureChoice[]).map((choice) => (
+              <option key={choice} value={choice}>
+                {STRUCTURE_LABELS[choice]}
+              </option>
+            ))}
+          </select>
+        )}
+        <button type="submit" disabled={!salaries} style={{ ...smallButtonStyle, opacity: salaries ? 1 : 0.5 }}>
+          {submitLabel}
+        </button>
+      </div>
+
+      {showStructure && structure === "custom" && yearCount !== null && (
+        <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {Array.from({ length: yearCount }, (_, index) => (
+            <label key={index} style={{ display: "grid", gap: "0.1rem", fontSize: "0.68rem", color: "var(--muted)" }}>
+              {CONTRACT_SEASON + index}
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                inputMode="decimal"
+                value={customSalaries[index] ?? ""}
+                onChange={(event) =>
+                  setCustomSalaries((current) => {
+                    const next = [...current];
+                    next[index] = event.target.value;
+                    return next;
+                  })
+                }
+                placeholder={aav !== null ? String(aav / 1_000_000) : "$M"}
+                aria-label={`${CONTRACT_SEASON + index} salary in millions`}
+                style={{ ...contractFieldStyle, width: "4.6rem" }}
+              />
+            </label>
+          ))}
+        </div>
+      )}
+
+      {showStructure && salaries && structure !== "even" && (
+        <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>
+          {salaries.map((amount) => formatSalary(amount)).join(" / ")} · {formatSalary(total)} total
+        </span>
+      )}
     </form>
   );
 }
@@ -378,6 +475,12 @@ export default function RosterBuilder({
   const [signings, setSignings] = useState<Record<number, Signing>>({});
   const [editingContractId, setEditingContractId] = useState<number | null>(null);
   const [payrollOpen, setPayrollOpen] = useState(false);
+  // An in-progress trade: the player coming back and who's being sent out.
+  const [tradeTarget, setTradeTarget] = useState<ExternalPlayer | null>(null);
+  const [tradeOutgoingIds, setTradeOutgoingIds] = useState<number[]>([]);
+  const [tradeQuery, setTradeQuery] = useState("");
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const nextTransactionId = useRef(1);
   // Created players get negative ids so they can never collide with a
   // real MLB player id.
   const nextCreatedId = useRef(-1);
@@ -426,10 +529,20 @@ export default function RosterBuilder({
 
     const total = totals.guaranteed + totals.arbitration + totals.preArb + totals.buyouts;
 
-    return { rows, totals, total };
+    // Later seasons only count money that's actually guaranteed (real
+    // multi-year deals and builder signings) — arbitration and pre-arb
+    // salaries past next season aren't projected.
+    const future = Array.from({ length: FUTURE_COMMITMENT_SEASONS }, (_, index) => {
+      const season = CONTRACT_SEASON + 1 + index;
+      const committed = rows.reduce((sum, { contract }) => sum + (contract?.salaryBySeason?.[season] ?? 0), 0);
+      return { season, committed };
+    });
+
+    return { rows, totals, total, future };
   }, [fortyMan, reserveIL, removedPlayers, contractFor]);
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
+  const externalById = useMemo(() => new Map(externalPlayers.map((player) => [player.id, player])), [externalPlayers]);
   const fortyManById = useMemo(() => new Map(fortyMan.map((player) => [player.id, player])), [fortyMan]);
 
   const assignedIds = useMemo(
@@ -596,10 +709,98 @@ export default function RosterBuilder({
     setSignings((current) => ({ ...current, [playerId]: signing }));
   }
 
+  function logTransaction(transaction: Omit<Transaction, "id">) {
+    const id = nextTransactionId.current;
+    nextTransactionId.current += 1;
+    setTransactions((current) => [{ id, ...transaction }, ...current]);
+  }
+
   function signFreeAgent(freeAgent: FreeAgent, signing: Signing) {
     if (addToFortyMan(freeAgent)) {
       setSigning(freeAgent.id, signing);
+      logTransaction({
+        kind: "signing",
+        summary: `Signed ${freeAgent.fullName} (${freeAgent.groups.join("/")}, ${getTeamAbbreviation(freeAgent.teamId)})`,
+        detail: signedContract(signing).detail,
+      });
     }
+  }
+
+  function startTrade(player: SimplePlayer) {
+    const target = externalById.get(player.id);
+    if (!target) {
+      return;
+    }
+    setTradeTarget(target);
+    setTradeOutgoingIds([]);
+    setTradeQuery("");
+  }
+
+  function cancelTrade() {
+    setTradeTarget(null);
+    setTradeOutgoingIds([]);
+    setTradeQuery("");
+  }
+
+  const tradeOutgoing = tradeOutgoingIds
+    .map((id) => fortyManById.get(id))
+    .filter((player): player is SimplePlayer => player !== undefined);
+
+  const tradeCandidates = useMemo(() => {
+    const trimmed = stripDiacritics(tradeQuery.trim().toLowerCase());
+    return fortyMan
+      .filter((player) => !tradeOutgoingIds.includes(player.id))
+      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
+      .slice(0, 8);
+  }, [fortyMan, tradeOutgoingIds, tradeQuery]);
+
+  // The acquired player joins the 40-man and everyone sent out leaves it
+  // (no buyout or dead money — their contracts go with them).
+  function completeTrade() {
+    if (!tradeTarget) {
+      return;
+    }
+
+    const projected = fortyMan.length + 1 - tradeOutgoing.length;
+    if (
+      projected > FORTY_MAN_LIMIT &&
+      !window.confirm(
+        `This trade would put the 40-man roster at ${projected}, over the ${FORTY_MAN_LIMIT}-man limit. Make it anyway?`
+      )
+    ) {
+      return;
+    }
+
+    const outgoingIds = new Set(tradeOutgoing.map((player) => player.id));
+    const outgoingSalary = tradeOutgoing.reduce((sum, player) => sum + (contractFor(player)?.salary ?? 0), 0);
+    const team = tradeTarget.teamId ? getTeamAbbreviation(tradeTarget.teamId) : "another team";
+
+    setFortyMan((current) => [
+      ...current.filter((player) => !outgoingIds.has(player.id)),
+      {
+        id: tradeTarget.id,
+        fullName: tradeTarget.fullName,
+        lastName: tradeTarget.lastName,
+        position: tradeTarget.position,
+      },
+    ]);
+    setRemovedPlayers((current) => current.filter((player) => player.id !== tradeTarget.id));
+    for (const id of outgoingIds) {
+      unassignPlayer(id);
+    }
+
+    logTransaction({
+      kind: "trade",
+      summary: `Acquired ${tradeTarget.fullName} (${tradeTarget.position}, ${team}) for ${
+        tradeOutgoing.length > 0 ? tradeOutgoing.map((player) => player.fullName).join(", ") : "nothing"
+      }`,
+      detail:
+        tradeOutgoing.length > 0
+          ? `${formatSalary(outgoingSalary)} in ${CONTRACT_SEASON} salary sent out`
+          : undefined,
+    });
+
+    cancelTrade();
   }
 
   // A created player's contract is optional, but if either contract field
@@ -627,6 +828,11 @@ export default function RosterBuilder({
     if (addToFortyMan(player)) {
       if (createSigning) {
         setSigning(player.id, createSigning);
+        logTransaction({
+          kind: "signing",
+          summary: `Signed ${player.fullName} (${player.position}, created player)`,
+          detail: signedContract(createSigning).detail,
+        });
       }
 
       nextCreatedId.current -= 1;
@@ -974,6 +1180,20 @@ export default function RosterBuilder({
               ))}
             </div>
 
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+                Guaranteed commitments in later seasons
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "1.25rem" }}>
+                {payroll.future.map(({ season, committed }) => (
+                  <div key={season}>
+                    <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 700, color: "var(--muted)" }}>{season}</p>
+                    <p style={{ margin: 0, fontSize: "1rem", fontWeight: 800 }}>{formatSalary(committed)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                 <thead>
@@ -1054,7 +1274,8 @@ export default function RosterBuilder({
               salaries use the {CONTRACT_SEASON - 1} league minimum. Pre-arb free-agency years come from FanGraphs
               where listed; years marked &ldquo;est.&rdquo; are the earliest possible, based on MLB debut date.
               Removing an arbitration player counts as a non-tender, and removing a club-option player counts as
-              declining the option (buyout still owed).
+              declining the option (buyout still owed). Players traded away take their full contracts with them. Later-season
+              commitments only include guaranteed money (multi-year deals and builder signings).
               {payroll.totals.unknownCount > 0 &&
                 ` ${payroll.totals.unknownCount} player${payroll.totals.unknownCount === 1 ? " has" : "s have"} no contract set and ${payroll.totals.unknownCount === 1 ? "isn't" : "aren't"} counted.`}
             </p>
@@ -1333,10 +1554,130 @@ export default function RosterBuilder({
                 </>
               ) : (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
+                  {addTab === "trades" && tradeTarget && (
+                    <div
+                      style={{
+                        border: "2px solid var(--accent)",
+                        borderRadius: "14px",
+                        padding: "0.85rem",
+                        display: "grid",
+                        gap: "0.6rem",
+                        background: "rgba(196,30,58,0.05)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                        <strong>
+                          Trade for {tradeTarget.fullName}
+                          <span style={{ color: "var(--muted)", fontWeight: 400 }}>
+                            {" "}
+                            · {tradeTarget.position}
+                            {tradeTarget.teamId ? ` · ${getTeamAbbreviation(tradeTarget.teamId)}` : ""}
+                          </span>
+                        </strong>
+                        <button type="button" onClick={cancelTrade} style={{ ...smallButtonStyle, marginLeft: "auto" }}>
+                          Cancel
+                        </button>
+                      </div>
+
+                      <div style={{ display: "grid", gap: "0.35rem" }}>
+                        <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--muted)" }}>
+                          SENDING OUT {tradeOutgoing.length > 0 ? `(${tradeOutgoing.length})` : ""}
+                        </span>
+                        <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                          {tradeOutgoing.length === 0 ? (
+                            <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
+                              No one yet — pick players from the 40-man below.
+                            </span>
+                          ) : (
+                            tradeOutgoing.map((player) => (
+                              <span
+                                key={player.id}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "0.35rem",
+                                  padding: "0.25rem 0.3rem 0.25rem 0.65rem",
+                                  borderRadius: "999px",
+                                  border: "1px solid var(--line)",
+                                  background: "var(--panel)",
+                                  fontSize: "0.82rem",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {player.fullName}
+                                <span style={{ color: "var(--muted)", fontWeight: 400 }}>
+                                  {contractFor(player) ? formatSalary(contractFor(player)!.salary) : player.position}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setTradeOutgoingIds((current) => current.filter((id) => id !== player.id))}
+                                  aria-label={`Keep ${player.fullName}`}
+                                  style={{
+                                    width: "1.2rem",
+                                    height: "1.2rem",
+                                    borderRadius: "50%",
+                                    border: "none",
+                                    background: "rgba(180,35,24,0.12)",
+                                    color: "#b42318",
+                                    fontWeight: 800,
+                                    cursor: "pointer",
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <input
+                        type="text"
+                        value={tradeQuery}
+                        onChange={(event) => setTradeQuery(event.target.value)}
+                        placeholder="Add players to send out..."
+                        aria-label="Search 40-man players to send out"
+                        style={{ ...createFieldStyle, width: "100%" }}
+                      />
+                      <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                        {tradeCandidates.map((player) => (
+                          <button
+                            key={player.id}
+                            type="button"
+                            onClick={() => setTradeOutgoingIds((current) => [...current, player.id])}
+                            style={smallButtonStyle}
+                          >
+                            + {player.fullName}{" "}
+                            <span style={{ color: "var(--muted)", fontWeight: 400 }}>{player.position}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={completeTrade}
+                          style={{
+                            ...smallButtonStyle,
+                            background: "var(--accent)",
+                            borderColor: "var(--accent)",
+                            color: "#fff",
+                            padding: "0.45rem 1rem",
+                          }}
+                        >
+                          Complete trade
+                        </button>
+                        <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                          Set {tradeTarget.fullName}&apos;s salary from the payroll table after the trade.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {addTab === "trades" && !addQuery.trim() ? (
                     <p style={{ margin: 0, color: "var(--muted)" }}>
-                      Type a name to search players under contract with other teams. Set their salary from the payroll
-                      table once they&apos;re added.
+                      Type a name to search players under contract with other teams, then pick who to send back.
                     </p>
                   ) : addPool.length === 0 ? (
                     <p style={{ margin: 0, color: "var(--muted)" }}>No matching players found.</p>
@@ -1376,7 +1717,7 @@ export default function RosterBuilder({
                         <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{player.position}</span>
                         <button
                           type="button"
-                          onClick={() => addToFortyMan(player)}
+                          onClick={() => (addTab === "trades" ? startTrade(player) : addToFortyMan(player))}
                           style={{
                             marginLeft: "auto",
                             border: "1px solid var(--line)",
@@ -1389,7 +1730,7 @@ export default function RosterBuilder({
                             fontSize: "0.8rem",
                           }}
                         >
-                          Add
+                          {addTab === "trades" ? "Trade for" : "Add"}
                         </button>
                       </div>
                     ))
@@ -1397,6 +1738,51 @@ export default function RosterBuilder({
                 </div>
               )}
             </>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <p className="kicker" style={{ marginBottom: "0.6rem" }}>
+          Transactions
+        </p>
+        <div
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: "18px",
+            background: "var(--panel)",
+            padding: "1.15rem",
+            display: "grid",
+            gap: "0.6rem",
+          }}
+        >
+          {transactions.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--muted)" }}>No trades or signings yet.</p>
+          ) : (
+            transactions.map((transaction) => (
+              <div
+                key={transaction.id}
+                style={{ display: "grid", gap: "0.15rem", paddingBottom: "0.6rem", borderBottom: "1px solid var(--line)" }}
+              >
+                <span style={{ fontSize: "0.9rem" }}>
+                  <span
+                    style={{
+                      fontSize: "0.68rem",
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      color: transaction.kind === "trade" ? "var(--accent)" : "#0f7a38",
+                      marginRight: "0.5rem",
+                    }}
+                  >
+                    {transaction.kind}
+                  </span>
+                  <strong>{transaction.summary}</strong>
+                </span>
+                {transaction.detail && (
+                  <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{transaction.detail}</span>
+                )}
+              </div>
+            ))
           )}
         </div>
       </div>
