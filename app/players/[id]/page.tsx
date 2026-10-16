@@ -10,7 +10,7 @@ import {
   getColumnRanks,
   getPlayerBio,
   getPlayerCareerYears,
-  getPlayerHandednessSplits,
+  getPlayerSituationSplits,
   getPlayerYearStats,
   getTeamAbbreviation,
   HITTER_COLUMNS,
@@ -21,13 +21,20 @@ import {
   playerHeadshotUrl,
   teamLogoUrl,
   type RosterEntry,
+  type StatLine,
   type StatRow,
 } from "@/lib/mlb";
 import { getPlayerGrades } from "@/lib/grades";
 import { getPodcastMentionsForPlayer } from "@/lib/podcast-mentions";
 import { getStatcastPercentiles, isAmericanLeagueTeam, isNationalLeagueTeam } from "@/lib/statcast";
 import { computeEraPlus, computeWrcPlus, formatPlusStat, getSeasonEnvironment } from "@/lib/park-adjusted";
-import { formatWar, getPitcherWar, getPositionPlayerWar } from "@/lib/war";
+import {
+  formatWar,
+  getPitcherSplitWar,
+  getPitcherWar,
+  getPositionPlayerSplitWar,
+  getPositionPlayerWar,
+} from "@/lib/war";
 import RollingTrendChart from "@/components/players/RollingTrendChart";
 import GameLogTable from "@/components/players/GameLogTable";
 import YearSelect from "@/components/players/YearSelect";
@@ -38,6 +45,7 @@ import PodcastMentions from "@/components/players/PodcastMentions";
 import StatcastPercentiles from "@/components/players/StatcastPercentiles";
 import PlayerStatsPanel, { type StatsView } from "@/components/players/PlayerStatsPanel";
 import SeasonStatCells from "@/components/players/SeasonStatCells";
+import SplitsPanel from "@/components/players/SplitsPanel";
 
 type PlayerPageProps = {
   params: Promise<{ id: string }>;
@@ -48,11 +56,17 @@ function StatTable({
   columns,
   rows,
   teamColumn,
+  highlighted = [],
 }: {
   columns: readonly string[];
   rows: Array<{ label: string; row: StatRow; team?: string }>;
   teamColumn?: boolean;
+  // Columns tinted like the featured season cells (WAR, wRC+/ERA+).
+  highlighted?: readonly string[];
 }) {
+  const highlightStyle = (column: string): React.CSSProperties =>
+    highlighted.includes(column) ? { background: "rgba(196,30,58,0.06)", fontWeight: 700 } : {};
+
   const stickyFirstColStyle: React.CSSProperties = {
     position: "sticky",
     left: 0,
@@ -71,7 +85,7 @@ function StatTable({
               <th style={{ padding: "0.5rem 0.75rem", whiteSpace: "nowrap" }}>Team</th>
             )}
             {columns.map((column) => (
-              <th key={column} style={{ padding: "0.5rem 0.75rem", whiteSpace: "nowrap" }}>
+              <th key={column} style={{ padding: "0.5rem 0.75rem", whiteSpace: "nowrap", ...highlightStyle(column) }}>
                 {column}
               </th>
             ))}
@@ -96,7 +110,7 @@ function StatTable({
                 </td>
               )}
               {columns.map((column) => (
-                <td key={column} style={{ padding: "0.6rem 0.75rem", whiteSpace: "nowrap" }}>
+                <td key={column} style={{ padding: "0.6rem 0.75rem", whiteSpace: "nowrap", ...highlightStyle(column) }}>
                   {entry.row[column] ?? "-"}
                 </td>
               ))}
@@ -201,10 +215,10 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
   const statcastType = role === "Pitcher" ? "pitcher" : "batter";
 
-  const [yearStats, handednessSplits, playerGrades, podcastMentions, statcastMetrics, seasonEnvironment] =
+  const [yearStats, situationSplits, playerGrades, podcastMentions, statcastMetrics, seasonEnvironment] =
     await Promise.all([
       getPlayerYearStats(playerId, selectedYear, group),
-      getPlayerHandednessSplits(playerId, selectedYear, group),
+      getPlayerSituationSplits(playerId, selectedYear, group, ["vl", "vr", "h", "a"]),
       getPlayerGrades(bio.fullName),
       getPodcastMentionsForPlayer(bio.fullName),
       getStatcastPercentiles(playerId, selectedYear, statcastType),
@@ -321,11 +335,6 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       )
     : "-";
 
-  const monthRows = yearStats.months.map((month) => ({
-    label: month.month,
-    row: buildStatRow(role, month.stat),
-  }));
-
   const handednessLabel = (code: string) => {
     if (role === "Pitcher") {
       return code === "vl" ? "Vs. LHB" : "Vs. RHB";
@@ -334,10 +343,71 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     return code === "vl" ? "Vs. LHP" : "Vs. RHP";
   };
 
-  const handednessRows = handednessSplits.map((split) => ({
-    label: handednessLabel(split.code),
-    row: buildStatRow(role, split.stat),
-  }));
+  const splitByCode = new Map(situationSplits.map((split) => [split.code, split.stat]));
+  const splitGroups = {
+    month: yearStats.months.map((month) => ({ label: month.month, stat: month.stat })),
+    handedness: ["vl", "vr"].flatMap((code) => {
+      const stat = splitByCode.get(code);
+      return stat ? [{ label: handednessLabel(code), stat }] : [];
+    }),
+    venue: [
+      { code: "h", label: "Home" },
+      { code: "a", label: "Away" },
+    ].flatMap(({ code, label }) => {
+      const stat = splitByCode.get(code);
+      return stat ? [{ label, stat }] : [];
+    }),
+  };
+
+  // Splits cover the whole season whatever team is picked above, so their
+  // WAR and wRC+/ERA+ use every stint's park and league context.
+  const splitEntries = [...splitGroups.month, ...splitGroups.handedness, ...splitGroups.venue];
+  const splitWars =
+    role === "Pitcher"
+      ? await getPitcherSplitWar(
+          selectedYear,
+          splitEntries.map((entry) => entry.stat),
+          yearStats.seasonTeams
+        )
+      : await getPositionPlayerSplitWar(
+          playerId,
+          selectedYear,
+          splitEntries.map((entry) => entry.stat),
+          yearStats.seasonTeams,
+          yearStats.season?.plateAppearances ?? 0
+        );
+  const splitWarByStat = new Map(splitEntries.map((entry, index) => [entry.stat, splitWars[index]]));
+
+  const buildSplitRows = (entries: Array<{ label: string; stat: StatLine }>) =>
+    entries.map((entry) => {
+      const row = buildStatRow(role, entry.stat);
+      row.WAR = formatWar(splitWarByStat.get(entry.stat));
+      row[plusColumn] = seasonEnvironment
+        ? formatPlusStat(
+            role === "Pitcher"
+              ? computeEraPlus(entry.stat, yearStats.seasonTeams, seasonEnvironment)
+              : computeWrcPlus(entry.stat, yearStats.seasonTeams, seasonEnvironment)
+          )
+        : "-";
+      return { label: entry.label, row };
+    });
+
+  const splitColumns = [...featuredColumns, ...columns];
+  // Pitching splits by batter hand have no runs allowed, so WAR and ERA+
+  // can't be computed there.
+  const handednessSplitColumns = role === "Pitcher" ? handednessColumns : [...featuredColumns, ...handednessColumns];
+
+  const splitOptions = [
+    { key: "month", label: "By Month", empty: "monthly", columns: splitColumns, rows: buildSplitRows(splitGroups.month) },
+    {
+      key: "handedness",
+      label: "By Handedness",
+      empty: "handedness",
+      columns: handednessSplitColumns,
+      rows: buildSplitRows(splitGroups.handedness),
+    },
+    { key: "venue", label: "Home / Away", empty: "home/away", columns: splitColumns, rows: buildSplitRows(splitGroups.venue) },
+  ];
 
   const age = computeAgeAsOf(bio.birthDate, `${selectedYear}-07-01`);
 
@@ -548,44 +618,20 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         className="container fade-up player-page-section"
         style={{ animationDelay: "0.11s" }}
       >
-        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Splits by Month</h2>
-        <article
-          className="split-table-card"
-          style={{
-            border: "1px solid var(--line)",
-            borderRadius: "18px",
-            background: "var(--panel)",
-            padding: "1.15rem",
-          }}
-        >
-          {monthRows.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--muted)" }}>No monthly data for {selectedYear}.</p>
-          ) : (
-            <StatTable columns={columns} rows={monthRows} />
-          )}
-        </article>
-      </section>
-
-      <section
-        className="container fade-up player-page-section"
-        style={{ animationDelay: "0.14s" }}
-      >
-        <h2 className="player-section-title" style={{ margin: "0 0 1rem" }}>Splits by Handedness</h2>
-        <article
-          className="split-table-card"
-          style={{
-            border: "1px solid var(--line)",
-            borderRadius: "18px",
-            background: "var(--panel)",
-            padding: "1.15rem",
-          }}
-        >
-          {handednessRows.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--muted)" }}>No handedness splits for {selectedYear}.</p>
-          ) : (
-            <StatTable columns={handednessColumns} rows={handednessRows} />
-          )}
-        </article>
+        <SplitsPanel
+          options={splitOptions.map((option) => ({
+            key: option.key,
+            label: option.label,
+            content:
+              option.rows.length === 0 ? (
+                <p style={{ margin: 0, color: "var(--muted)" }}>
+                  No {option.empty} splits for {selectedYear}.
+                </p>
+              ) : (
+                <StatTable columns={option.columns} rows={option.rows} highlighted={featuredColumns} />
+              ),
+          }))}
+        />
       </section>
 
       <section

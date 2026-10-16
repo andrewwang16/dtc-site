@@ -139,8 +139,8 @@ export type MonthSplit = {
   stat: StatLine;
 };
 
-export type HandednessSplit = {
-  code: "vl" | "vr";
+export type SituationSplit = {
+  code: string;
   description: string;
   stat: StatLine;
 };
@@ -496,13 +496,16 @@ const MONTH_NAMES = [
   "December",
 ];
 
-export async function getPlayerHandednessSplits(
+// Situational splits by MLB "sitCode": "vl"/"vr" (vs. left/right) and
+// "h"/"a" (home/away).
+export async function getPlayerSituationSplits(
   playerId: number,
   year: number,
-  group: StatGroup
-): Promise<HandednessSplit[]> {
+  group: StatGroup,
+  codes: string[]
+): Promise<SituationSplit[]> {
   const data = await fetchJson<RawStatsResponse>(
-    `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=${group}&season=${year}&sitCodes=vl,vr`,
+    `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=${group}&season=${year}&sitCodes=${codes.join(",")}`,
     3600
   );
 
@@ -511,7 +514,7 @@ export async function getPlayerHandednessSplits(
 
   // A player who changed teams mid-season gets one split per team stint
   // *plus* a season-combined split with no `team` attached, all sharing the
-  // same handedness code — keep only the combined one per code (falling
+  // same split code — keep only the combined one per code (falling
   // back to the single per-team entry when a player stayed on one team).
   const byCode = new Map<string, Record<string, any>>();
 

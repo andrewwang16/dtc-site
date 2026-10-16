@@ -412,14 +412,16 @@ function weightedAverage(stints: SeasonStint[], weightOf: (stat: StatLine) => nu
 
 // `seasonPA` is the player's full-season PA: Statcast fielding and
 // baserunning are season totals, so a single team stint gets a PA-based
-// share of them.
+// share of them. `positionalShare` does the same for the positional
+// adjustment, whose innings are already per team stint but not per split.
 function positionPlayerWar(
   playerId: number,
   stat: StatLine,
   stints: SeasonStint[],
   fielding: FieldingSplit[],
   seasonPA: number,
-  env: WarEnvironment
+  env: WarEnvironment,
+  positionalShare = 1
 ): PositionPlayerWar | null {
   const pa = stat.plateAppearances ?? 0;
   const { guts, parkFactors, leagues, teamLeague } = env.base;
@@ -467,7 +469,7 @@ function positionPlayerWar(
       }
       // A DH plays no defensive innings, so count each DH game as nine.
       const innings = split.position === "DH" ? split.games * 9 : split.innings;
-      return sum + (innings / 1458) * runs;
+      return sum + (innings / 1458) * runs * positionalShare;
     }, 0);
 
   const league = leagueAdjustmentPerPA * pa;
@@ -559,6 +561,51 @@ export async function getPitcherWar(
 
   const env = await getWarEnvironment(season);
   return env ? pitcherWar(stat, stints, env) : null;
+}
+
+// WAR for parts of a season (months, handedness or home/away splits), on
+// the full season's park and league context, the way FanGraphs splits it.
+// Season-total pieces (Statcast fielding and baserunning, the positional
+// adjustment) are prorated by the split's share of season PA.
+export async function getPositionPlayerSplitWar(
+  playerId: number,
+  season: number,
+  splits: Array<StatLine | null>,
+  stints: SeasonStint[],
+  seasonPA: number
+): Promise<Array<number | null>> {
+  if (stints.length === 0 || seasonPA <= 0) {
+    return splits.map(() => null);
+  }
+
+  const [env, fielding] = await Promise.all([getWarEnvironment(season), getFieldingSplits(playerId, season)]);
+
+  return splits.map((stat) => {
+    if (!env || !stat) {
+      return null;
+    }
+    const share = Math.min(1, (stat.plateAppearances ?? 0) / seasonPA);
+    return positionPlayerWar(playerId, stat, stints, fielding, seasonPA, env, share)?.war ?? null;
+  });
+}
+
+// Pitching splits by batter hand don't include runs allowed, so RA9-WAR
+// can't be computed for them — those come back null rather than as if no
+// runs scored.
+export async function getPitcherSplitWar(
+  season: number,
+  splits: Array<StatLine | null>,
+  stints: SeasonStint[]
+): Promise<Array<number | null>> {
+  if (stints.length === 0) {
+    return splits.map(() => null);
+  }
+
+  const env = await getWarEnvironment(season);
+
+  return splits.map((stat) =>
+    env && stat && stat.runs !== undefined && stat.runs !== null ? pitcherWar(stat, stints, env)?.war ?? null : null
+  );
 }
 
 export function formatWar(value: number | null | undefined): string {
