@@ -208,6 +208,21 @@ function sortByLastName<T extends SimplePlayer>(players: T[]): T[] {
   return [...players].sort(compareByLastName);
 }
 
+// Trade lists keep an organization's groups in the order they arrive —
+// 40-man first, then the 60-day IL, then each minor league level — and sort
+// by last name within each group.
+function sortWithinLevels<T extends SystemPlayer>(players: T[]): T[] {
+  const levelRank = new Map<string, number>();
+  for (const player of players) {
+    if (!levelRank.has(player.level)) {
+      levelRank.set(player.level, levelRank.size);
+    }
+  }
+  return [...players].sort(
+    (a, b) => (levelRank.get(a.level) ?? 0) - (levelRank.get(b.level) ?? 0) || compareByLastName(a, b)
+  );
+}
+
 // How well a player fits an open roster spot, from last season's usage:
 // games at that position, starts for the rotation, relief outings for the
 // bullpen, holds for setup, saves for the closer, and total games for the
@@ -1498,7 +1513,7 @@ export default function RosterBuilder({
       return [];
     }
     const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
-    return sortByLastName(
+    return sortWithinLevels(
       tradeTeamPlayers.filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
     );
   }, [tradeTeamPlayers, addQuery]);
@@ -1544,8 +1559,8 @@ export default function RosterBuilder({
 
   const tradeCandidates = useMemo(() => {
     const trimmed = stripDiacritics(tradeQuery.trim().toLowerCase());
-    // The whole system, by last name (the list scrolls).
-    return sortByLastName(
+    // 40-man first, then the IL and the minors (the list scrolls).
+    return sortWithinLevels(
       orgSystem
         .filter((player) => !tradeOutgoingIds.includes(player.id))
         .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
