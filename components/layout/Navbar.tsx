@@ -11,14 +11,13 @@ type NavItem = { label: string; href: string; children?: NavChild[] };
 const navItems: NavItem[] = [
   { label: "Home", href: "/" },
   {
-    label: "Podcast",
+    label: "Content",
     href: "/podcast",
     children: [
-      { label: "Dealin' the Cards", href: "/podcast?show=dtc" },
-      { label: "Birds on the Farm", href: "/podcast?show=btf" },
+      { label: "Podcast", href: "/podcast" },
+      { label: "Articles", href: "/articles" },
     ],
   },
-  { label: "Articles", href: "/articles" },
   { label: "Schedule", href: "/schedule" },
   {
     label: "Players",
@@ -33,10 +32,10 @@ const navItems: NavItem[] = [
   },
   { label: "Prospects", href: "/prospects" },
   { label: "Shop", href: "/shop" },
-  { label: "About Us", href: "/about-us" },
+  // About Us is hidden from the nav for now; /about-us still works.
 ];
 
-// Its own tab at the right end of the links, outlined in gold.
+// Its own tab after the other links, outlined in gold.
 const GM_SIMULATOR = { label: "GM Simulator", href: "/gm-simulator" };
 
 export default function Navbar() {
@@ -248,7 +247,9 @@ export default function Navbar() {
           }}
         >
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            // A dropdown tab is active on any of its pages (Content on /articles).
+            const isActive =
+              pathname === item.href || (item.children ?? []).some((child) => pathname === child.href.split("?")[0]);
 
             if (!item.children) {
               return (
@@ -367,8 +368,7 @@ export default function Navbar() {
             aria-current={pathname === GM_SIMULATOR.href ? "page" : undefined}
             onClick={() => setMobileMenuOpen(false)}
             style={{
-              marginLeft: "auto",
-              padding: "0.2rem 0.85rem",
+              padding: "0.05rem 0.75rem",
               borderRadius: "999px",
               border: "1.5px solid #f2c14e",
               background: pathname === GM_SIMULATOR.href ? "rgba(242,193,78,0.22)" : "rgba(242,193,78,0.08)",

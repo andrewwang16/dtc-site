@@ -1,19 +1,10 @@
 import { getPlaylistVideos } from "@/lib/youtube";
 
-const SHOWS = {
-  dtc: {
-    slug: "dtc",
-    label: "Dealin' the Cards",
-    playlistId: "PLzLr3_w2micHl1PeuYZYfjYQdZfT9LO0a",
-  },
-  btf: {
-    slug: "btf",
-    label: "Birds on the Farm",
-    playlistId: "PLzLr3_w2micHiyyourtPl_GYVgsnQGfcx",
-  },
+// Only Dealin' the Cards is shown here now.
+const show = {
+  label: "Dealin' the Cards",
+  playlistId: "PLzLr3_w2micHl1PeuYZYfjYQdZfT9LO0a",
 } as const;
-
-type ShowSlug = keyof typeof SHOWS;
 
 const EPISODES_PER_PAGE = 12;
 
@@ -32,7 +23,6 @@ function formatEpisodeDate(iso: string) {
 type PodcastPageProps = {
   searchParams: Promise<{
     page?: string;
-    show?: string;
   }>;
 };
 
@@ -40,9 +30,6 @@ export default async function PodcastPage({
   searchParams,
 }: PodcastPageProps) {
   const params = await searchParams;
-
-  const activeShowSlug: ShowSlug = params.show === "btf" ? "btf" : "dtc";
-  const show = SHOWS[activeShowSlug];
 
   const episodes = await getPlaylistVideos(show.playlistId);
 
@@ -201,7 +188,7 @@ export default async function PodcastPage({
             >
               {hasNewerEpisodes ? (
                 <a
-                  href={`?show=${show.slug}&page=${safePage - 1}`}
+                  href={`?page=${safePage - 1}`}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -230,7 +217,7 @@ export default async function PodcastPage({
 
               {hasOlderEpisodes ? (
                 <a
-                  href={`?show=${show.slug}&page=${safePage + 1}`}
+                  href={`?page=${safePage + 1}`}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
