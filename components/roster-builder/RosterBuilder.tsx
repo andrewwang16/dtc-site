@@ -66,14 +66,20 @@ const DIAMOND_SLOTS: SlotDef[] = [
 
 const BENCH_SLOTS: SlotDef[] = [1, 2, 3, 4].map((n) => ({ id: `BN${n}`, label: `Bench ${n}`, group: "bench" }));
 const ROTATION_SLOTS: SlotDef[] = [1, 2, 3, 4, 5].map((n) => ({ id: `SP${n}`, label: `SP${n}`, group: "rotation" }));
-const BULLPEN_SLOTS: SlotDef[] = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ id: `RP${n}`, label: `RP${n}`, group: "bullpen" }));
+// The last two bullpen spots are the setup man and the closer.
+const BULLPEN_SLOTS: SlotDef[] = [
+  ...[1, 2, 3, 4, 5, 6].map((n): SlotDef => ({ id: `RP${n}`, label: `RP${n}`, group: "bullpen" })),
+  { id: "SU", label: "SU", group: "bullpen" },
+  { id: "CL", label: "CL", group: "bullpen" },
+];
+const BULLPEN_ROLE_IDS = new Set(["SU", "CL"]);
 
 // The 26-man roster. A two-way player used both as a hitter and a pitcher
 // fills two slots but is one player, so the club gets one extra slot — on
 // the bench or in the bullpen, whichever the user picks.
 const TOTAL_SLOTS = DIAMOND_SLOTS.length + BENCH_SLOTS.length + ROTATION_SLOTS.length + BULLPEN_SLOTS.length;
 const EXTRA_BENCH_SLOT: SlotDef = { id: "BN5", label: "Bench 5", group: "bench" };
-const EXTRA_BULLPEN_SLOT: SlotDef = { id: "RP9", label: "RP9", group: "bullpen" };
+const EXTRA_BULLPEN_SLOT: SlotDef = { id: "RP9", label: "RP7", group: "bullpen" };
 type ExtraSpot = "bench" | "bullpen";
 const FORTY_MAN_LIMIT = 40;
 const PLAYER_ID_DRAG_TYPE = "text/plain";
@@ -90,7 +96,7 @@ type SimplePlayer = {
   throws?: string;
   level?: string;
 };
-type AddTab = "prospects" | "free-agents" | "trades" | "create";
+type AddTab = "prospects" | "extensions" | "free-agents" | "trades" | "create";
 
 // A player somewhere in an organization, tagged with where: "40-man", "60-day
 // IL", or a minor league level.
@@ -146,6 +152,10 @@ type Transaction = {
   // Trades can also move players who aren't on the 40-man.
   outgoingInjured?: SimplePlayer[];
   outgoingProspects?: SystemPlayer[];
+  // Cash in a trade, for CONTRACT_SEASON: positive is sent to the partner,
+  // negative received from them.
+  cash?: number;
+  partnerTeamId?: number;
   incomingProspects?: SystemPlayer[];
   // Activations: players who came off the 60-day IL onto the 40-man.
   fromIL?: SimplePlayer[];
@@ -264,14 +274,6 @@ function parseYears(text: string): number | null {
   return Number.isInteger(years) && years >= 1 && years <= MAX_CONTRACT_YEARS ? years : null;
 }
 
-// A deal is entered as its total value in millions. Returns null until both
-// fields hold a usable deal; the total is split evenly across the seasons.
-function parseSigning(totalText: string, yearsText: string): Signing | null {
-  const total = parseMillions(totalText);
-  const years = parseYears(yearsText);
-  return total !== null && years !== null ? { salaries: flatSalaries(total, years) } : null;
-}
-
 type StructureChoice = "flat" | "custom";
 
 const STRUCTURE_LABELS: Record<StructureChoice, string> = {
@@ -318,11 +320,15 @@ function SignForm({
   submitLabel,
   initial,
   startOptions,
+  disabled = false,
   onSign,
 }: {
   submitLabel: string;
   initial?: Signing;
   startOptions?: number[];
+  // Blocks submitting even with a valid deal (e.g. a created player
+  // without a name yet).
+  disabled?: boolean;
   onSign: (signing: Signing) => void;
 }) {
   const initialTotal = initial ? initial.salaries.reduce((sum, salary) => sum + salary, 0) : 0;
@@ -377,7 +383,7 @@ function SignForm({
     deferEntered && deferralValid && deferAmount !== null && payoutCount !== null
       ? { total: deferAmount, payoutStart: payoutFrom, payoutYears: payoutCount }
       : undefined;
-  const ready = !!salaries && deferralValid;
+  const ready = !!salaries && deferralValid && !disabled;
 
   return (
     <form
@@ -891,13 +897,10 @@ export default function RosterBuilder({
   const [createPosition, setCreatePosition] = useState(CREATE_POSITIONS[0]);
   const [createBats, setCreateBats] = useState("R");
   const [createThrows, setCreateThrows] = useState("R");
-  const [createSalary, setCreateSalary] = useState("");
-  const [createYears, setCreateYears] = useState("1");
   const [freeAgentFilter, setFreeAgentFilter] = useState<FreeAgentFilter>("all");
   // Deals made in the builder, keyed by player id. These override any
   // real contract data for that player.
   const [signings, setSignings] = useState<Record<number, Signing>>({});
-  const [editingContractId, setEditingContractId] = useState<number | null>(null);
   const [payrollOpen, setPayrollOpen] = useState(false);
   const [payorStatus, setPayorStatus] = useState<PayorStatus>("first");
   // Where the extra slot goes while a two-way player is both hitting and
@@ -913,6 +916,9 @@ export default function RosterBuilder({
   const [tradeIncoming, setTradeIncoming] = useState<TradePiece[]>([]);
   const [tradeOutgoingIds, setTradeOutgoingIds] = useState<number[]>([]);
   const [tradeQuery, setTradeQuery] = useState("");
+  // Cash each side adds to the trade, in $M.
+  const [tradeCashOut, setTradeCashOut] = useState("");
+  const [tradeCashIn, setTradeCashIn] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const nextTransactionId = useRef(1);
   // Created players get negative ids so they can never collide with a
@@ -1005,7 +1011,11 @@ export default function RosterBuilder({
   });
   const extraSlot = twoWayPlayer ? (extraSpot === "bench" ? EXTRA_BENCH_SLOT : EXTRA_BULLPEN_SLOT) : null;
   const benchSlots = extraSlot?.group === "bench" ? [...BENCH_SLOTS, extraSlot] : BENCH_SLOTS;
-  const bullpenSlots = extraSlot?.group === "bullpen" ? [...BULLPEN_SLOTS, extraSlot] : BULLPEN_SLOTS;
+  // An extra reliever slots in ahead of the setup man and closer.
+  const bullpenSlots =
+    extraSlot?.group === "bullpen"
+      ? [...BULLPEN_SLOTS.filter((slot) => !BULLPEN_ROLE_IDS.has(slot.id)), extraSlot, ...BULLPEN_SLOTS.filter((slot) => BULLPEN_ROLE_IDS.has(slot.id))]
+      : BULLPEN_SLOTS;
   const allSlots = [...DIAMOND_SLOTS, ...benchSlots, ...ROTATION_SLOTS, ...bullpenSlots];
 
   // Counts players, not slots (a two-way player in two slots is one spot),
@@ -1099,6 +1109,19 @@ export default function RosterBuilder({
     for (const payment of currentOtherPayments) {
       totals.deadMoney += payment.amount;
     }
+    // Cash sent in builder trades is owed this season; cash received offsets.
+    const tradeCash = transactions
+      .filter((transaction) => transaction.kind === "trade" && transaction.cash)
+      .map((transaction) => ({
+        id: transaction.id,
+        amount: transaction.cash ?? 0,
+        description: `Cash ${(transaction.cash ?? 0) > 0 ? "to" : "from"} ${
+          transaction.partnerTeamId ? getTeamAbbreviation(transaction.partnerTeamId) : "trade partner"
+        } (trade)`,
+      }));
+    for (const entry of tradeCash) {
+      totals.deadMoney += entry.amount;
+    }
 
     const total = totals.guaranteed + totals.arbitration + totals.preArb + totals.deadMoney;
 
@@ -1126,6 +1149,7 @@ export default function RosterBuilder({
       rows.reduce((sum, { contract, salary, inMinors }) => sum + (contract ? (inMinors ? salary : contract.cbt ?? salary) : 0), 0) +
       deadMoney.reduce((sum, entry) => sum + entry.taxAmount, 0) +
       currentOtherPayments.reduce((sum, payment) => sum + payment.amount, 0) +
+      tradeCash.reduce((sum, entry) => sum + entry.amount, 0) +
       taxAdjustments.reduce((sum, adjustment) => sum + adjustment.amount, 0) +
       PLAYER_BENEFITS_ESTIMATE;
     const luxuryTax = computeLuxuryTax(taxPayroll, payorStatus);
@@ -1141,6 +1165,7 @@ export default function RosterBuilder({
       taxAdjustments,
       luxuryTax,
       minorsCount,
+      tradeCash,
     };
   }, [fortyMan, reserveIL, deadMoney, contractFor, teamId, payorStatus, allSlots, assignments, roster, sixtyDayIL, transactions]);
 
@@ -1343,6 +1368,14 @@ export default function RosterBuilder({
     }
   }
 
+  // Everyone currently with the club, for the Extensions tab.
+  const extensionPool = useMemo(() => {
+    const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
+    return [...fortyMan, ...reserveIL]
+      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }, [fortyMan, reserveIL, addQuery]);
+
   // When an extension can start: right away (replacing the current deal) or
   // the season after the current deal's last guaranteed year.
   function extensionStartOptions(player: SimplePlayer): number[] {
@@ -1358,7 +1391,6 @@ export default function RosterBuilder({
   function extendPlayer(player: SimplePlayer, signing: Signing) {
     const signingBefore = signings[player.id] ?? null;
     setSigning(player.id, signing);
-    setEditingContractId(null);
     logTransaction({
       kind: "extension",
       summary: `Extended ${player.fullName} (${positionLabel(player)})`,
@@ -1422,7 +1454,10 @@ export default function RosterBuilder({
     setTradeIncoming([]);
     setTradeOutgoingIds([]);
     setTradeQuery("");
+    setTradeCashOut("");
+    setTradeCashIn("");
   }
+
 
   // Everyone the club could send out: the 40-man, the 60-day IL, and
   // the minor leagues.
@@ -1440,6 +1475,10 @@ export default function RosterBuilder({
   const tradeOutgoing = tradeOutgoingIds
     .map((id) => orgSystem.find((player) => player.id === id))
     .filter((player): player is SystemPlayer => player !== undefined);
+
+  const cashOut = parseMillions(tradeCashOut) ?? 0;
+  const cashIn = parseMillions(tradeCashIn) ?? 0;
+  const tradeHasPieces = tradeIncoming.length > 0 || tradeOutgoing.length > 0 || cashOut > 0 || cashIn > 0;
 
   const tradeCandidates = useMemo(() => {
     const trimmed = stripDiacritics(tradeQuery.trim().toLowerCase());
@@ -1462,7 +1501,7 @@ export default function RosterBuilder({
   // the system; everyone sent out leaves (their contracts go with them — no
   // dead money).
   function completeTrade() {
-    if (tradeIncoming.length === 0 && tradeOutgoing.length === 0) {
+    if (!tradeHasPieces) {
       return;
     }
 
@@ -1527,13 +1566,23 @@ export default function RosterBuilder({
 
     logTransaction({
       kind: "trade",
-      summary: `Acquired ${tradeIncoming.length > 0 ? tradeIncoming.map(describeTradePiece).join(", ") : "nothing"} for ${
-        tradeOutgoing.length > 0 ? tradeOutgoing.map(describeTradePiece).join(", ") : "nothing"
-      }`,
+      summary: `Acquired ${describeSide(tradeIncoming.map(describeTradePiece), cashIn)} for ${describeSide(
+        tradeOutgoing.map(describeTradePiece),
+        cashOut
+      )}`,
       detail:
-        outgoingSalary > 0 || incomingSalary > 0
-          ? `Est. ${CONTRACT_SEASON} salary: ${formatSalary(incomingSalary)} in, ${formatSalary(outgoingSalary)} out`
-          : undefined,
+        [
+          outgoingSalary > 0 || incomingSalary > 0
+            ? `Est. ${CONTRACT_SEASON} salary: ${formatSalary(incomingSalary)} in, ${formatSalary(outgoingSalary)} out`
+            : null,
+          cashOut - cashIn !== 0
+            ? `${formatSalary(Math.abs(cashOut - cashIn))} net cash ${cashOut > cashIn ? "sent" : "received"} (${CONTRACT_SEASON})`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || undefined,
+      cash: cashOut - cashIn !== 0 ? cashOut - cashIn : undefined,
+      partnerTeamId: tradeTeamId ?? tradeIncoming[0]?.teamId,
       incoming: incomingFortyMan,
       outgoing: outgoingFortyMan,
       signingsBefore: {},
@@ -1543,6 +1592,12 @@ export default function RosterBuilder({
     });
 
     cancelTrade();
+  }
+
+  // "Player A, Player B and $5M cash" / "$5M cash" / "nothing".
+  function describeSide(pieces: string[], cash: number) {
+    const parts = [...pieces, ...(cash > 0 ? [`${formatSalary(cash)} cash`] : [])];
+    return parts.length > 0 ? parts.join(", ") : "nothing";
   }
 
   // A move can be undone as long as nothing later has built on it: everyone
@@ -1601,14 +1656,11 @@ export default function RosterBuilder({
     setTransactions((current) => current.filter((entry) => entry.id !== transaction.id));
   }
 
-  // A created player's contract is optional, but if either contract field
-  // is filled in, both have to make a valid deal.
-  const createSigning = parseSigning(createSalary, createYears);
-  const createHasContract = createSalary.trim() !== "";
-  const canCreate = !!createFirstName.trim() && !!createLastName.trim() && (!createHasContract || !!createSigning);
+  // A created player needs a name; the contract (same form as free agents,
+  // including custom-by-year salaries and deferrals) is optional.
+  const canCreate = !!createFirstName.trim() && !!createLastName.trim();
 
-  function createPlayer(event: React.FormEvent) {
-    event.preventDefault();
+  function createPlayer(createSigning?: Signing) {
     const first = createFirstName.trim();
     const last = createLastName.trim();
 
@@ -1641,8 +1693,6 @@ export default function RosterBuilder({
       nextCreatedId.current -= 1;
       setCreateFirstName("");
       setCreateLastName("");
-      setCreateSalary("");
-      setCreateYears("1");
     }
   }
 
@@ -1741,11 +1791,11 @@ export default function RosterBuilder({
       name: player.fullName,
       hand: player.position === "P" || pitching ? undefined : player.bats,
     });
-    const slotRows = (slots: SlotDef[], badge: (index: number) => string | undefined): GraphicRow[] =>
+    const slotRows = (slots: SlotDef[], badge: (index: number, slot: SlotDef) => string | undefined): GraphicRow[] =>
       slots.map((slot, index) => {
         const player = playerInSlot(slot.id);
         return {
-          badge: badge(index),
+          badge: badge(index, slot),
           player: player && toGraphic(player, isPitcherSlot(slot.group)),
           tag: player ? slotPositionLabel(player, slot.group) : undefined,
         };
@@ -1767,7 +1817,7 @@ export default function RosterBuilder({
         ],
         right: [
           { title: "Rotation", rows: slotRows(ROTATION_SLOTS, (index) => String(index + 1)) },
-          { title: "Bullpen", rows: slotRows(bullpenSlots, () => undefined) },
+          { title: "Bullpen", rows: slotRows(bullpenSlots, (_, slot) => (BULLPEN_ROLE_IDS.has(slot.id) ? slot.label : undefined)) },
         ],
         stats: [
           { label: `Est. ${CONTRACT_SEASON} Payroll`, value: formatSalary(payroll.total) },
@@ -2263,380 +2313,8 @@ export default function RosterBuilder({
       </div>
 
       <div>
-        <button
-          type="button"
-          onClick={() => setPayrollOpen((open) => !open)}
-          aria-expanded={payrollOpen}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            padding: "0.9rem 1.15rem",
-            border: "1px solid var(--line)",
-            borderRadius: payrollOpen ? "18px 18px 0 0" : "18px",
-            background: "var(--panel)",
-            color: "var(--text)",
-            cursor: "pointer",
-            textAlign: "left",
-          }}
-        >
-          <span className="kicker" style={{ margin: 0 }}>
-            {CONTRACT_SEASON} Payroll &amp; Contracts
-          </span>
-          <span
-            style={{
-              fontSize: "0.68rem",
-              fontWeight: 800,
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-              color: "#8a5a00",
-              background: "rgba(138,90,0,0.1)",
-              borderRadius: "999px",
-              padding: "0.15rem 0.5rem",
-            }}
-          >
-            Estimated
-          </span>
-          <span style={{ marginLeft: "auto", fontWeight: 800, fontSize: "1.05rem" }}>
-            {formatSalary(payroll.total)}
-            <span style={{ color: "var(--muted)", fontWeight: 700, fontSize: "0.78rem", marginLeft: "0.3rem" }}>est.</span>
-          </span>
-          <span
-            aria-hidden="true"
-            style={{ transition: "transform 0.15s", transform: payrollOpen ? "rotate(180deg)" : "none", color: "var(--muted)" }}
-          >
-            ▾
-          </span>
-        </button>
-
-        {payrollOpen && (
-          <div
-            style={{
-              border: "1px solid var(--line)",
-              borderTop: "none",
-              borderRadius: "0 0 18px 18px",
-              background: "var(--panel)",
-              padding: "1.15rem",
-              display: "grid",
-              gap: "1rem",
-            }}
-          >
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
-              {[
-                { label: "Estimated payroll", value: payroll.total, strong: true },
-                { label: "Signed / options", value: payroll.totals.guaranteed },
-                { label: "Arbitration (proj.)", value: payroll.totals.arbitration },
-                { label: "Pre-arb (est.)", value: payroll.totals.preArb },
-                ...(payroll.totals.deadMoney !== 0 ? [{ label: "Dead money & other", value: payroll.totals.deadMoney }] : []),
-                ...(payroll.deferred > 0 ? [{ label: "Deferred (paid later)", value: payroll.deferred }] : []),
-              ].map((item) => (
-                <div key={item.label}>
-                  <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
-                    {item.label}
-                  </p>
-                  <p style={{ margin: 0, fontSize: item.strong ? "1.4rem" : "1.1rem", fontWeight: 800 }}>
-                    {formatSalary(item.value)}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gap: "0.6rem",
-                padding: "0.85rem 1rem",
-                borderRadius: "14px",
-                border: "1px solid var(--line)",
-                background: payroll.luxuryTax.tier > 0 ? "rgba(180,35,24,0.05)" : "rgba(15,122,56,0.05)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-                <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
-                  Luxury tax (CBT) · est.
-                </p>
-                <select
-                  value={payorStatus}
-                  onChange={(event) => setPayorStatus(event.target.value as PayorStatus)}
-                  aria-label="Luxury tax payor status"
-                  style={{ ...contractFieldStyle, marginLeft: "auto", width: "auto", fontWeight: 700 }}
-                >
-                  {(Object.keys(PAYOR_STATUS_LABELS) as PayorStatus[]).map((status) => (
-                    <option key={status} value={status}>
-                      {PAYOR_STATUS_LABELS[status]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
-                {[
-                  { label: "Tax payroll", value: formatSalary(payroll.taxPayroll) },
-                  { label: "Threshold", value: formatSalary(TAX_THRESHOLDS[0]) },
-                  {
-                    label: payroll.luxuryTax.tier > 0 ? `Over (tier ${payroll.luxuryTax.tier})` : "Room under",
-                    value: formatSalary(Math.abs(payroll.taxPayroll - TAX_THRESHOLDS[0])),
-                    color: payroll.luxuryTax.tier > 0 ? "#b42318" : "#0f7a38",
-                  },
-                  { label: "Estimated tax", value: formatSalary(payroll.luxuryTax.tax) },
-                ].map((item) => (
-                  <div key={item.label}>
-                    <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
-                      {item.label}
-                    </p>
-                    <p style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800, color: item.color }}>{item.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Tax payroll against the base threshold and the three surcharge tiers. */}
-              {(() => {
-                const scaleMax = Math.max(TAX_THRESHOLDS[3] * 1.08, payroll.taxPayroll * 1.04);
-                const percent = (amount: number) => `${Math.min(100, (amount / scaleMax) * 100)}%`;
-                return (
-                  <div style={{ position: "relative", height: "34px" }} aria-hidden="true">
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "6px",
-                        left: 0,
-                        right: 0,
-                        height: "10px",
-                        borderRadius: "999px",
-                        background: "var(--line)",
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "6px",
-                        left: 0,
-                        width: percent(payroll.taxPayroll),
-                        height: "10px",
-                        borderRadius: "999px",
-                        background: payroll.luxuryTax.tier > 0 ? "#b42318" : "#0f7a38",
-                      }}
-                    />
-                    {TAX_THRESHOLDS.map((threshold) => (
-                      <div key={threshold} style={{ position: "absolute", top: 0, left: percent(threshold) }}>
-                        <div style={{ width: "2px", height: "22px", background: "var(--text)", opacity: 0.55 }} />
-                        <span
-                          style={{
-                            position: "absolute",
-                            top: "21px",
-                            transform: "translateX(-50%)",
-                            fontSize: "0.62rem",
-                            fontWeight: 700,
-                            color: "var(--muted)",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {formatSalary(threshold)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-
-              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.74rem" }}>
-                Tax payroll counts each contract at its AAV (deferred money at present value, ~
-                {Math.round(DEFERRAL_DISCOUNT_RATE * 1000) / 10}% discount), arbitration and pre-arb salaries, money owed to
-                former players{payroll.taxAdjustments.length > 0 ? ", FanGraphs' tax adjustments" : ""}, and an estimated{" "}
-                {formatSalary(PLAYER_BENEFITS_ESTIMATE)} in player benefits. Uses the 2026 thresholds and rates until the next
-                CBA sets 2027&apos;s. Going $40M+ over also moves a club&apos;s top draft pick back 10 spots.
-              </p>
-            </div>
-
-            <div style={{ display: "grid", gap: "0.35rem" }}>
-              <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
-                Guaranteed commitments in later seasons
-              </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "1.25rem" }}>
-                {payroll.future.map(({ season, committed }) => (
-                  <div key={season}>
-                    <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 700, color: "var(--muted)" }}>{season}</p>
-                    <p style={{ margin: 0, fontSize: "1rem", fontWeight: 800 }}>{formatSalary(committed)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.72rem", textTransform: "uppercase" }}>
-                    <th style={{ padding: "0.4rem 0.5rem" }}>Player</th>
-                    <th style={{ padding: "0.4rem 0.5rem" }}>Status</th>
-                    <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>{CONTRACT_SEASON} (est.)</th>
-                    <th style={{ padding: "0.4rem 0.5rem" }}>Contract</th>
-                    <th style={{ padding: "0.4rem 0.5rem" }}>FA After</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payroll.rows.map(({ player, contract, salary, inMinors }) => {
-                    // Created players get a contract set directly; real players
-                    // can be extended (a logged, undoable move), and a deal the
-                    // builder already made can be edited in place.
-                    const isCreated = player.id < 0;
-                    const hasBuilderDeal = !!signings[player.id];
-                    const isEditing = editingContractId === player.id;
-                    const actionLabel = hasBuilderDeal ? "Edit deal" : isCreated ? "Set contract" : "Extend";
-
-                    return (
-                      <tr key={player.id} style={{ borderTop: "1px solid var(--line)" }}>
-                        <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700, whiteSpace: "nowrap" }}>
-                          {player.fullName}
-                          <span style={{ color: "var(--muted)", fontWeight: 400, marginLeft: "0.4rem" }}>
-                            {player.position}
-                            {reserveIL.some((p) => p.id === player.id) && " · 60-day IL"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>
-                          {contract ? CONTRACT_STATUS_LABELS[contract.status] : "Unknown"}
-                          {inMinors && (
-                            <span
-                              style={{ display: "block", fontSize: "0.7rem", color: "var(--muted)" }}
-                              title="Not on the 26-man, so paid the minor league 40-man salary"
-                            >
-                              In minors · 40-man
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700, whiteSpace: "nowrap" }}>
-                          {contract ? formatSalary(salary) : "—"}
-                          {contract?.deferred ? (
-                            <span style={{ display: "block", fontSize: "0.7rem", color: "var(--muted)", fontWeight: 600 }}>
-                              {formatSalary(contract.deferred)} deferred
-                            </span>
-                          ) : null}
-                        </td>
-                        <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }}>
-                          {isEditing ? (
-                            <div style={{ display: "grid", gap: "0.3rem", justifyItems: "end" }}>
-                              <SignForm
-                                submitLabel={actionLabel === "Extend" ? "Extend" : "Save"}
-                                initial={signings[player.id]}
-                                startOptions={isCreated ? undefined : extensionStartOptions(player)}
-                                onSign={(signing) => {
-                                  if (actionLabel === "Extend") {
-                                    extendPlayer(player, signing);
-                                  } else {
-                                    setSigning(player.id, signing);
-                                    setEditingContractId(null);
-                                  }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setEditingContractId(null)}
-                                style={{ ...smallButtonStyle, padding: "0.15rem 0.6rem", fontSize: "0.7rem" }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                              <span title={contract?.deferralNote}>
-                                {contract?.detail ?? "—"}
-                                {contract?.deferralNote && !contract.deferred && " · has deferrals"}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setEditingContractId(player.id)}
-                                style={{ ...smallButtonStyle, padding: "0.2rem 0.6rem", fontSize: "0.72rem" }}
-                              >
-                                {actionLabel}
-                              </button>
-                            </span>
-                          )}
-                        </td>
-                        <td
-                          style={{ padding: "0.4rem 0.5rem", color: "var(--muted)", whiteSpace: "nowrap" }}
-                          title={
-                            contract?.freeAgentEstimated
-                              ? "Earliest possible year, estimated from MLB debut date — any time in the minors pushes it later"
-                              : undefined
-                          }
-                        >
-                          {formatFreeAgentAfter(contract)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {(payroll.currentOtherPayments.length > 0 || deadMoney.length > 0) && (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        style={{
-                          padding: "0.9rem 0.5rem 0.3rem",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
-                          color: "var(--muted)",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Dead money &amp; other payments
-                      </td>
-                    </tr>
-                  )}
-                  {payroll.currentOtherPayments.map((payment) => (
-                    <tr key={`${payment.description}-${payment.amount}`} style={{ borderTop: "1px solid var(--line)" }}>
-                      <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700 }} colSpan={2}>
-                        {payment.description.charAt(0).toUpperCase() + payment.description.slice(1)}
-                      </td>
-                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
-                        {formatSalary(payment.amount)}
-                      </td>
-                      <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }} colSpan={2}>
-                        {payment.amount < 0 ? `Owed to the ${team.shortName}` : "No longer on the roster"}
-                      </td>
-                    </tr>
-                  ))}
-                  {deadMoney.map((entry) => (
-                    <tr key={`dead-${entry.player.id}`} style={{ borderTop: "1px solid var(--line)" }}>
-                      <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700 }} colSpan={2}>
-                        {entry.player.fullName} ({entry.reason})
-                      </td>
-                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
-                        {formatSalary(entry.amount)}
-                      </td>
-                      <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }} colSpan={2}>
-                        {entry.detail}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.78rem" }}>
-              All salary figures are estimates. Contracts, options and dead money come from FanGraphs RosterResource for
-              every club (so players acquired in trades bring their real salaries), and arbitration figures are MLB
-              Trade Rumors projections — both as of {CONTRACTS_UPDATED}. Pre-arb players on the 26-man earn their{" "}
-              {CONTRACT_SEASON - 1} salary or the {formatSalary(PRE_ARB_SALARY_ESTIMATE)} minimum, whichever is more;
-              pre-arb 40-man players in the minors earn the minor league 40-man salary (
-              {formatSalary(MINOR_LEAGUE_SALARY_FIRST_CONTRACT)} on a first major league contract,{" "}
-              {formatSalary(MINOR_LEAGUE_SALARY)} after; {CONTRACT_SEASON - 1} CBA figures). Until all 26 spots are set,
-              the open spots are assumed to go to the most experienced unassigned 40-man players. Pre-arb free-agency years come from FanGraphs where listed; years
-              marked &ldquo;est.&rdquo; are the earliest possible, based on MLB debut date. Includes the 40-man, the
-              60-day IL, and money still owed to players no longer on the roster (cash sent in trades, buyouts).
-              Removing a player from the 40-man declines a club or mutual option (the salary comes off, but any buyout stays
-              on as dead money) or non-tenders an arbitration/pre-arb player (off the payroll); anyone else is designated
-              for assignment, and a guaranteed deal stays on as dead money.
-              Players traded away take their full contracts with them (no cash is sent in builder trades). Later-season commitments only include guaranteed
-              money (multi-year deals, builder signings, and dead money).
-              {payroll.totals.unknownCount > 0 &&
-                ` ${payroll.totals.unknownCount} player${payroll.totals.unknownCount === 1 ? " has" : "s have"} no contract set and ${payroll.totals.unknownCount === 1 ? "isn't" : "aren't"} counted.`}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div>
         <p className="kicker" style={{ marginBottom: "0.6rem" }}>
-          Add to 40-Man Roster
+          Roster Moves
         </p>
         <div
           style={{
@@ -2655,6 +2333,13 @@ export default function RosterBuilder({
               onClick={() => { setAddTab("prospects"); setAddQuery(""); }}
             >
               Prospects
+            </button>
+            <button
+              type="button"
+              style={addTabButtonStyle(addTab === "extensions")}
+              onClick={() => { setAddTab("extensions"); setAddQuery(""); }}
+            >
+              Extensions
             </button>
             <button
               type="button"
@@ -2680,7 +2365,8 @@ export default function RosterBuilder({
           </div>
 
           {addTab === "create" ? (
-            <form onSubmit={createPlayer} style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            <div style={{ display: "grid", gap: "0.6rem" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
               <select
                 value={createPosition}
                 onChange={(event) => setCreatePosition(event.target.value)}
@@ -2733,47 +2419,103 @@ export default function RosterBuilder({
                 aria-label="Last name"
                 style={{ ...createFieldStyle, flex: "1 1 140px" }}
               />
-              <input
-                type="number"
-                min="0"
-                step="0.1"
-                inputMode="decimal"
-                value={createSalary}
-                onChange={(event) => setCreateSalary(event.target.value)}
-                placeholder="Total $M (optional)"
-                aria-label="Total contract value in millions"
-                style={{ ...createFieldStyle, flex: "1 1 150px" }}
-              />
-              <input
-                type="number"
-                min="1"
-                max={MAX_CONTRACT_YEARS}
-                step="1"
-                inputMode="numeric"
-                value={createYears}
-                onChange={(event) => setCreateYears(event.target.value)}
-                aria-label="Contract years"
-                title="Contract years"
-                style={{ ...createFieldStyle, flex: "0 0 5rem" }}
-              />
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <span style={{ marginRight: "auto", fontSize: "0.8rem", color: "var(--muted)", alignSelf: "center" }}>
+                Contract (optional): total, years, custom by year, or deferrals.
+              </span>
+              <SignForm submitLabel="Sign to 40-Man" disabled={!canCreate} onSign={(signing) => createPlayer(signing)} />
               <button
-                type="submit"
+                type="button"
+                onClick={() => createPlayer()}
                 disabled={!canCreate}
-                style={{
-                  border: "1px solid var(--line)",
-                  background: "var(--panel)",
-                  color: "var(--text)",
-                  fontWeight: 700,
-                  borderRadius: "999px",
-                  padding: "0.55rem 1rem",
-                  cursor: "pointer",
-                  fontSize: "0.85rem",
-                  opacity: canCreate ? 1 : 0.5,
-                }}
+                style={{ ...smallButtonStyle, opacity: canCreate ? 1 : 0.5 }}
               >
-                {createHasContract ? "Sign to 40-Man" : "Add to 40-Man"}
+                Add without contract
               </button>
-            </form>
+            </div>
+            </div>
+          ) : addTab === "extensions" ? (
+            <div style={{ display: "grid", gap: "0.6rem" }}>
+              <input
+                type="text"
+                value={addQuery}
+                onChange={(event) => setAddQuery(event.target.value)}
+                placeholder={`Search ${extensionPool.length} ${team.shortName} players to extend...`}
+                aria-label="Search players to extend"
+                style={{ ...createFieldStyle, width: "100%" }}
+              />
+              <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--muted)" }}>
+                Same deal options as free agents. An extension can replace the current deal starting in{" "}
+                {CONTRACT_SEASON} or start the season after it ends. Extensions are logged and can be undone.
+              </p>
+              <div style={{ display: "grid", gap: "0.5rem", maxHeight: "560px", overflowY: "auto" }}>
+                {extensionPool.length === 0 ? (
+                  <p style={{ margin: 0, color: "var(--muted)" }}>No matching players.</p>
+                ) : (
+                  extensionPool.map((player) => {
+                    const contract = contractFor(player);
+                    const isCreated = player.id < 0;
+                    return (
+                      <div
+                        key={player.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "0.4rem 0.65rem",
+                          padding: "0.5rem 0.7rem",
+                          borderRadius: "12px",
+                          border: "1px solid var(--line)",
+                          background: "rgba(15,31,61,0.02)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: "34px",
+                            height: "34px",
+                            borderRadius: "50%",
+                            overflow: "hidden",
+                            flexShrink: 0,
+                            background: "rgba(15,31,61,.08)",
+                            border: "1px solid var(--line)",
+                          }}
+                        >
+                          <PlayerHeadshot
+                            src={playerHeadshotUrl(player.id, 68)}
+                            alt={player.fullName}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+                          />
+                        </div>
+                        <div style={{ display: "grid", gap: "0.1rem", minWidth: 0, flex: "1 1 220px" }}>
+                          <span style={{ fontSize: "0.9rem" }}>
+                            <span style={{ fontWeight: 700 }}>
+                              <PlayerName player={player} showThrows />
+                            </span>
+                            <span style={{ color: "var(--muted)", marginLeft: "0.5rem", fontSize: "0.8rem" }}>
+                              {positionLabel(player)}
+                              {contract ? ` · ${CONTRACT_STATUS_LABELS[contract.status]} · ${formatSalary(contract.salary)}` : " · No contract"}
+                            </span>
+                          </span>
+                          <span style={{ color: "var(--muted)", fontSize: "0.75rem" }}>
+                            {contract?.detail ?? "No contract set"}
+                            {contract?.freeAgentAfter ? ` · FA after ${formatFreeAgentAfter(contract)}` : ""}
+                          </span>
+                        </div>
+                        <div style={{ marginLeft: "auto" }}>
+                          <SignForm
+                            submitLabel={signings[player.id] ? "Re-sign" : "Extend"}
+                            initial={signings[player.id]}
+                            startOptions={isCreated ? undefined : extensionStartOptions(player)}
+                            onSign={(signing) => extendPlayer(player, signing)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           ) : addTab === "trades" ? (
             <div style={{ display: "grid", gap: "0.75rem" }}>
               <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--muted)" }}>PICK A TRADE PARTNER</span>
@@ -2819,7 +2561,7 @@ export default function RosterBuilder({
 
               <div
                 style={{
-                  border: `2px solid ${tradeIncoming.length > 0 || tradeOutgoing.length > 0 ? "var(--accent)" : "var(--line)"}`,
+                  border: `2px solid ${tradeHasPieces ? "var(--accent)" : "var(--line)"}`,
                   borderRadius: "14px",
                   padding: "0.85rem",
                   display: "grid",
@@ -2862,6 +2604,21 @@ export default function RosterBuilder({
                         })
                       )}
                     </div>
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", color: "var(--muted)" }}>
+                      <span style={{ fontWeight: 700 }}>+ Cash</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        inputMode="decimal"
+                        value={tradeCashOut}
+                        onChange={(event) => setTradeCashOut(event.target.value)}
+                        placeholder="$M"
+                        aria-label="Cash sent in millions"
+                        style={{ ...contractFieldStyle, width: "5.5rem" }}
+                      />
+                      <span>in {CONTRACT_SEASON}</span>
+                    </label>
                     <input
                       type="text"
                       value={tradeQuery}
@@ -2922,6 +2679,21 @@ export default function RosterBuilder({
                         ))
                       )}
                     </div>
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", color: "var(--muted)" }}>
+                      <span style={{ fontWeight: 700 }}>+ Cash</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        inputMode="decimal"
+                        value={tradeCashIn}
+                        onChange={(event) => setTradeCashIn(event.target.value)}
+                        placeholder="$M"
+                        aria-label="Cash received in millions"
+                        style={{ ...contractFieldStyle, width: "5.5rem" }}
+                      />
+                      <span>in {CONTRACT_SEASON}</span>
+                    </label>
                     {tradeTeamId === null ? (
                       <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>
                         Pick a team above to browse their 40-man and minor leaguers.
@@ -2973,19 +2745,19 @@ export default function RosterBuilder({
                   <button
                     type="button"
                     onClick={completeTrade}
-                    disabled={tradeIncoming.length === 0 && tradeOutgoing.length === 0}
+                    disabled={!tradeHasPieces}
                     style={{
                       ...smallButtonStyle,
                       background: "var(--accent)",
                       borderColor: "var(--accent)",
                       color: "#fff",
                       padding: "0.45rem 1rem",
-                      opacity: tradeIncoming.length === 0 && tradeOutgoing.length === 0 ? 0.5 : 1,
+                      opacity: tradeHasPieces ? 1 : 0.5,
                     }}
                   >
                     Complete trade ({tradeOutgoing.length} for {tradeIncoming.length})
                   </button>
-                  {(tradeIncoming.length > 0 || tradeOutgoing.length > 0) && (
+                  {tradeHasPieces && (
                     <button type="button" onClick={cancelTrade} style={smallButtonStyle}>
                       Clear
                     </button>
@@ -3231,6 +3003,350 @@ export default function RosterBuilder({
             })
           )}
         </div>
+      </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setPayrollOpen((open) => !open)}
+          aria-expanded={payrollOpen}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "0.9rem 1.15rem",
+            border: "1px solid var(--line)",
+            borderRadius: payrollOpen ? "18px 18px 0 0" : "18px",
+            background: "var(--panel)",
+            color: "var(--text)",
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <span className="kicker" style={{ margin: 0 }}>
+            {CONTRACT_SEASON} Payroll &amp; Contracts
+          </span>
+          <span
+            style={{
+              fontSize: "0.68rem",
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              color: "#8a5a00",
+              background: "rgba(138,90,0,0.1)",
+              borderRadius: "999px",
+              padding: "0.15rem 0.5rem",
+            }}
+          >
+            Estimated
+          </span>
+          <span style={{ marginLeft: "auto", fontWeight: 800, fontSize: "1.05rem" }}>
+            {formatSalary(payroll.total)}
+            <span style={{ color: "var(--muted)", fontWeight: 700, fontSize: "0.78rem", marginLeft: "0.3rem" }}>est.</span>
+          </span>
+          <span
+            aria-hidden="true"
+            style={{ transition: "transform 0.15s", transform: payrollOpen ? "rotate(180deg)" : "none", color: "var(--muted)" }}
+          >
+            ▾
+          </span>
+        </button>
+
+        {payrollOpen && (
+          <div
+            style={{
+              border: "1px solid var(--line)",
+              borderTop: "none",
+              borderRadius: "0 0 18px 18px",
+              background: "var(--panel)",
+              padding: "1.15rem",
+              display: "grid",
+              gap: "1rem",
+            }}
+          >
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
+              {[
+                { label: "Estimated payroll", value: payroll.total, strong: true },
+                { label: "Signed / options", value: payroll.totals.guaranteed },
+                { label: "Arbitration (proj.)", value: payroll.totals.arbitration },
+                { label: "Pre-arb (est.)", value: payroll.totals.preArb },
+                ...(payroll.totals.deadMoney !== 0 ? [{ label: "Dead money & other", value: payroll.totals.deadMoney }] : []),
+                ...(payroll.deferred > 0 ? [{ label: "Deferred (paid later)", value: payroll.deferred }] : []),
+              ].map((item) => (
+                <div key={item.label}>
+                  <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+                    {item.label}
+                  </p>
+                  <p style={{ margin: 0, fontSize: item.strong ? "1.4rem" : "1.1rem", fontWeight: 800 }}>
+                    {formatSalary(item.value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "0.6rem",
+                padding: "0.85rem 1rem",
+                borderRadius: "14px",
+                border: "1px solid var(--line)",
+                background: payroll.luxuryTax.tier > 0 ? "rgba(180,35,24,0.05)" : "rgba(15,122,56,0.05)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+                  Luxury tax (CBT) · est.
+                </p>
+                <select
+                  value={payorStatus}
+                  onChange={(event) => setPayorStatus(event.target.value as PayorStatus)}
+                  aria-label="Luxury tax payor status"
+                  style={{ ...contractFieldStyle, marginLeft: "auto", width: "auto", fontWeight: 700 }}
+                >
+                  {(Object.keys(PAYOR_STATUS_LABELS) as PayorStatus[]).map((status) => (
+                    <option key={status} value={status}>
+                      {PAYOR_STATUS_LABELS[status]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
+                {[
+                  { label: "Tax payroll", value: formatSalary(payroll.taxPayroll) },
+                  { label: "Threshold", value: formatSalary(TAX_THRESHOLDS[0]) },
+                  {
+                    label: payroll.luxuryTax.tier > 0 ? `Over (tier ${payroll.luxuryTax.tier})` : "Room under",
+                    value: formatSalary(Math.abs(payroll.taxPayroll - TAX_THRESHOLDS[0])),
+                    color: payroll.luxuryTax.tier > 0 ? "#b42318" : "#0f7a38",
+                  },
+                  { label: "Estimated tax", value: formatSalary(payroll.luxuryTax.tax) },
+                ].map((item) => (
+                  <div key={item.label}>
+                    <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+                      {item.label}
+                    </p>
+                    <p style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800, color: item.color }}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tax payroll against the base threshold and the three surcharge tiers. */}
+              {(() => {
+                const scaleMax = Math.max(TAX_THRESHOLDS[3] * 1.08, payroll.taxPayroll * 1.04);
+                const percent = (amount: number) => `${Math.min(100, (amount / scaleMax) * 100)}%`;
+                return (
+                  <div style={{ position: "relative", height: "34px" }} aria-hidden="true">
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "6px",
+                        left: 0,
+                        right: 0,
+                        height: "10px",
+                        borderRadius: "999px",
+                        background: "var(--line)",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "6px",
+                        left: 0,
+                        width: percent(payroll.taxPayroll),
+                        height: "10px",
+                        borderRadius: "999px",
+                        background: payroll.luxuryTax.tier > 0 ? "#b42318" : "#0f7a38",
+                      }}
+                    />
+                    {TAX_THRESHOLDS.map((threshold) => (
+                      <div key={threshold} style={{ position: "absolute", top: 0, left: percent(threshold) }}>
+                        <div style={{ width: "2px", height: "22px", background: "var(--text)", opacity: 0.55 }} />
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: "21px",
+                            transform: "translateX(-50%)",
+                            fontSize: "0.62rem",
+                            fontWeight: 700,
+                            color: "var(--muted)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatSalary(threshold)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.74rem" }}>
+                Tax payroll counts each contract at its AAV (deferred money at present value, ~
+                {Math.round(DEFERRAL_DISCOUNT_RATE * 1000) / 10}% discount), arbitration and pre-arb salaries, money owed to
+                former players{payroll.taxAdjustments.length > 0 ? ", FanGraphs' tax adjustments" : ""}, and an estimated{" "}
+                {formatSalary(PLAYER_BENEFITS_ESTIMATE)} in player benefits. Uses the 2026 thresholds and rates until the next
+                CBA sets 2027&apos;s. Going $40M+ over also moves a club&apos;s top draft pick back 10 spots.
+              </p>
+            </div>
+
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+                Guaranteed commitments in later seasons
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "1.25rem" }}>
+                {payroll.future.map(({ season, committed }) => (
+                  <div key={season}>
+                    <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 700, color: "var(--muted)" }}>{season}</p>
+                    <p style={{ margin: 0, fontSize: "1rem", fontWeight: 800 }}>{formatSalary(committed)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.72rem", textTransform: "uppercase" }}>
+                    <th style={{ padding: "0.4rem 0.5rem" }}>Player</th>
+                    <th style={{ padding: "0.4rem 0.5rem" }}>Status</th>
+                    <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>{CONTRACT_SEASON} (est.)</th>
+                    <th style={{ padding: "0.4rem 0.5rem" }}>Contract</th>
+                    <th style={{ padding: "0.4rem 0.5rem" }}>FA After</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payroll.rows.map(({ player, contract, salary, inMinors }) => {
+                    return (
+                      <tr key={player.id} style={{ borderTop: "1px solid var(--line)" }}>
+                        <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700, whiteSpace: "nowrap" }}>
+                          {player.fullName}
+                          <span style={{ color: "var(--muted)", fontWeight: 400, marginLeft: "0.4rem" }}>
+                            {player.position}
+                            {reserveIL.some((p) => p.id === player.id) && " · 60-day IL"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>
+                          {contract ? CONTRACT_STATUS_LABELS[contract.status] : "Unknown"}
+                          {inMinors && (
+                            <span
+                              style={{ display: "block", fontSize: "0.7rem", color: "var(--muted)" }}
+                              title="Not on the 26-man, so paid the minor league 40-man salary"
+                            >
+                              In minors · 40-man
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700, whiteSpace: "nowrap" }}>
+                          {contract ? formatSalary(salary) : "—"}
+                          {contract?.deferred ? (
+                            <span style={{ display: "block", fontSize: "0.7rem", color: "var(--muted)", fontWeight: 600 }}>
+                              {formatSalary(contract.deferred)} deferred
+                            </span>
+                          ) : null}
+                        </td>
+                        <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }}>
+                          <span title={contract?.deferralNote}>
+                            {contract?.detail ?? "—"}
+                            {contract?.deferralNote && !contract.deferred && " · has deferrals"}
+                          </span>
+                        </td>
+                        <td
+                          style={{ padding: "0.4rem 0.5rem", color: "var(--muted)", whiteSpace: "nowrap" }}
+                          title={
+                            contract?.freeAgentEstimated
+                              ? "Earliest possible year, estimated from MLB debut date — any time in the minors pushes it later"
+                              : undefined
+                          }
+                        >
+                          {formatFreeAgentAfter(contract)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {(payroll.currentOtherPayments.length > 0 || deadMoney.length > 0 || payroll.tradeCash.length > 0) && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        style={{
+                          padding: "0.9rem 0.5rem 0.3rem",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          color: "var(--muted)",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Dead money &amp; other payments
+                      </td>
+                    </tr>
+                  )}
+                  {payroll.currentOtherPayments.map((payment) => (
+                    <tr key={`${payment.description}-${payment.amount}`} style={{ borderTop: "1px solid var(--line)" }}>
+                      <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700 }} colSpan={2}>
+                        {payment.description.charAt(0).toUpperCase() + payment.description.slice(1)}
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
+                        {formatSalary(payment.amount)}
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }} colSpan={2}>
+                        {payment.amount < 0 ? `Owed to the ${team.shortName}` : "No longer on the roster"}
+                      </td>
+                    </tr>
+                  ))}
+                  {payroll.tradeCash.map((entry) => (
+                    <tr key={`cash-${entry.id}`} style={{ borderTop: "1px solid var(--line)" }}>
+                      <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700 }} colSpan={2}>
+                        {entry.description}
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
+                        {formatSalary(entry.amount)}
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }} colSpan={2}>
+                        {entry.amount < 0 ? "Received in a trade" : "Sent in a trade"} ({CONTRACT_SEASON})
+                      </td>
+                    </tr>
+                  ))}
+                  {deadMoney.map((entry) => (
+                    <tr key={`dead-${entry.player.id}`} style={{ borderTop: "1px solid var(--line)" }}>
+                      <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700 }} colSpan={2}>
+                        {entry.player.fullName} ({entry.reason})
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
+                        {formatSalary(entry.amount)}
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }} colSpan={2}>
+                        {entry.detail}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.78rem" }}>
+              All salary figures are estimates. Contracts, options and dead money come from FanGraphs RosterResource for
+              every club (so players acquired in trades bring their real salaries), and arbitration figures are MLB
+              Trade Rumors projections — both as of {CONTRACTS_UPDATED}. Pre-arb players on the 26-man earn their{" "}
+              {CONTRACT_SEASON - 1} salary or the {formatSalary(PRE_ARB_SALARY_ESTIMATE)} minimum, whichever is more;
+              pre-arb 40-man players in the minors earn the minor league 40-man salary (
+              {formatSalary(MINOR_LEAGUE_SALARY_FIRST_CONTRACT)} on a first major league contract,{" "}
+              {formatSalary(MINOR_LEAGUE_SALARY)} after; {CONTRACT_SEASON - 1} CBA figures). Until all 26 spots are set,
+              the open spots are assumed to go to the most experienced unassigned 40-man players. Pre-arb free-agency years come from FanGraphs where listed; years
+              marked &ldquo;est.&rdquo; are the earliest possible, based on MLB debut date. Includes the 40-man, the
+              60-day IL, and money still owed to players no longer on the roster (cash sent in trades, buyouts).
+              Removing a player from the 40-man declines a club or mutual option (the salary comes off, but any buyout stays
+              on as dead money) or non-tenders an arbitration/pre-arb player (off the payroll); anyone else is designated
+              for assignment, and a guaranteed deal stays on as dead money.
+              Players traded away take their full contracts with them; cash added to a builder trade counts toward{" "}
+              {CONTRACT_SEASON} (sent adds to payroll, received offsets it). Later-season commitments only include guaranteed
+              money (multi-year deals, builder signings, and dead money).
+              {payroll.totals.unknownCount > 0 &&
+                ` ${payroll.totals.unknownCount} player${payroll.totals.unknownCount === 1 ? " has" : "s have"} no contract set and ${payroll.totals.unknownCount === 1 ? "isn't" : "aren't"} counted.`}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
