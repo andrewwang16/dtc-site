@@ -97,6 +97,15 @@ const TRANSACTION_LABELS: Record<TransactionKind, { label: string; color: string
   dfa: { label: "DFA", color: "#5b3fa0" },
 };
 
+// Money owed to a player who's no longer on the roster.
+type DeadMoney = {
+  player: SimplePlayer;
+  reason: "designated for assignment" | "option buyout";
+  amount: number;
+  salaryBySeason?: Record<number, number>;
+  detail: string;
+};
+
 type Transaction = {
   id: number;
   kind: TransactionKind;
@@ -210,6 +219,13 @@ const REMOVAL_ACTIONS: Record<"option" | "non-tender" | "dfa", string> = {
   "non-tender": "Non-tender",
   dfa: "Designate for assignment",
 };
+
+// Tooltip for the 40-man remove button, with the buyout a declined option
+// still costs.
+function removalTitle(contract: ContractInfo | null) {
+  const action = REMOVAL_ACTIONS[removalKind(contract)];
+  return contract?.buyout ? `${action} (${formatSalary(contract.buyout)} buyout)` : action;
+}
 
 function parseMillions(text: string): number | null {
   const millions = Number(text);
@@ -612,7 +628,18 @@ function TradeChip({
 }
 
 // A searchable player who can be added to one side of the trade.
-function TradeResultRow({ player, inTrade, onAdd }: { player: SystemPlayer; inTrade: boolean; onAdd: () => void }) {
+// "Add", or why the player can't be added: already in the trade, or already
+// a Cardinal (acquired in an earlier trade).
+function TradeResultRow({
+  player,
+  blockedLabel,
+  onAdd,
+}: {
+  player: SystemPlayer;
+  blockedLabel?: string;
+  onAdd: () => void;
+}) {
+  const blocked = !!blockedLabel;
   return (
     <div
       style={{
@@ -653,10 +680,10 @@ function TradeResultRow({ player, inTrade, onAdd }: { player: SystemPlayer; inTr
       <button
         type="button"
         onClick={onAdd}
-        disabled={inTrade}
-        style={{ ...smallButtonStyle, marginLeft: "auto", opacity: inTrade ? 0.5 : 1, cursor: inTrade ? "default" : "pointer" }}
+        disabled={blocked}
+        style={{ ...smallButtonStyle, marginLeft: "auto", opacity: blocked ? 0.5 : 1, cursor: blocked ? "default" : "pointer" }}
       >
-        {inTrade ? "In trade" : "Add"}
+        {blockedLabel ?? "Add"}
       </button>
     </div>
   );
@@ -722,15 +749,31 @@ export default function RosterBuilder({
     [signings]
   );
 
-  // Players designated for assignment whose deals are guaranteed (real
-  // multi-year contracts and builder signings) — that money is still owed.
-  const deadMoneyContracts = useMemo(
+  // Money still owed to players the builder has dropped: guaranteed deals
+  // (real multi-year contracts and builder signings) of players designated
+  // for assignment, and the buyouts of declined options.
+  const deadMoney = useMemo(
     () =>
-      transactions
-        .filter((transaction) => transaction.kind === "dfa")
-        .flatMap((transaction) => transaction.outgoing)
-        .map((player) => ({ player, contract: contractFor(player) }))
-        .filter(({ contract }) => contract?.status === "guaranteed" || contract?.status === "signed"),
+      transactions.flatMap((transaction) =>
+        transaction.outgoing.flatMap((player): DeadMoney[] => {
+          const contract = contractFor(player);
+          if (transaction.kind === "dfa" && (contract?.status === "guaranteed" || contract?.status === "signed")) {
+            return [
+              {
+                player,
+                reason: "designated for assignment",
+                amount: contract.salary,
+                salaryBySeason: contract.salaryBySeason,
+                detail: contract.detail,
+              },
+            ];
+          }
+          if (transaction.kind === "option" && contract?.buyout) {
+            return [{ player, reason: "option buyout", amount: contract.buyout, detail: contract.detail }];
+          }
+          return [];
+        })
+      ),
     [transactions, contractFor]
   );
 
@@ -760,8 +803,8 @@ export default function RosterBuilder({
       }
     }
 
-    for (const { contract } of deadMoneyContracts) {
-      totals.deadMoney += contract?.salary ?? 0;
+    for (const entry of deadMoney) {
+      totals.deadMoney += entry.amount;
     }
     for (const payment of currentOtherPayments) {
       totals.deadMoney += payment.amount;
@@ -775,13 +818,14 @@ export default function RosterBuilder({
     const future = Array.from({ length: FUTURE_COMMITMENT_SEASONS }, (_, index) => {
       const season = CONTRACT_SEASON + 1 + index;
       const committed =
-        [...rows, ...deadMoneyContracts].reduce((sum, { contract }) => sum + (contract?.salaryBySeason?.[season] ?? 0), 0) +
+        rows.reduce((sum, { contract }) => sum + (contract?.salaryBySeason?.[season] ?? 0), 0) +
+        deadMoney.reduce((sum, entry) => sum + (entry.salaryBySeason?.[season] ?? 0), 0) +
         otherPayments.filter((payment) => payment.season === season).reduce((sum, payment) => sum + payment.amount, 0);
       return { season, committed };
     });
 
     return { rows, totals, total, future, currentOtherPayments };
-  }, [fortyMan, reserveIL, deadMoneyContracts, contractFor]);
+  }, [fortyMan, reserveIL, deadMoney, contractFor]);
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
   const fortyManById = useMemo(() => new Map(fortyMan.map((player) => [player.id, player])), [fortyMan]);
@@ -1024,7 +1068,12 @@ export default function RosterBuilder({
       .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed));
   }, [tradeTeamPlayers, addQuery]);
 
+  // A club's system is loaded once and cached, so it still lists players
+  // the Cardinals have since acquired from it — they can't be added again.
   function addToTrade(player: TradePiece) {
+    if (cardinalsSystemIds.has(player.id)) {
+      return;
+    }
     setTradeIncoming((current) => (current.some((piece) => piece.id === player.id) ? current : [...current, player]));
   }
 
@@ -1045,6 +1094,7 @@ export default function RosterBuilder({
     ],
     [fortyMan, reserveIL, systemProspects, fortyManIds, reserveIds]
   );
+  const cardinalsSystemIds = useMemo(() => new Set(cardinalsSystem.map((player) => player.id)), [cardinalsSystem]);
 
   const tradeOutgoing = tradeOutgoingIds
     .map((id) => cardinalsSystem.find((player) => player.id === id))
@@ -1072,6 +1122,19 @@ export default function RosterBuilder({
   // dead money).
   function completeTrade() {
     if (tradeIncoming.length === 0 && tradeOutgoing.length === 0) {
+      return;
+    }
+
+    // Never acquire someone who's already a Cardinal (e.g. a piece added
+    // before an earlier trade brought them over).
+    const alreadyCardinals = tradeIncoming.filter((player) => cardinalsSystemIds.has(player.id));
+    if (alreadyCardinals.length > 0) {
+      window.alert(
+        `${alreadyCardinals.map((player) => player.fullName).join(", ")} ${
+          alreadyCardinals.length === 1 ? "is" : "are"
+        } already in the Cardinals organization and ${alreadyCardinals.length === 1 ? "was" : "were"} taken out of this trade.`
+      );
+      setTradeIncoming((current) => current.filter((player) => !cardinalsSystemIds.has(player.id)));
       return;
     }
 
@@ -1104,9 +1167,19 @@ export default function RosterBuilder({
     const outgoingSalary = salaryOf([...outgoingFortyMan, ...outgoingInjured]);
     const incomingSalary = salaryOf(incomingFortyMan);
 
-    setFortyMan((current) => [...current.filter((player) => !outFortyManIds.has(player.id)), ...incomingFortyMan]);
+    // Each update also skips anyone already present, so a player can never
+    // end up listed twice.
+    setFortyMan((current) => {
+      const kept = current.filter((player) => !outFortyManIds.has(player.id));
+      const keptIds = ids(kept);
+      return [...kept, ...incomingFortyMan.filter((player) => !keptIds.has(player.id))];
+    });
     setReserveIL((current) => current.filter((player) => !outInjuredIds.has(player.id)));
-    setSystemProspects((current) => [...current.filter((player) => !outProspectIds.has(player.id)), ...incomingProspects]);
+    setSystemProspects((current) => {
+      const kept = current.filter((player) => !outProspectIds.has(player.id));
+      const keptIds = ids(kept);
+      return [...kept, ...incomingProspects.filter((player) => !keptIds.has(player.id))];
+    });
     for (const id of outFortyManIds) {
       unassignPlayer(id);
     }
@@ -1281,13 +1354,15 @@ export default function RosterBuilder({
       kind,
       summary:
         kind === "option"
-          ? `Declined ${player.fullName}'s club option`
+          ? `Declined ${player.fullName}'s ${contract?.status === "mutual-option" ? "mutual" : "club"} option`
           : kind === "non-tender"
             ? `Non-tendered ${player.fullName}`
             : `Designated ${player.fullName} for assignment`,
       detail:
         kind === "option" && contract
-          ? `${formatSalary(contract.salary)} option comes off the payroll`
+          ? contract.buyout
+            ? `${formatSalary(contract.salary)} option comes off the payroll; the ${formatSalary(contract.buyout)} buyout stays on as dead money`
+            : `${formatSalary(contract.salary)} option comes off the payroll`
           : kind === "non-tender" && contract
             ? `${formatSalary(contract.salary)} projected salary comes off the payroll`
             : guaranteed && contract
@@ -1648,7 +1723,7 @@ export default function RosterBuilder({
                   type="button"
                   onClick={() => removeFromFortyMan(player.id)}
                   aria-label={`Remove ${player.fullName} from the 40-man roster`}
-                  title={REMOVAL_ACTIONS[removalKind(contractFor(player))]}
+                  title={removalTitle(contractFor(player))}
                   style={{
                     width: "1.3rem",
                     height: "1.3rem",
@@ -1897,7 +1972,7 @@ export default function RosterBuilder({
                       </tr>
                     );
                   })}
-                  {(payroll.currentOtherPayments.length > 0 || deadMoneyContracts.length > 0) && (
+                  {(payroll.currentOtherPayments.length > 0 || deadMoney.length > 0) && (
                     <tr>
                       <td
                         colSpan={5}
@@ -1926,16 +2001,16 @@ export default function RosterBuilder({
                       </td>
                     </tr>
                   ))}
-                  {deadMoneyContracts.map(({ player, contract }) => (
-                    <tr key={`dfa-${player.id}`} style={{ borderTop: "1px solid var(--line)" }}>
+                  {deadMoney.map((entry) => (
+                    <tr key={`dead-${entry.player.id}`} style={{ borderTop: "1px solid var(--line)" }}>
                       <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700 }} colSpan={2}>
-                        {player.fullName} (designated for assignment)
+                        {entry.player.fullName} ({entry.reason})
                       </td>
                       <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
-                        {formatSalary(contract?.salary ?? 0)}
+                        {formatSalary(entry.amount)}
                       </td>
                       <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }} colSpan={2}>
-                        {contract?.detail}
+                        {entry.detail}
                       </td>
                     </tr>
                   ))}
@@ -1950,8 +2025,9 @@ export default function RosterBuilder({
               {CONTRACT_SEASON - 1} league minimum. Pre-arb free-agency years come from FanGraphs where listed; years
               marked &ldquo;est.&rdquo; are the earliest possible, based on MLB debut date. Includes the 40-man, the
               60-day IL, and money still owed to players no longer on the roster (cash sent in trades, buyouts).
-              Removing a player from the 40-man declines a club option or non-tenders an arbitration/pre-arb player (both
-              come off the payroll); anyone else is designated for assignment, and a guaranteed deal stays on as dead money.
+              Removing a player from the 40-man declines a club or mutual option (the salary comes off, but any buyout stays
+              on as dead money) or non-tenders an arbitration/pre-arb player (off the payroll); anyone else is designated
+              for assignment, and a guaranteed deal stays on as dead money.
               Players traded away take their full contracts with them (no cash is sent in builder trades). Later-season commitments only include guaranteed
               money (multi-year deals, builder signings, and dead money).
               {payroll.totals.unknownCount > 0 &&
@@ -2203,8 +2279,9 @@ export default function RosterBuilder({
                           <TradeResultRow
                             key={player.id}
                             player={player}
-                            inTrade={false}
-                            onAdd={() => setTradeOutgoingIds((current) => [...current, player.id])}
+                            onAdd={() =>
+                              setTradeOutgoingIds((current) => (current.includes(player.id) ? current : [...current, player.id]))
+                            }
                           />
                         ))
                       )}
@@ -2276,7 +2353,13 @@ export default function RosterBuilder({
                               <TradeResultRow
                                 key={player.id}
                                 player={player}
-                                inTrade={tradeIncoming.some((piece) => piece.id === player.id)}
+                                blockedLabel={
+                                  cardinalsSystemIds.has(player.id)
+                                    ? "On STL"
+                                    : tradeIncoming.some((piece) => piece.id === player.id)
+                                      ? "In trade"
+                                      : undefined
+                                }
                                 onAdd={() => addToTrade(player)}
                               />
                             ))

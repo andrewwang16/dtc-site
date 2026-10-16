@@ -193,6 +193,7 @@ function buildContract(summary, years, allYears, arbitration) {
       salary: Math.round(current.Salary),
       detail: `${money(current.Salary)} ${mutual ? "mutual" : "club"} option${buyout ? `, ${money(buyout)} buyout` : ""}`,
       freeAgentAfter: SEASON,
+      ...(buyout ? { buyout: Math.round(buyout) } : {}),
     };
   }
 

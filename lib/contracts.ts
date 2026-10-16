@@ -34,6 +34,9 @@ export type ContractInfo = {
   // future-year payroll commitments. Absent for one-season figures
   // (arbitration, pre-arb, options).
   salaryBySeason?: Record<number, number>;
+  // What declining an option costs (club and mutual options only). It's
+  // owed even though the player leaves, so it stays on as dead money.
+  buyout?: number;
 };
 
 // Money a club pays for players no longer on its roster: cash owed in
@@ -46,7 +49,7 @@ const CONTRACTS = contractData.contracts as unknown as Record<string, ContractIn
 // Details the sources leave out, layered over the generated data.
 const CONTRACT_OVERRIDES: Record<number, Partial<ContractInfo>> = {
   // Stanek's buyout (MLB Trade Rumors); FanGraphs lists the option only.
-  592773: { detail: "$6M club option, $1M buyout" },
+  592773: { detail: "$6M club option, $1M buyout", buyout: 1_000_000 },
 };
 
 // Free-agency year for pre-arb players, from FanGraphs.
