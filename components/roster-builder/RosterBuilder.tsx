@@ -17,6 +17,8 @@ import {
   CONTRACT_SEASON,
   formatSalary,
   getContract,
+  getOtherPayments,
+  CONTRACTS_UPDATED,
   signedContract,
   flatSalaries,
   type ContractInfo,
@@ -131,6 +133,7 @@ const CONTRACT_STATUS_LABELS: Record<ContractInfo["status"], string> = {
   guaranteed: "Signed",
   signed: "New deal",
   "club-option": "Club option",
+  "mutual-option": "Mutual option",
   arbitration: "Arbitration",
   "pre-arb": "Pre-arb",
 };
@@ -191,7 +194,7 @@ function handTitle(player: { position: string; bats?: string; throws?: string })
 
 // What dropping a player from the 40-man means for their contract.
 function removalKind(contract: ContractInfo | null): "option" | "non-tender" | "dfa" {
-  if (contract?.status === "club-option") {
+  if (contract?.status === "club-option" || contract?.status === "mutual-option") {
     return "option";
   }
 
@@ -709,19 +712,14 @@ export default function RosterBuilder({
   // real MLB player id.
   const nextCreatedId = useRef(-1);
 
-  // Players who started in the organization (40-man, 60-day IL, or the
-  // minors). Anyone here without a listed contract is treated as pre-arb.
-  const organizationalIds = useMemo(
-    () => new Set([...roster, ...sixtyDayIL, ...prospects, ...systemProspects].map((player) => player.id)),
-    [roster, sixtyDayIL, prospects, systemProspects]
-  );
-
+  // Real contracts for every club's players (lib/contracts-data.json), so a
+  // player acquired in a trade brings their actual salary with them.
   const contractFor = useCallback(
     (player: SimplePlayer) => {
       const signing = signings[player.id];
-      return signing ? signedContract(signing) : getContract(player, organizationalIds.has(player.id));
+      return signing ? signedContract(signing) : getContract(player);
     },
-    [signings, organizationalIds]
+    [signings]
   );
 
   // Players designated for assignment whose deals are guaranteed (real
@@ -737,8 +735,12 @@ export default function RosterBuilder({
   );
 
   // Everyone on the 40-man or the 60-day IL is paid. Non-tendered players
-  // and declined options cost nothing; DFA'd guaranteed deals are dead money.
+  // and declined options cost nothing; DFA'd guaranteed deals are dead money,
+  // on top of what the club already owes players it's moved on from
+  // (cash sent in trades, releases, buyouts).
   const payroll = useMemo(() => {
+    const otherPayments = getOtherPayments(CARDINALS_TEAM_ID);
+    const currentOtherPayments = otherPayments.filter((payment) => payment.season === CONTRACT_SEASON);
     const paidPlayers = [...fortyMan, ...reserveIL];
     const rows = paidPlayers
       .map((player) => ({ player, contract: contractFor(player) }))
@@ -761,6 +763,9 @@ export default function RosterBuilder({
     for (const { contract } of deadMoneyContracts) {
       totals.deadMoney += contract?.salary ?? 0;
     }
+    for (const payment of currentOtherPayments) {
+      totals.deadMoney += payment.amount;
+    }
 
     const total = totals.guaranteed + totals.arbitration + totals.preArb + totals.deadMoney;
 
@@ -769,14 +774,13 @@ export default function RosterBuilder({
     // arbitration and pre-arb salaries past next season aren't projected.
     const future = Array.from({ length: FUTURE_COMMITMENT_SEASONS }, (_, index) => {
       const season = CONTRACT_SEASON + 1 + index;
-      const committed = [...rows, ...deadMoneyContracts].reduce(
-        (sum, { contract }) => sum + (contract?.salaryBySeason?.[season] ?? 0),
-        0
-      );
+      const committed =
+        [...rows, ...deadMoneyContracts].reduce((sum, { contract }) => sum + (contract?.salaryBySeason?.[season] ?? 0), 0) +
+        otherPayments.filter((payment) => payment.season === season).reduce((sum, payment) => sum + payment.amount, 0);
       return { season, committed };
     });
 
-    return { rows, totals, total, future };
+    return { rows, totals, total, future, currentOtherPayments };
   }, [fortyMan, reserveIL, deadMoneyContracts, contractFor]);
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
@@ -1095,10 +1099,10 @@ export default function RosterBuilder({
     const outFortyManIds = ids(outgoingFortyMan);
     const outInjuredIds = ids(outgoingInjured);
     const outProspectIds = ids(outgoingProspects);
-    const outgoingSalary = [...outgoingFortyMan, ...outgoingInjured].reduce(
-      (sum, player) => sum + (contractFor(player)?.salary ?? 0),
-      0
-    );
+    const salaryOf = (players: SimplePlayer[]) =>
+      players.reduce((sum, player) => sum + (contractFor(player)?.salary ?? 0), 0);
+    const outgoingSalary = salaryOf([...outgoingFortyMan, ...outgoingInjured]);
+    const incomingSalary = salaryOf(incomingFortyMan);
 
     setFortyMan((current) => [...current.filter((player) => !outFortyManIds.has(player.id)), ...incomingFortyMan]);
     setReserveIL((current) => current.filter((player) => !outInjuredIds.has(player.id)));
@@ -1112,8 +1116,10 @@ export default function RosterBuilder({
       summary: `Acquired ${tradeIncoming.length > 0 ? tradeIncoming.map(describeTradePiece).join(", ") : "nothing"} for ${
         tradeOutgoing.length > 0 ? tradeOutgoing.map(describeTradePiece).join(", ") : "nothing"
       }`,
-      // Players without a known contract don't add anything here.
-      detail: outgoingSalary > 0 ? `${formatSalary(outgoingSalary)} in ${CONTRACT_SEASON} salary sent out` : undefined,
+      detail:
+        outgoingSalary > 0 || incomingSalary > 0
+          ? `Est. ${CONTRACT_SEASON} salary: ${formatSalary(incomingSalary)} in, ${formatSalary(outgoingSalary)} out`
+          : undefined,
       incoming: incomingFortyMan,
       outgoing: outgoingFortyMan,
       signingsBefore: {},
@@ -1325,7 +1331,7 @@ export default function RosterBuilder({
           { title: "Bullpen", rows: slotRows(BULLPEN_SLOTS, () => undefined) },
         ],
         stats: [
-          { label: `${CONTRACT_SEASON} Payroll`, value: formatSalary(payroll.total) },
+          { label: `Est. ${CONTRACT_SEASON} Payroll`, value: formatSalary(payroll.total) },
           { label: "40-Man", value: `${fortyMan.length} / ${FORTY_MAN_LIMIT}` },
           { label: "Active", value: `${filledCount} / ${TOTAL_SLOTS}` },
         ],
@@ -1749,7 +1755,24 @@ export default function RosterBuilder({
           <span className="kicker" style={{ margin: 0 }}>
             {CONTRACT_SEASON} Payroll &amp; Contracts
           </span>
-          <span style={{ marginLeft: "auto", fontWeight: 800, fontSize: "1.05rem" }}>{formatSalary(payroll.total)}</span>
+          <span
+            style={{
+              fontSize: "0.68rem",
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              color: "#8a5a00",
+              background: "rgba(138,90,0,0.1)",
+              borderRadius: "999px",
+              padding: "0.15rem 0.5rem",
+            }}
+          >
+            Estimated
+          </span>
+          <span style={{ marginLeft: "auto", fontWeight: 800, fontSize: "1.05rem" }}>
+            {formatSalary(payroll.total)}
+            <span style={{ color: "var(--muted)", fontWeight: 700, fontSize: "0.78rem", marginLeft: "0.3rem" }}>est.</span>
+          </span>
           <span
             aria-hidden="true"
             style={{ transition: "transform 0.15s", transform: payrollOpen ? "rotate(180deg)" : "none", color: "var(--muted)" }}
@@ -1772,11 +1795,11 @@ export default function RosterBuilder({
           >
             <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
               {[
-                { label: "Projected payroll", value: payroll.total, strong: true },
+                { label: "Estimated payroll", value: payroll.total, strong: true },
                 { label: "Signed / options", value: payroll.totals.guaranteed },
                 { label: "Arbitration (proj.)", value: payroll.totals.arbitration },
                 { label: "Pre-arb (est.)", value: payroll.totals.preArb },
-                ...(payroll.totals.deadMoney > 0 ? [{ label: "Dead money (DFA)", value: payroll.totals.deadMoney }] : []),
+                ...(payroll.totals.deadMoney !== 0 ? [{ label: "Dead money & other", value: payroll.totals.deadMoney }] : []),
               ].map((item) => (
                 <div key={item.label}>
                   <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
@@ -1809,15 +1832,15 @@ export default function RosterBuilder({
                   <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "0.72rem", textTransform: "uppercase" }}>
                     <th style={{ padding: "0.4rem 0.5rem" }}>Player</th>
                     <th style={{ padding: "0.4rem 0.5rem" }}>Status</th>
-                    <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>{CONTRACT_SEASON}</th>
+                    <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>{CONTRACT_SEASON} (est.)</th>
                     <th style={{ padding: "0.4rem 0.5rem" }}>Contract</th>
                     <th style={{ padding: "0.4rem 0.5rem" }}>FA After</th>
                   </tr>
                 </thead>
                 <tbody>
                   {payroll.rows.map(({ player, contract }) => {
-                    // Only players without real contract data (or with a
-                    // builder deal already) can have a contract set here.
+                    // Every real player has contract data now, so only created
+                    // players (or ones with a builder deal) can be set here.
                     const canSetContract = !contract || contract.status === "signed";
                     const isEditing = editingContractId === player.id;
 
@@ -1874,17 +1897,62 @@ export default function RosterBuilder({
                       </tr>
                     );
                   })}
+                  {(payroll.currentOtherPayments.length > 0 || deadMoneyContracts.length > 0) && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        style={{
+                          padding: "0.9rem 0.5rem 0.3rem",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          color: "var(--muted)",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Dead money &amp; other payments
+                      </td>
+                    </tr>
+                  )}
+                  {payroll.currentOtherPayments.map((payment) => (
+                    <tr key={`${payment.description}-${payment.amount}`} style={{ borderTop: "1px solid var(--line)" }}>
+                      <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700 }} colSpan={2}>
+                        {payment.description.charAt(0).toUpperCase() + payment.description.slice(1)}
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
+                        {formatSalary(payment.amount)}
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }} colSpan={2}>
+                        {payment.amount < 0 ? "Owed to the Cardinals" : "No longer on the roster"}
+                      </td>
+                    </tr>
+                  ))}
+                  {deadMoneyContracts.map(({ player, contract }) => (
+                    <tr key={`dfa-${player.id}`} style={{ borderTop: "1px solid var(--line)" }}>
+                      <td style={{ padding: "0.4rem 0.5rem", fontWeight: 700 }} colSpan={2}>
+                        {player.fullName} (designated for assignment)
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
+                        {formatSalary(contract?.salary ?? 0)}
+                      </td>
+                      <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }} colSpan={2}>
+                        {contract?.detail}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
             <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.78rem" }}>
-              Includes the 40-man and 60-day IL. Arbitration figures are MLB Trade Rumors projections; pre-arb
-              salaries use the {CONTRACT_SEASON - 1} league minimum. Pre-arb free-agency years come from FanGraphs
-              where listed; years marked &ldquo;est.&rdquo; are the earliest possible, based on MLB debut date.
+              All salary figures are estimates. Contracts, options and dead money come from FanGraphs RosterResource for
+              every club (so players acquired in trades bring their real salaries), and arbitration figures are MLB
+              Trade Rumors projections — both as of {CONTRACTS_UPDATED}. Pre-arb salaries use the{" "}
+              {CONTRACT_SEASON - 1} league minimum. Pre-arb free-agency years come from FanGraphs where listed; years
+              marked &ldquo;est.&rdquo; are the earliest possible, based on MLB debut date. Includes the 40-man, the
+              60-day IL, and money still owed to players no longer on the roster (cash sent in trades, buyouts).
               Removing a player from the 40-man declines a club option or non-tenders an arbitration/pre-arb player (both
               come off the payroll); anyone else is designated for assignment, and a guaranteed deal stays on as dead money.
-              Players traded away take their full contracts with them. Later-season commitments only include guaranteed
+              Players traded away take their full contracts with them (no cash is sent in builder trades). Later-season commitments only include guaranteed
               money (multi-year deals, builder signings, and dead money).
               {payroll.totals.unknownCount > 0 &&
                 ` ${payroll.totals.unknownCount} player${payroll.totals.unknownCount === 1 ? " has" : "s have"} no contract set and ${payroll.totals.unknownCount === 1 ? "isn't" : "aren't"} counted.`}
@@ -2169,6 +2237,8 @@ export default function RosterBuilder({
                               // Only worth labeling when pieces come from more than one club.
                               player.teamId !== tradeTeamId ? getTeamAbbreviation(player.teamId) : null,
                               player.level !== FORTY_MAN_LEVEL ? player.level : null,
+                              // Minor leaguers off the 40-man aren't on the payroll.
+                              player.level === FORTY_MAN_LEVEL ? formatSalary(contractFor(player)?.salary ?? 0) : null,
                             ]}
                             removeLabel={`Take ${player.fullName} out of the trade`}
                             onRemove={() => setTradeIncoming((current) => current.filter((piece) => piece.id !== player.id))}
@@ -2239,8 +2309,8 @@ export default function RosterBuilder({
                     </button>
                   )}
                   <span style={{ fontSize: "0.75rem", color: "var(--muted)", flex: "1 1 240px" }}>
-                    Add as many players as you like to each side. Incoming 40-man players join the 40-man; minor
-                    leaguers join the system. Set incoming salaries from the payroll table.
+                    Add as many players as you like to each side. Incoming 40-man players join the 40-man with their
+                    current contracts; minor leaguers join the system.
                   </span>
                 </div>
               </div>
