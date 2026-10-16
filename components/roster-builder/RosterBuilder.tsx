@@ -65,8 +65,13 @@ const BENCH_SLOTS: SlotDef[] = [1, 2, 3, 4].map((n) => ({ id: `BN${n}`, label: `
 const ROTATION_SLOTS: SlotDef[] = [1, 2, 3, 4, 5].map((n) => ({ id: `SP${n}`, label: `SP${n}`, group: "rotation" }));
 const BULLPEN_SLOTS: SlotDef[] = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ id: `RP${n}`, label: `RP${n}`, group: "bullpen" }));
 
-const ALL_SLOTS: SlotDef[] = [...DIAMOND_SLOTS, ...BENCH_SLOTS, ...ROTATION_SLOTS, ...BULLPEN_SLOTS];
-const TOTAL_SLOTS = ALL_SLOTS.length;
+// The 26-man roster. A two-way player used both as a hitter and a pitcher
+// fills two slots but is one player, so the club gets one extra slot — on
+// the bench or in the bullpen, whichever the user picks.
+const TOTAL_SLOTS = DIAMOND_SLOTS.length + BENCH_SLOTS.length + ROTATION_SLOTS.length + BULLPEN_SLOTS.length;
+const EXTRA_BENCH_SLOT: SlotDef = { id: "BN5", label: "Bench 5", group: "bench" };
+const EXTRA_BULLPEN_SLOT: SlotDef = { id: "RP9", label: "RP9", group: "bullpen" };
+type ExtraSpot = "bench" | "bullpen";
 const FORTY_MAN_LIMIT = 40;
 const PLAYER_ID_DRAG_TYPE = "text/plain";
 // Separate type so dragging a batting-order row never drops onto a field slot.
@@ -551,6 +556,31 @@ function isPitcherSlot(group: SlotGroup) {
   return group === "rotation" || group === "bullpen";
 }
 
+const SLOT_GROUPS = new Map(
+  [...DIAMOND_SLOTS, ...BENCH_SLOTS, ...ROTATION_SLOTS, ...BULLPEN_SLOTS, EXTRA_BENCH_SLOT, EXTRA_BULLPEN_SLOT].map(
+    (slot) => [slot.id, slot.group]
+  )
+);
+
+function slotGroupById(slotId: string): SlotGroup | null {
+  return SLOT_GROUPS.get(slotId) ?? null;
+}
+
+// Two-way players (MLB's "TWP", e.g. Shohei Ohtani) can fill a hitter slot
+// and a pitcher slot at the same time.
+function isTwoWay(player: { position: string }) {
+  return player.position === "TWP";
+}
+
+function canFillSlot(player: { position: string }, group: SlotGroup) {
+  return isTwoWay(player) || (player.position === "P") === isPitcherSlot(group);
+}
+
+// Shown on a filled slot: a two-way player pitching is labeled by hand.
+function slotPositionLabel(player: Handed, group: SlotGroup) {
+  return isTwoWay(player) && isPitcherSlot(group) && player.throws ? `${player.throws}HP` : positionLabel(player);
+}
+
 const slotButtonBase: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -864,6 +894,9 @@ export default function RosterBuilder({
   const [editingContractId, setEditingContractId] = useState<number | null>(null);
   const [payrollOpen, setPayrollOpen] = useState(false);
   const [payorStatus, setPayorStatus] = useState<PayorStatus>("first");
+  // Where the extra slot goes while a two-way player is both hitting and
+  // pitching.
+  const [extraSpot, setExtraSpot] = useState<ExtraSpot>("bullpen");
   // The club's minor leaguers — starts as the real system and changes with
   // trades.
   const [systemProspects, setSystemProspects] = useState<SystemPlayer[]>(prospects);
@@ -1004,7 +1037,57 @@ export default function RosterBuilder({
     () => new Set(Object.values(assignments).filter((id): id is number => id !== null && id !== undefined)),
     [assignments]
   );
-  const filledCount = assignedIds.size;
+
+  // Which side(s) each assigned player is on.
+  const assignedSides = useMemo(() => {
+    const sides = new Map<number, { hitting: boolean; pitching: boolean }>();
+    for (const [slotId, playerId] of Object.entries(assignments)) {
+      if (playerId == null) {
+        continue;
+      }
+      const group = slotGroupById(slotId);
+      const side = sides.get(playerId) ?? { hitting: false, pitching: false };
+      if (group && isPitcherSlot(group)) {
+        side.pitching = true;
+      } else if (group) {
+        side.hitting = true;
+      }
+      sides.set(playerId, side);
+    }
+    return sides;
+  }, [assignments]);
+
+  // A two-way player on both sides opens the extra slot.
+  const twoWayPlayer = fortyMan.find((player) => {
+    const side = assignedSides.get(player.id);
+    return isTwoWay(player) && side?.hitting && side?.pitching;
+  });
+  const extraSlot = twoWayPlayer ? (extraSpot === "bench" ? EXTRA_BENCH_SLOT : EXTRA_BULLPEN_SLOT) : null;
+  const benchSlots = extraSlot?.group === "bench" ? [...BENCH_SLOTS, extraSlot] : BENCH_SLOTS;
+  const bullpenSlots = extraSlot?.group === "bullpen" ? [...BULLPEN_SLOTS, extraSlot] : BULLPEN_SLOTS;
+  const allSlots = [...DIAMOND_SLOTS, ...benchSlots, ...ROTATION_SLOTS, ...bullpenSlots];
+
+  // Counts players, not slots (a two-way player in two slots is one spot),
+  // and only slots that currently exist — an extra slot that just closed is
+  // cleared by the effect below, but shouldn't count even for that render.
+  const filledCount = new Set(
+    allSlots.map((slot) => assignments[slot.id]).filter((id): id is number => id != null)
+  ).size;
+
+  // Whoever's in an extra slot that's gone (the two-way player left one
+  // side, or the extra spot moved) comes off it.
+  useEffect(() => {
+    const stale = [EXTRA_BENCH_SLOT, EXTRA_BULLPEN_SLOT].filter((slot) => slot.id !== extraSlot?.id);
+    if (stale.some((slot) => assignments[slot.id] != null)) {
+      setAssignments((current) => {
+        const next = { ...current };
+        for (const slot of stale) {
+          next[slot.id] = null;
+        }
+        return next;
+      });
+    }
+  }, [extraSlot?.id, assignments]);
 
   const addPool = useMemo((): SimplePlayer[] => {
     const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
@@ -1026,7 +1109,7 @@ export default function RosterBuilder({
       .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed));
   }, [addQuery, freeAgentFilter, fortyManIds]);
 
-  const openSlotDef = ALL_SLOTS.find((slot) => slot.id === openSlotId) ?? null;
+  const openSlotDef = allSlots.find((slot) => slot.id === openSlotId) ?? null;
 
   const slotEligiblePlayers = useMemo(() => {
     if (!openSlotDef) {
@@ -1037,11 +1120,15 @@ export default function RosterBuilder({
     const trimmed = stripDiacritics(slotQuery.trim().toLowerCase());
 
     return fortyMan
-      .filter((player) => (player.position === "P") === wantsPitcher)
-      .filter((player) => !assignedIds.has(player.id))
+      .filter((player) => canFillSlot(player, openSlotDef.group))
+      // A two-way player can still be picked for the side he isn't on yet.
+      .filter((player) => {
+        const side = assignedSides.get(player.id);
+        return !side || (isTwoWay(player) && !(wantsPitcher ? side.pitching : side.hitting));
+      })
       .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
       .slice(0, 8);
-  }, [openSlotDef, fortyMan, assignedIds, slotQuery]);
+  }, [openSlotDef, fortyMan, assignedSides, slotQuery]);
 
   // Created players have negative ids, so slot lookups can't use a
   // sentinel id for "empty" — check for an assignment explicitly.
@@ -1072,11 +1159,9 @@ export default function RosterBuilder({
     setBattingOrder(next);
   }
 
+  // Clears just this slot (a two-way player keeps his other one).
   function clearSlot(slot: SlotDef) {
-    const playerId = assignments[slot.id];
-    if (playerId != null) {
-      unassignPlayer(playerId);
-    }
+    setAssignments((current) => ({ ...current, [slot.id]: null }));
   }
 
   function unassignPlayer(playerId: number) {
@@ -1091,11 +1176,16 @@ export default function RosterBuilder({
     });
   }
 
+  // A player holds one slot — a two-way player one per side — so moving
+  // them frees the slot they were in on that side.
   function assignPlayerToSlot(slot: SlotDef, playerId: number) {
+    const twoWay = isTwoWay(fortyManById.get(playerId) ?? { position: "" });
     setAssignments((current) => {
       const next = { ...current };
       for (const slotId of Object.keys(next)) {
-        if (next[slotId] === playerId) {
+        const group = slotGroupById(slotId);
+        const sameSide = !twoWay || (group !== null && isPitcherSlot(group) === isPitcherSlot(slot.group));
+        if (next[slotId] === playerId && sameSide) {
           next[slotId] = null;
         }
       }
@@ -1114,7 +1204,7 @@ export default function RosterBuilder({
     const playerId = Number(event.dataTransfer.getData(PLAYER_ID_DRAG_TYPE));
     const player = fortyManById.get(playerId);
 
-    if (!player || (player.position === "P") !== isPitcherSlot(slot.group)) {
+    if (!player || !canFillSlot(player, slot.group)) {
       return;
     }
 
@@ -1589,15 +1679,21 @@ export default function RosterBuilder({
   }
 
   async function downloadGraphic() {
-    const toGraphic = (player: SimplePlayer): GraphicPlayer => ({
+    // Batting side only for hitting slots (a two-way player pitching shows
+    // his throwing hand as the position instead).
+    const toGraphic = (player: SimplePlayer, pitching = false): GraphicPlayer => ({
       id: player.id,
       name: player.fullName,
-      hand: player.position === "P" ? undefined : player.bats,
+      hand: player.position === "P" || pitching ? undefined : player.bats,
     });
     const slotRows = (slots: SlotDef[], badge: (index: number) => string | undefined): GraphicRow[] =>
       slots.map((slot, index) => {
         const player = playerInSlot(slot.id);
-        return { badge: badge(index), player: player && toGraphic(player), tag: player ? positionLabel(player) : undefined };
+        return {
+          badge: badge(index),
+          player: player && toGraphic(player, isPitcherSlot(slot.group)),
+          tag: player ? slotPositionLabel(player, slot.group) : undefined,
+        };
       });
 
     const lineupRows: GraphicRow[] = Array.from({ length: LINEUP_SPOTS }, (_, index) => {
@@ -1612,11 +1708,11 @@ export default function RosterBuilder({
         team,
         left: [
           { title: "Lineup", rows: lineupRows },
-          { title: "Bench", rows: slotRows(BENCH_SLOTS, () => undefined) },
+          { title: "Bench", rows: slotRows(benchSlots, () => undefined) },
         ],
         right: [
           { title: "Rotation", rows: slotRows(ROTATION_SLOTS, (index) => String(index + 1)) },
-          { title: "Bullpen", rows: slotRows(BULLPEN_SLOTS, () => undefined) },
+          { title: "Bullpen", rows: slotRows(bullpenSlots, () => undefined) },
         ],
         stats: [
           { label: `Est. ${CONTRACT_SEASON} Payroll`, value: formatSalary(payroll.total) },
@@ -1722,6 +1818,44 @@ export default function RosterBuilder({
         <p style={{ margin: 0, color: "var(--muted)", fontWeight: 700 }}>
           {filledCount} / {TOTAL_SLOTS} roster spots filled
         </p>
+        {twoWayPlayer && (
+          <div
+            role="group"
+            aria-label="Extra roster spot"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              flexWrap: "wrap",
+              padding: "0.35rem 0.4rem 0.35rem 0.8rem",
+              borderRadius: "999px",
+              border: "1px solid var(--line)",
+              background: "rgba(15,42,82,0.05)",
+              fontSize: "0.8rem",
+            }}
+          >
+            <span>
+              <strong>{displayLastName(twoWayPlayer)}</strong> is hitting and pitching — one roster spot, so one extra
+              spot opens:
+            </span>
+            {(["bullpen", "bench"] as ExtraSpot[]).map((spot) => (
+              <button
+                key={spot}
+                type="button"
+                aria-pressed={extraSpot === spot}
+                onClick={() => setExtraSpot(spot)}
+                style={{
+                  ...smallButtonStyle,
+                  padding: "0.25rem 0.75rem",
+                  borderColor: extraSpot === spot ? "#8a1024" : "var(--line)",
+                  background: extraSpot === spot ? "rgba(196,30,58,0.15)" : "var(--panel)",
+                }}
+              >
+                {spot === "bullpen" ? "Bullpen" : "Bench"}
+              </button>
+            ))}
+          </div>
+        )}
         {graphicStatus === "error" && (
           <span style={{ marginLeft: "auto", fontSize: "0.8rem", color: "#b42318" }}>
             Couldn&apos;t create the graphic — try again.
@@ -1895,7 +2029,7 @@ export default function RosterBuilder({
             Bullpen
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "0.5rem" }}>
-            {BULLPEN_SLOTS.map((slot) => (
+            {bullpenSlots.map((slot) => (
               <SlotCell
                 key={slot.id}
                 slot={slot}
@@ -1917,7 +2051,7 @@ export default function RosterBuilder({
             Bench
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "0.5rem" }}>
-            {BENCH_SLOTS.map((slot) => (
+            {benchSlots.map((slot) => (
               <SlotCell
                 key={slot.id}
                 slot={slot}
