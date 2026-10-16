@@ -17,9 +17,18 @@ export const CONTRACTS_UPDATED = contractData.updated;
 // pre-arb salaries are an estimate until that's settled.
 export const PRE_ARB_SALARY_ESTIMATE = 780_000;
 
-// "signed" is a deal made inside the roster builder (a created player or a
-// free agent), not a real contract.
-export type ContractStatus = "guaranteed" | "signed" | "club-option" | "mutual-option" | "arbitration" | "pre-arb";
+// "signed" is a deal made inside the roster builder (a created player, a
+// free agent, or an extension that replaces the current deal), not a real
+// contract. "extended" is a real current deal plus a builder extension that
+// starts after it.
+export type ContractStatus =
+  | "guaranteed"
+  | "signed"
+  | "extended"
+  | "club-option"
+  | "mutual-option"
+  | "arbitration"
+  | "pre-arb";
 
 export type ContractInfo = {
   status: ContractStatus;
@@ -37,6 +46,13 @@ export type ContractInfo = {
   // What declining an option costs (club and mutual options only). It's
   // owed even though the player leaves, so it stays on as dead money.
   buyout?: number;
+  // Luxury-tax hit for CONTRACT_SEASON when it differs from the salary: a
+  // guaranteed deal counts at its AAV, with deferred money at present value.
+  cbt?: number;
+  // How much of CONTRACT_SEASON's salary is deferred (paid in later years).
+  deferred?: number;
+  // FanGraphs' description of a real contract's deferrals.
+  deferralNote?: string;
 };
 
 // Money a club pays for players no longer on its roster: cash owed in
@@ -60,6 +76,20 @@ const OTHER_PAYMENTS = contractData.otherPayments as Record<string, OtherPayment
 export function getOtherPayments(teamId: number): OtherPayment[] {
   return OTHER_PAYMENTS[teamId] ?? [];
 }
+
+export type TaxAdjustment = { amount: number; description: string };
+
+const TAX_ADJUSTMENTS = contractData.taxAdjustments as Record<string, TaxAdjustment[]>;
+
+// Luxury-tax-only entries for CONTRACT_SEASON (e.g. AAV credits and debits
+// when cash changed hands in a trade).
+export function getTaxAdjustments(teamId: number): TaxAdjustment[] {
+  return TAX_ADJUSTMENTS[teamId] ?? [];
+}
+
+// Player benefits count toward every club's luxury-tax payroll (FanGraphs'
+// league-wide estimate).
+export const PLAYER_BENEFITS_ESTIMATE: number = contractData.playerBenefits ?? 18_500_000;
 
 // Free agency comes after six years of MLB service. Without service-time
 // data, assume a player has been up continuously since debuting: a debut
@@ -102,11 +132,21 @@ export function getContract(player: { id: number; debutDate?: string }): Contrac
   return player.id > 0 ? preArbContract(player.id, player.debutDate) : null;
 }
 
+// Part of a builder deal's money paid after the fact, in equal installments
+// over `payoutYears` seasons starting with `payoutStart`. It comes out of
+// each season's salary in proportion to that salary.
+export type Deferral = { total: number; payoutStart: number; payoutYears: number };
+
 // A deal made in the roster builder: one salary per season, starting with
-// CONTRACT_SEASON.
-export type Signing = { salaries: number[] };
+// `startSeason` (CONTRACT_SEASON unless it's an extension that begins after
+// a player's current deal).
+export type Signing = { salaries: number[]; startSeason?: number; deferral?: Deferral };
 
 const SALARY_ROUNDING = 1_000;
+
+// The CBA counts deferred money at present value for the luxury tax, using a
+// federal interest rate set each year — about 4.5% lately. Approximate.
+export const DEFERRAL_DISCOUNT_RATE = 0.045;
 
 // A flat deal: the total split evenly across its seasons (to the nearest
 // $1K, with the last season absorbing the remainder so the total is exact).
@@ -117,20 +157,79 @@ export function flatSalaries(total: number, years: number): number[] {
   return salaries;
 }
 
-export function signedContract({ salaries }: Signing): ContractInfo {
+function seasonSpan(start: number, end: number) {
+  return start === end ? String(start) : `${start}–${String(end).slice(2)}`;
+}
+
+// Deferred money per season, proportional to each season's salary.
+function deferredBySeason({ salaries, deferral }: Signing): number[] {
+  const total = salaries.reduce((sum, salary) => sum + salary, 0);
+  if (!deferral || total <= 0) {
+    return salaries.map(() => 0);
+  }
+  return salaries.map((salary) => Math.round((deferral.total * salary) / total));
+}
+
+// The deal's luxury-tax AAV: money paid on time at face value plus the
+// deferred payouts discounted back to the deal's first season.
+export function signingTaxAav(signing: Signing): number {
+  const start = signing.startSeason ?? CONTRACT_SEASON;
+  const deferred = deferredBySeason(signing);
+  const paidOnTime = signing.salaries.reduce((sum, salary, index) => sum + salary - deferred[index], 0);
+  let presentValue = 0;
+
+  if (signing.deferral && signing.deferral.payoutYears > 0) {
+    const installment = signing.deferral.total / signing.deferral.payoutYears;
+    for (let index = 0; index < signing.deferral.payoutYears; index += 1) {
+      const season = signing.deferral.payoutStart + index;
+      presentValue += installment / (1 + DEFERRAL_DISCOUNT_RATE) ** (season - start);
+    }
+  }
+
+  return Math.round((paidOnTime + presentValue) / signing.salaries.length);
+}
+
+// A builder deal as a contract. One that starts after CONTRACT_SEASON (an
+// extension) sits on top of the player's current contract, which still
+// covers this season and any guaranteed years before the extension.
+export function signedContract(signing: Signing, current: ContractInfo | null = null): ContractInfo {
+  const { salaries, deferral } = signing;
+  const start = signing.startSeason ?? CONTRACT_SEASON;
   const years = salaries.length;
   const total = salaries.reduce((sum, salary) => sum + salary, 0);
-  const lastSeason = CONTRACT_SEASON + years - 1;
-  const seasons = years === 1 ? `${CONTRACT_SEASON}` : `${CONTRACT_SEASON}–${String(lastSeason).slice(2)}`;
+  const lastSeason = start + years - 1;
   const isEven = salaries.every((salary) => salary === salaries[0]);
   const schedule = isEven ? "" : ` · ${salaries.map((salary) => formatSalary(salary).replace(/^\$|M$/g, "")).join("/")}`;
+  const deferralText = deferral
+    ? ` · ${formatSalary(deferral.total)} deferred, paid ${seasonSpan(deferral.payoutStart, deferral.payoutStart + deferral.payoutYears - 1)}`
+    : "";
+  const dealDetail = `${years} yr / ${formatSalary(total)} (${seasonSpan(start, lastSeason)})${schedule}${deferralText}`;
+  const newSeasons = Object.fromEntries(salaries.map((salary, index) => [start + index, salary]));
+  const deferred = deferredBySeason(signing);
+  const taxAav = signingTaxAav(signing);
+
+  if (start > CONTRACT_SEASON && current) {
+    const earlierSeasons = Object.fromEntries(
+      Object.entries(current.salaryBySeason ?? {}).filter(([season]) => Number(season) < start)
+    );
+    return {
+      ...current,
+      status: "extended",
+      detail: `${current.detail} · extended ${dealDetail}`,
+      freeAgentAfter: lastSeason,
+      freeAgentEstimated: false,
+      salaryBySeason: { ...earlierSeasons, ...newSeasons },
+    };
+  }
 
   return {
     status: "signed",
     salary: salaries[0],
-    detail: `${years} yr / ${formatSalary(total)} (${seasons})${schedule}`,
+    detail: dealDetail,
     freeAgentAfter: lastSeason,
-    salaryBySeason: Object.fromEntries(salaries.map((salary, index) => [CONTRACT_SEASON + index, salary])),
+    salaryBySeason: newSeasons,
+    ...(taxAav !== salaries[0] ? { cbt: taxAav } : {}),
+    ...(deferred[0] > 0 ? { deferred: deferred[0] } : {}),
   };
 }
 

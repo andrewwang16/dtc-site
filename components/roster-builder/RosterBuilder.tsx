@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  CARDINALS_TEAM_ID,
   MLB_TEAM_IDS,
   getTeamAbbreviation,
   teamLogoUrl,
@@ -18,13 +17,24 @@ import {
   formatSalary,
   getContract,
   getOtherPayments,
+  getTaxAdjustments,
   CONTRACTS_UPDATED,
+  DEFERRAL_DISCOUNT_RATE,
+  PLAYER_BENEFITS_ESTIMATE,
   signedContract,
   flatSalaries,
   type ContractInfo,
   type Signing,
 } from "@/lib/contracts";
 import { FREE_AGENTS, type FreeAgent, type FreeAgentGroup } from "@/lib/free-agents";
+import { useRouter } from "next/navigation";
+import { ALL_TEAMS, getTeamInfo } from "@/lib/teams";
+import {
+  computeLuxuryTax,
+  PAYOR_STATUS_LABELS,
+  TAX_THRESHOLDS,
+  type PayorStatus,
+} from "@/lib/luxury-tax";
 import { renderRosterGraphic, type GraphicRow, type GraphicPlayer } from "./rosterGraphic";
 
 type SlotGroup = "diamond" | "bench" | "rotation" | "bullpen";
@@ -79,17 +89,23 @@ type AddTab = "prospects" | "free-agents" | "trades" | "create";
 type SystemPlayer = SimplePlayer & { level: string };
 type TradePiece = SystemPlayer & { teamId: number };
 
-const OTHER_TEAM_IDS = MLB_TEAM_IDS.filter((id) => id !== CARDINALS_TEAM_ID).sort((a, b) =>
-  getTeamAbbreviation(a).localeCompare(getTeamAbbreviation(b))
-);
 const INJURED_LEVEL = "60-day IL";
 
-type TransactionKind = "trade" | "signing" | "selection" | "activation" | "option" | "non-tender" | "dfa";
+type TransactionKind =
+  | "trade"
+  | "signing"
+  | "extension"
+  | "selection"
+  | "activation"
+  | "option"
+  | "non-tender"
+  | "dfa";
 
 // Hex colors (not CSS variables) so the roster graphic's canvas can use them.
 const TRANSACTION_LABELS: Record<TransactionKind, { label: string; color: string }> = {
   trade: { label: "Trade", color: "#c41e3a" },
   signing: { label: "Signing", color: "#0f7a38" },
+  extension: { label: "Extension", color: "#0f7a38" },
   selection: { label: "Contract selected", color: "#0f2a52" },
   activation: { label: "Activated", color: "#0f7a38" },
   option: { label: "Option declined", color: "#8a5a00" },
@@ -102,6 +118,8 @@ type DeadMoney = {
   player: SimplePlayer;
   reason: "designated for assignment" | "option buyout";
   amount: number;
+  // Luxury-tax hit (a DFA'd deal still counts at its AAV).
+  taxAmount: number;
   salaryBySeason?: Record<number, number>;
   detail: string;
 };
@@ -141,6 +159,7 @@ const CREATE_POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "D
 const CONTRACT_STATUS_LABELS: Record<ContractInfo["status"], string> = {
   guaranteed: "Signed",
   signed: "New deal",
+  extended: "Extended",
   "club-option": "Club option",
   "mutual-option": "Mutual option",
   arbitration: "Arbitration",
@@ -281,17 +300,21 @@ const smallButtonStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-// Total value ($M) + years, used to sign a free agent or set a contract on
-// a created or traded-for player. A multi-year deal is flat (the total
+// Total value ($M) + years, used to sign a free agent, extend a player, or
+// set a contract on a created player. A multi-year deal is flat (the total
 // split evenly) unless it's set season by season with "Custom by year", in
-// which case the seasons add up to the total.
+// which case the seasons add up to the total. Any deal can defer part of
+// its money; an extension can start now (replacing the current deal) or
+// the season after it ends (`startOptions`).
 function SignForm({
   submitLabel,
   initial,
+  startOptions,
   onSign,
 }: {
   submitLabel: string;
   initial?: Signing;
+  startOptions?: number[];
   onSign: (signing: Signing) => void;
 }) {
   const initialTotal = initial ? initial.salaries.reduce((sum, salary) => sum + salary, 0) : 0;
@@ -303,6 +326,11 @@ function SignForm({
   const [customSalaries, setCustomSalaries] = useState<string[]>(
     initial && !initialFlat ? initial.salaries.map((amount) => String(amount / 1_000_000)) : []
   );
+  const [startSeason, setStartSeason] = useState(initial?.startSeason ?? startOptions?.[0] ?? CONTRACT_SEASON);
+  const [deferOpen, setDeferOpen] = useState(!!initial?.deferral);
+  const [deferTotal, setDeferTotal] = useState(initial?.deferral ? String(initial.deferral.total / 1_000_000) : "");
+  const [payoutStart, setPayoutStart] = useState(initial?.deferral ? String(initial.deferral.payoutStart) : "");
+  const [payoutYears, setPayoutYears] = useState(initial?.deferral ? String(initial.deferral.payoutYears) : "10");
 
   const yearCount = parseYears(years);
   const isCustom = structure === "custom" && yearCount !== null && yearCount > 1;
@@ -318,19 +346,61 @@ function SignForm({
     }
   }
 
-  const customTotal = isCustom && salaries ? salaries.reduce((sum, amount) => sum + amount, 0) : null;
+  const dealTotal = salaries ? salaries.reduce((sum, amount) => sum + amount, 0) : null;
+  const customTotal = isCustom ? dealTotal : null;
+  const lastSeason = startSeason + (yearCount ?? 1) - 1;
+
+  // Deferred money is optional; once any of it is entered it has to be a
+  // usable schedule: no more than the deal is worth, paid out after the
+  // deal starts.
+  const deferAmount = deferOpen ? parseMillions(deferTotal) : null;
+  const payoutFrom = Number(payoutStart || lastSeason + 1);
+  const payoutCount = parseYears(payoutYears);
+  const deferEntered = deferOpen && deferTotal.trim() !== "";
+  const deferralValid =
+    !deferEntered ||
+    (deferAmount !== null &&
+      dealTotal !== null &&
+      deferAmount <= dealTotal &&
+      payoutCount !== null &&
+      Number.isInteger(payoutFrom) &&
+      payoutFrom > startSeason);
+  const deferral =
+    deferEntered && deferralValid && deferAmount !== null && payoutCount !== null
+      ? { total: deferAmount, payoutStart: payoutFrom, payoutYears: payoutCount }
+      : undefined;
+  const ready = !!salaries && deferralValid;
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (salaries) {
-          onSign({ salaries });
+        if (salaries && ready) {
+          onSign({
+            salaries,
+            ...(startSeason !== CONTRACT_SEASON ? { startSeason } : {}),
+            ...(deferral ? { deferral } : {}),
+          });
         }
       }}
       style={{ display: "grid", gap: "0.35rem", justifyItems: "end" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        {startOptions && startOptions.length > 1 && (
+          <select
+            value={startSeason}
+            onChange={(event) => setStartSeason(Number(event.target.value))}
+            aria-label="Extension starts"
+            title="When the new deal starts"
+            style={{ ...contractFieldStyle, width: "auto" }}
+          >
+            {startOptions.map((season) => (
+              <option key={season} value={season}>
+                {season === CONTRACT_SEASON ? `Starts ${season} (replaces deal)` : `Starts ${season}`}
+              </option>
+            ))}
+          </select>
+        )}
         {isCustom ? (
           <span style={{ fontSize: "0.8rem", fontWeight: 700, minWidth: "6.5rem", textAlign: "right" }}>
             {customTotal !== null ? `${formatSalary(customTotal)} total` : "Fill every season"}
@@ -384,7 +454,19 @@ function SignForm({
             ))}
           </select>
         )}
-        <button type="submit" disabled={!salaries} style={{ ...smallButtonStyle, opacity: salaries ? 1 : 0.5 }}>
+        <button
+          type="button"
+          onClick={() => setDeferOpen((open) => !open)}
+          aria-expanded={deferOpen}
+          title="Defer part of the money (optional)"
+          style={{
+            ...smallButtonStyle,
+            background: deferOpen ? "rgba(15,42,82,0.1)" : "var(--panel)",
+          }}
+        >
+          Defer
+        </button>
+        <button type="submit" disabled={!ready} style={{ ...smallButtonStyle, opacity: ready ? 1 : 0.5 }}>
           {submitLabel}
         </button>
       </div>
@@ -393,7 +475,7 @@ function SignForm({
         <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
           {Array.from({ length: yearCount }, (_, index) => (
             <label key={index} style={{ display: "grid", gap: "0.1rem", fontSize: "0.68rem", color: "var(--muted)" }}>
-              {CONTRACT_SEASON + index}
+              {startSeason + index}
               <input
                 type="number"
                 min="0"
@@ -408,11 +490,57 @@ function SignForm({
                   })
                 }
                 placeholder="$M"
-                aria-label={`${CONTRACT_SEASON + index} salary in millions`}
+                aria-label={`${startSeason + index} salary in millions`}
                 style={{ ...contractFieldStyle, width: "4.6rem" }}
               />
             </label>
           ))}
+        </div>
+      )}
+
+      {deferOpen && (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <input
+            type="number"
+            min="0"
+            step="0.1"
+            inputMode="decimal"
+            value={deferTotal}
+            onChange={(event) => setDeferTotal(event.target.value)}
+            placeholder="Deferred $M"
+            aria-label="Total deferred in millions"
+            style={{ ...contractFieldStyle, width: "6.5rem" }}
+          />
+          <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>paid from</span>
+          <input
+            type="number"
+            min={startSeason + 1}
+            step="1"
+            inputMode="numeric"
+            value={payoutStart}
+            onChange={(event) => setPayoutStart(event.target.value)}
+            placeholder={String(lastSeason + 1)}
+            aria-label="First deferred payout season"
+            style={{ ...contractFieldStyle, width: "5rem" }}
+          />
+          <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>over</span>
+          <input
+            type="number"
+            min="1"
+            max={MAX_CONTRACT_YEARS}
+            step="1"
+            inputMode="numeric"
+            value={payoutYears}
+            onChange={(event) => setPayoutYears(event.target.value)}
+            aria-label="Deferred payout years"
+            style={{ ...contractFieldStyle, width: "4rem" }}
+          />
+          <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>yr</span>
+          {deferEntered && !deferralValid && (
+            <span style={{ width: "100%", textAlign: "right", fontSize: "0.72rem", color: "#b42318" }}>
+              Deferred money can&apos;t exceed the deal, and payouts have to start after {startSeason}.
+            </span>
+          )}
         </div>
       )}
     </form>
@@ -629,7 +757,7 @@ function TradeChip({
 
 // A searchable player who can be added to one side of the trade.
 // "Add", or why the player can't be added: already in the trade, or already
-// a Cardinal (acquired in an earlier trade).
+// in the organization (acquired in an earlier trade).
 function TradeResultRow({
   player,
   blockedLabel,
@@ -690,14 +818,27 @@ function TradeResultRow({
 }
 
 export default function RosterBuilder({
+  teamId,
   roster,
   prospects,
   sixtyDayIL,
 }: {
+  teamId: number;
   roster: RosterEntry[];
   prospects: ProspectPlayer[];
   sixtyDayIL: RosterEntry[];
 }) {
+  const router = useRouter();
+  const team = getTeamInfo(teamId);
+  const teamAbbreviation = getTeamAbbreviation(teamId);
+  // Trade partners: every other club.
+  const partnerTeamIds = useMemo(
+    () =>
+      MLB_TEAM_IDS.filter((id) => id !== teamId).sort((a, b) =>
+        getTeamAbbreviation(a).localeCompare(getTeamAbbreviation(b))
+      ),
+    [teamId]
+  );
   const [fortyMan, setFortyMan] = useState<SimplePlayer[]>(roster);
   const [reserveIL, setReserveIL] = useState<SimplePlayer[]>(sixtyDayIL);
   const [assignments, setAssignments] = useState<Record<string, number | null>>({});
@@ -722,9 +863,9 @@ export default function RosterBuilder({
   const [signings, setSignings] = useState<Record<number, Signing>>({});
   const [editingContractId, setEditingContractId] = useState<number | null>(null);
   const [payrollOpen, setPayrollOpen] = useState(false);
-  // An in-progress trade: the player coming back and who's being sent out.
-  // The Cardinals' minor leaguers — starts as the real system and changes
-  // with trades.
+  const [payorStatus, setPayorStatus] = useState<PayorStatus>("first");
+  // The club's minor leaguers — starts as the real system and changes with
+  // trades.
   const [systemProspects, setSystemProspects] = useState<SystemPlayer[]>(prospects);
   // Trade builder: which club is being browsed, each club's system once
   // loaded, and the players coming back.
@@ -744,7 +885,8 @@ export default function RosterBuilder({
   const contractFor = useCallback(
     (player: SimplePlayer) => {
       const signing = signings[player.id];
-      return signing ? signedContract(signing) : getContract(player);
+      // An extension that starts later builds on the current contract.
+      return signing ? signedContract(signing, getContract(player)) : getContract(player);
     },
     [signings]
   );
@@ -757,19 +899,31 @@ export default function RosterBuilder({
       transactions.flatMap((transaction) =>
         transaction.outgoing.flatMap((player): DeadMoney[] => {
           const contract = contractFor(player);
-          if (transaction.kind === "dfa" && (contract?.status === "guaranteed" || contract?.status === "signed")) {
+          if (
+            transaction.kind === "dfa" &&
+            (contract?.status === "guaranteed" || contract?.status === "signed" || contract?.status === "extended")
+          ) {
             return [
               {
                 player,
                 reason: "designated for assignment",
                 amount: contract.salary,
+                taxAmount: contract.cbt ?? contract.salary,
                 salaryBySeason: contract.salaryBySeason,
                 detail: contract.detail,
               },
             ];
           }
           if (transaction.kind === "option" && contract?.buyout) {
-            return [{ player, reason: "option buyout", amount: contract.buyout, detail: contract.detail }];
+            return [
+              {
+                player,
+                reason: "option buyout",
+                amount: contract.buyout,
+                taxAmount: contract.buyout,
+                detail: contract.detail,
+              },
+            ];
           }
           return [];
         })
@@ -782,7 +936,7 @@ export default function RosterBuilder({
   // on top of what the club already owes players it's moved on from
   // (cash sent in trades, releases, buyouts).
   const payroll = useMemo(() => {
-    const otherPayments = getOtherPayments(CARDINALS_TEAM_ID);
+    const otherPayments = getOtherPayments(teamId);
     const currentOtherPayments = otherPayments.filter((payment) => payment.season === CONTRACT_SEASON);
     const paidPlayers = [...fortyMan, ...reserveIL];
     const rows = paidPlayers
@@ -824,8 +978,24 @@ export default function RosterBuilder({
       return { season, committed };
     });
 
-    return { rows, totals, total, future, currentOtherPayments };
-  }, [fortyMan, reserveIL, deadMoney, contractFor]);
+    // Part of this season's salaries paid in later years (real deferrals
+    // FanGraphs spells out, and builder deals).
+    const deferred = rows.reduce((sum, { contract }) => sum + (contract?.deferred ?? 0), 0);
+
+    // Luxury-tax payroll: each contract at its tax hit (a guaranteed deal's
+    // AAV, deferred money at present value), money owed to former players,
+    // FanGraphs' tax-only adjustments, and player benefits.
+    const taxAdjustments = getTaxAdjustments(teamId);
+    const taxPayroll =
+      rows.reduce((sum, { contract }) => sum + (contract ? contract.cbt ?? contract.salary : 0), 0) +
+      deadMoney.reduce((sum, entry) => sum + entry.taxAmount, 0) +
+      currentOtherPayments.reduce((sum, payment) => sum + payment.amount, 0) +
+      taxAdjustments.reduce((sum, adjustment) => sum + adjustment.amount, 0) +
+      PLAYER_BENEFITS_ESTIMATE;
+    const luxuryTax = computeLuxuryTax(taxPayroll, payorStatus);
+
+    return { rows, totals, total, future, currentOtherPayments, deferred, taxPayroll, taxAdjustments, luxuryTax };
+  }, [fortyMan, reserveIL, deadMoney, contractFor, teamId, payorStatus]);
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
   const fortyManById = useMemo(() => new Map(fortyMan.map((player) => [player.id, player])), [fortyMan]);
@@ -1028,6 +1198,32 @@ export default function RosterBuilder({
     }
   }
 
+  // When an extension can start: right away (replacing the current deal) or
+  // the season after the current deal's last guaranteed year.
+  function extensionStartOptions(player: SimplePlayer): number[] {
+    const current = getContract(player);
+    const guaranteedSeasons = Object.keys(current?.salaryBySeason ?? {}).map(Number);
+    const lastCurrentSeason =
+      current?.status === "guaranteed" && guaranteedSeasons.length > 0 ? Math.max(...guaranteedSeasons) : CONTRACT_SEASON;
+    return [CONTRACT_SEASON, lastCurrentSeason + 1];
+  }
+
+  // An extension for someone already on the roster, logged (and undoable)
+  // like a free-agent signing.
+  function extendPlayer(player: SimplePlayer, signing: Signing) {
+    const signingBefore = signings[player.id] ?? null;
+    setSigning(player.id, signing);
+    setEditingContractId(null);
+    logTransaction({
+      kind: "extension",
+      summary: `Extended ${player.fullName} (${positionLabel(player)})`,
+      detail: signedContract(signing).detail,
+      incoming: [],
+      outgoing: [],
+      signingsBefore: { [player.id]: signingBefore },
+    });
+  }
+
   function toSimplePlayer(player: SimplePlayer): SimplePlayer {
     return {
       id: player.id,
@@ -1069,9 +1265,9 @@ export default function RosterBuilder({
   }, [tradeTeamPlayers, addQuery]);
 
   // A club's system is loaded once and cached, so it still lists players
-  // the Cardinals have since acquired from it — they can't be added again.
+  // since acquired from it — they can't be added again.
   function addToTrade(player: TradePiece) {
-    if (cardinalsSystemIds.has(player.id)) {
+    if (orgSystemIds.has(player.id)) {
       return;
     }
     setTradeIncoming((current) => (current.some((piece) => piece.id === player.id) ? current : [...current, player]));
@@ -1083,10 +1279,10 @@ export default function RosterBuilder({
     setTradeQuery("");
   }
 
-  // Everyone the Cardinals could send out: the 40-man, the 60-day IL, and
+  // Everyone the club could send out: the 40-man, the 60-day IL, and
   // the minor leagues.
   const reserveIds = useMemo(() => new Set(reserveIL.map((player) => player.id)), [reserveIL]);
-  const cardinalsSystem = useMemo<SystemPlayer[]>(
+  const orgSystem = useMemo<SystemPlayer[]>(
     () => [
       ...fortyMan.map((player) => ({ ...player, level: FORTY_MAN_LEVEL })),
       ...reserveIL.map((player) => ({ ...player, level: INJURED_LEVEL })),
@@ -1094,19 +1290,19 @@ export default function RosterBuilder({
     ],
     [fortyMan, reserveIL, systemProspects, fortyManIds, reserveIds]
   );
-  const cardinalsSystemIds = useMemo(() => new Set(cardinalsSystem.map((player) => player.id)), [cardinalsSystem]);
+  const orgSystemIds = useMemo(() => new Set(orgSystem.map((player) => player.id)), [orgSystem]);
 
   const tradeOutgoing = tradeOutgoingIds
-    .map((id) => cardinalsSystem.find((player) => player.id === id))
+    .map((id) => orgSystem.find((player) => player.id === id))
     .filter((player): player is SystemPlayer => player !== undefined);
 
   const tradeCandidates = useMemo(() => {
     const trimmed = stripDiacritics(tradeQuery.trim().toLowerCase());
-    return cardinalsSystem
+    return orgSystem
       .filter((player) => !tradeOutgoingIds.includes(player.id))
       .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
       .slice(0, 40);
-  }, [cardinalsSystem, tradeOutgoingIds, tradeQuery]);
+  }, [orgSystem, tradeOutgoingIds, tradeQuery]);
 
   function describeTradePiece(player: SystemPlayer & { teamId?: number }) {
     const where = [
@@ -1125,16 +1321,16 @@ export default function RosterBuilder({
       return;
     }
 
-    // Never acquire someone who's already a Cardinal (e.g. a piece added
+    // Never acquire someone who's already in the organization (e.g. a piece added
     // before an earlier trade brought them over).
-    const alreadyCardinals = tradeIncoming.filter((player) => cardinalsSystemIds.has(player.id));
-    if (alreadyCardinals.length > 0) {
+    const alreadyHere = tradeIncoming.filter((player) => orgSystemIds.has(player.id));
+    if (alreadyHere.length > 0) {
       window.alert(
-        `${alreadyCardinals.map((player) => player.fullName).join(", ")} ${
-          alreadyCardinals.length === 1 ? "is" : "are"
-        } already in the Cardinals organization and ${alreadyCardinals.length === 1 ? "was" : "were"} taken out of this trade.`
+        `${alreadyHere.map((player) => player.fullName).join(", ")} ${
+          alreadyHere.length === 1 ? "is" : "are"
+        } already in the ${team.shortName} organization and ${alreadyHere.length === 1 ? "was" : "were"} taken out of this trade.`
       );
-      setTradeIncoming((current) => current.filter((player) => !cardinalsSystemIds.has(player.id)));
+      setTradeIncoming((current) => current.filter((player) => !orgSystemIds.has(player.id)));
       return;
     }
 
@@ -1376,6 +1572,22 @@ export default function RosterBuilder({
 
   const [graphicStatus, setGraphicStatus] = useState<"idle" | "working" | "error">("idle");
 
+  // Switching clubs loads that club's roster fresh, so any moves made here
+  // are lost — confirm first if there are any.
+  function switchTeam(nextTeamId: number) {
+    if (nextTeamId === teamId) {
+      return;
+    }
+    const hasWork = transactions.length > 0 || filledCount > 0 || Object.keys(signings).length > 0;
+    if (
+      hasWork &&
+      !window.confirm(`Switch to the ${getTeamInfo(nextTeamId).name}? Your ${team.shortName} roster and moves will be cleared.`)
+    ) {
+      return;
+    }
+    router.push(`/roster-builder?team=${getTeamAbbreviation(nextTeamId).toLowerCase()}`);
+  }
+
   async function downloadGraphic() {
     const toGraphic = (player: SimplePlayer): GraphicPlayer => ({
       id: player.id,
@@ -1397,6 +1609,7 @@ export default function RosterBuilder({
     try {
       const blob = await renderRosterGraphic({
         season: CONTRACT_SEASON,
+        team,
         left: [
           { title: "Lineup", rows: lineupRows },
           { title: "Bench", rows: slotRows(BENCH_SLOTS, () => undefined) },
@@ -1407,6 +1620,7 @@ export default function RosterBuilder({
         ],
         stats: [
           { label: `Est. ${CONTRACT_SEASON} Payroll`, value: formatSalary(payroll.total) },
+          { label: "Tax Payroll", value: formatSalary(payroll.taxPayroll) },
           { label: "40-Man", value: `${fortyMan.length} / ${FORTY_MAN_LIMIT}` },
           { label: "Active", value: `${filledCount} / ${TOTAL_SLOTS}` },
         ],
@@ -1421,7 +1635,7 @@ export default function RosterBuilder({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `cardinals-${CONTRACT_SEASON}-roster.png`;
+      link.download = `${teamAbbreviation.toLowerCase()}-${CONTRACT_SEASON}-roster.png`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       setGraphicStatus("idle");
@@ -1457,6 +1671,52 @@ export default function RosterBuilder({
       {openSlotId && (
         <div onClick={() => setOpenSlotId(null)} style={{ position: "fixed", inset: 0, zIndex: 10 }} />
       )}
+
+      <div
+        className="roster-builder-team-bar"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.85rem",
+          flexWrap: "wrap",
+          padding: "0.75rem 1rem",
+          borderRadius: "18px",
+          border: "1px solid var(--line)",
+          borderLeft: `6px solid ${team.highlight}`,
+          background: "var(--panel)",
+        }}
+      >
+        <TeamLogo src={teamLogoUrl(teamId)} alt="" style={{ width: "44px", height: "44px", objectFit: "contain" }} />
+        <div style={{ display: "grid", gap: "0.1rem", minWidth: 0 }}>
+          <span className="kicker" style={{ margin: 0, fontSize: "0.7rem" }}>
+            Building
+          </span>
+          <strong style={{ fontSize: "1.2rem", lineHeight: 1.1 }}>{team.name}</strong>
+        </div>
+        <label style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--muted)" }}>Team</span>
+          <select
+            value={teamId}
+            onChange={(event) => switchTeam(Number(event.target.value))}
+            aria-label="Team to build"
+            style={{
+              padding: "0.55rem 1rem",
+              borderRadius: "999px",
+              border: "1px solid var(--line)",
+              background: "var(--panel)",
+              color: "var(--text)",
+              fontWeight: 700,
+              fontSize: "0.92rem",
+            }}
+          >
+            {ALL_TEAMS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <p style={{ margin: 0, color: "var(--muted)", fontWeight: 700 }}>
@@ -1875,6 +2135,7 @@ export default function RosterBuilder({
                 { label: "Arbitration (proj.)", value: payroll.totals.arbitration },
                 { label: "Pre-arb (est.)", value: payroll.totals.preArb },
                 ...(payroll.totals.deadMoney !== 0 ? [{ label: "Dead money & other", value: payroll.totals.deadMoney }] : []),
+                ...(payroll.deferred > 0 ? [{ label: "Deferred (paid later)", value: payroll.deferred }] : []),
               ].map((item) => (
                 <div key={item.label}>
                   <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
@@ -1885,6 +2146,113 @@ export default function RosterBuilder({
                   </p>
                 </div>
               ))}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "0.6rem",
+                padding: "0.85rem 1rem",
+                borderRadius: "14px",
+                border: "1px solid var(--line)",
+                background: payroll.luxuryTax.tier > 0 ? "rgba(180,35,24,0.05)" : "rgba(15,122,56,0.05)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+                  Luxury tax (CBT) · est.
+                </p>
+                <select
+                  value={payorStatus}
+                  onChange={(event) => setPayorStatus(event.target.value as PayorStatus)}
+                  aria-label="Luxury tax payor status"
+                  style={{ ...contractFieldStyle, marginLeft: "auto", width: "auto", fontWeight: 700 }}
+                >
+                  {(Object.keys(PAYOR_STATUS_LABELS) as PayorStatus[]).map((status) => (
+                    <option key={status} value={status}>
+                      {PAYOR_STATUS_LABELS[status]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
+                {[
+                  { label: "Tax payroll", value: formatSalary(payroll.taxPayroll) },
+                  { label: "Threshold", value: formatSalary(TAX_THRESHOLDS[0]) },
+                  {
+                    label: payroll.luxuryTax.tier > 0 ? `Over (tier ${payroll.luxuryTax.tier})` : "Room under",
+                    value: formatSalary(Math.abs(payroll.taxPayroll - TAX_THRESHOLDS[0])),
+                    color: payroll.luxuryTax.tier > 0 ? "#b42318" : "#0f7a38",
+                  },
+                  { label: "Estimated tax", value: formatSalary(payroll.luxuryTax.tax) },
+                ].map((item) => (
+                  <div key={item.label}>
+                    <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
+                      {item.label}
+                    </p>
+                    <p style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800, color: item.color }}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tax payroll against the base threshold and the three surcharge tiers. */}
+              {(() => {
+                const scaleMax = Math.max(TAX_THRESHOLDS[3] * 1.08, payroll.taxPayroll * 1.04);
+                const percent = (amount: number) => `${Math.min(100, (amount / scaleMax) * 100)}%`;
+                return (
+                  <div style={{ position: "relative", height: "34px" }} aria-hidden="true">
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "6px",
+                        left: 0,
+                        right: 0,
+                        height: "10px",
+                        borderRadius: "999px",
+                        background: "var(--line)",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "6px",
+                        left: 0,
+                        width: percent(payroll.taxPayroll),
+                        height: "10px",
+                        borderRadius: "999px",
+                        background: payroll.luxuryTax.tier > 0 ? "#b42318" : "#0f7a38",
+                      }}
+                    />
+                    {TAX_THRESHOLDS.map((threshold) => (
+                      <div key={threshold} style={{ position: "absolute", top: 0, left: percent(threshold) }}>
+                        <div style={{ width: "2px", height: "22px", background: "var(--text)", opacity: 0.55 }} />
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: "21px",
+                            transform: "translateX(-50%)",
+                            fontSize: "0.62rem",
+                            fontWeight: 700,
+                            color: "var(--muted)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatSalary(threshold)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.74rem" }}>
+                Tax payroll counts each contract at its AAV (deferred money at present value, ~
+                {Math.round(DEFERRAL_DISCOUNT_RATE * 1000) / 10}% discount), arbitration and pre-arb salaries, money owed to
+                former players{payroll.taxAdjustments.length > 0 ? ", FanGraphs' tax adjustments" : ""}, and an estimated{" "}
+                {formatSalary(PLAYER_BENEFITS_ESTIMATE)} in player benefits. Uses the 2026 thresholds and rates until the next
+                CBA sets 2027&apos;s. Going $40M+ over also moves a club&apos;s top draft pick back 10 spots.
+              </p>
             </div>
 
             <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -1914,10 +2282,13 @@ export default function RosterBuilder({
                 </thead>
                 <tbody>
                   {payroll.rows.map(({ player, contract }) => {
-                    // Every real player has contract data now, so only created
-                    // players (or ones with a builder deal) can be set here.
-                    const canSetContract = !contract || contract.status === "signed";
+                    // Created players get a contract set directly; real players
+                    // can be extended (a logged, undoable move), and a deal the
+                    // builder already made can be edited in place.
+                    const isCreated = player.id < 0;
+                    const hasBuilderDeal = !!signings[player.id];
                     const isEditing = editingContractId === player.id;
+                    const actionLabel = hasBuilderDeal ? "Edit deal" : isCreated ? "Set contract" : "Extend";
 
                     return (
                       <tr key={player.id} style={{ borderTop: "1px solid var(--line)" }}>
@@ -1931,31 +2302,51 @@ export default function RosterBuilder({
                         <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>
                           {contract ? CONTRACT_STATUS_LABELS[contract.status] : "Unknown"}
                         </td>
-                        <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
+                        <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700, whiteSpace: "nowrap" }}>
                           {contract ? formatSalary(contract.salary) : "—"}
+                          {contract?.deferred ? (
+                            <span style={{ display: "block", fontSize: "0.7rem", color: "var(--muted)", fontWeight: 600 }}>
+                              {formatSalary(contract.deferred)} deferred
+                            </span>
+                          ) : null}
                         </td>
                         <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }}>
                           {isEditing ? (
-                            <SignForm
-                              submitLabel="Save"
-                              initial={signings[player.id]}
-                              onSign={(signing) => {
-                                setSigning(player.id, signing);
-                                setEditingContractId(null);
-                              }}
-                            />
+                            <div style={{ display: "grid", gap: "0.3rem", justifyItems: "end" }}>
+                              <SignForm
+                                submitLabel={actionLabel === "Extend" ? "Extend" : "Save"}
+                                initial={signings[player.id]}
+                                startOptions={isCreated ? undefined : extensionStartOptions(player)}
+                                onSign={(signing) => {
+                                  if (actionLabel === "Extend") {
+                                    extendPlayer(player, signing);
+                                  } else {
+                                    setSigning(player.id, signing);
+                                    setEditingContractId(null);
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setEditingContractId(null)}
+                                style={{ ...smallButtonStyle, padding: "0.15rem 0.6rem", fontSize: "0.7rem" }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           ) : (
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-                              {contract?.detail ?? "—"}
-                              {canSetContract && (
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingContractId(player.id)}
-                                  style={{ ...smallButtonStyle, padding: "0.2rem 0.6rem", fontSize: "0.72rem" }}
-                                >
-                                  {contract ? "Edit" : "Set contract"}
-                                </button>
-                              )}
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                              <span title={contract?.deferralNote}>
+                                {contract?.detail ?? "—"}
+                                {contract?.deferralNote && !contract.deferred && " · has deferrals"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingContractId(player.id)}
+                                style={{ ...smallButtonStyle, padding: "0.2rem 0.6rem", fontSize: "0.72rem" }}
+                              >
+                                {actionLabel}
+                              </button>
                             </span>
                           )}
                         </td>
@@ -1997,7 +2388,7 @@ export default function RosterBuilder({
                         {formatSalary(payment.amount)}
                       </td>
                       <td style={{ padding: "0.4rem 0.5rem", color: "var(--muted)" }} colSpan={2}>
-                        {payment.amount < 0 ? "Owed to the Cardinals" : "No longer on the roster"}
+                        {payment.amount < 0 ? `Owed to the ${team.shortName}` : "No longer on the roster"}
                       </td>
                     </tr>
                   ))}
@@ -2185,16 +2576,16 @@ export default function RosterBuilder({
                 aria-label="Team to trade with"
                 style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))", gap: "0.4rem" }}
               >
-                {OTHER_TEAM_IDS.map((teamId) => {
-                  const selected = teamId === tradeTeamId;
+                {partnerTeamIds.map((partnerId) => {
+                  const selected = partnerId === tradeTeamId;
                   return (
                     <button
-                      key={teamId}
+                      key={partnerId}
                       type="button"
                       role="radio"
                       aria-checked={selected}
                       onClick={() => {
-                        setTradeTeamId(teamId);
+                        setTradeTeamId(partnerId);
                         setAddQuery("");
                       }}
                       style={{
@@ -2210,11 +2601,11 @@ export default function RosterBuilder({
                       }}
                     >
                       <TeamLogo
-                        src={teamLogoUrl(teamId)}
+                        src={teamLogoUrl(partnerId)}
                         alt=""
                         style={{ width: "34px", height: "34px", objectFit: "contain" }}
                       />
-                      <span style={{ fontSize: "0.72rem", fontWeight: 800 }}>{getTeamAbbreviation(teamId)}</span>
+                      <span style={{ fontSize: "0.72rem", fontWeight: 800 }}>{getTeamAbbreviation(partnerId)}</span>
                     </button>
                   );
                 })}
@@ -2234,11 +2625,13 @@ export default function RosterBuilder({
                   <div style={{ display: "grid", gap: "0.5rem", alignContent: "start" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
                       <TeamLogo
-                        src={teamLogoUrl(CARDINALS_TEAM_ID)}
+                        src={teamLogoUrl(teamId)}
                         alt=""
                         style={{ width: "26px", height: "26px", objectFit: "contain" }}
                       />
-                      <strong style={{ fontSize: "0.9rem" }}>STL sends ({tradeOutgoing.length})</strong>
+                      <strong style={{ fontSize: "0.9rem" }}>
+                        {teamAbbreviation} sends ({tradeOutgoing.length})
+                      </strong>
                     </div>
                     <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", minHeight: "1.9rem" }}>
                       {tradeOutgoing.length === 0 ? (
@@ -2267,8 +2660,8 @@ export default function RosterBuilder({
                       type="text"
                       value={tradeQuery}
                       onChange={(event) => setTradeQuery(event.target.value)}
-                      placeholder="Search the Cardinals system (40-man, IL, minors)..."
-                      aria-label="Search Cardinals players to send out"
+                      placeholder={`Search the ${team.shortName} system (40-man, IL, minors)...`}
+                      aria-label={`Search ${team.shortName} players to send out`}
                       style={{ ...createFieldStyle, width: "100%", fontSize: "0.88rem" }}
                     />
                     <div style={{ display: "grid", gap: "0.35rem", maxHeight: "360px", overflowY: "auto" }}>
@@ -2354,8 +2747,8 @@ export default function RosterBuilder({
                                 key={player.id}
                                 player={player}
                                 blockedLabel={
-                                  cardinalsSystemIds.has(player.id)
-                                    ? "On STL"
+                                  orgSystemIds.has(player.id)
+                                    ? `On ${teamAbbreviation}`
                                     : tradeIncoming.some((piece) => piece.id === player.id)
                                       ? "In trade"
                                       : undefined
@@ -2407,7 +2800,7 @@ export default function RosterBuilder({
                 placeholder={
                   addTab === "free-agents"
                     ? `Search ${FREE_AGENTS.length} impending free agents...`
-                    : "Search Cardinals prospects..."
+                    : `Search ${team.shortName} prospects...`
                 }
                 style={{
                   width: "100%",

@@ -197,7 +197,12 @@ export async function getPlayerBio(playerId: number): Promise<PlayerBio | null> 
   return data?.people?.[0] ?? null;
 }
 
-export async function getCardinalsRoster(
+export function getCardinalsRoster(year: number, rosterType: RosterType = "fullSeason"): Promise<RosterEntry[]> {
+  return getTeamRoster(CARDINALS_TEAM_ID, year, rosterType);
+}
+
+export async function getTeamRoster(
+  teamId: number,
   year: number,
   rosterType: RosterType = "fullSeason"
 ): Promise<RosterEntry[]> {
@@ -216,7 +221,7 @@ export async function getCardinalsRoster(
       status?: { description?: string };
     }>;
   }>(
-    `https://statsapi.mlb.com/api/v1/teams/${CARDINALS_TEAM_ID}/roster?rosterType=${rosterType}&season=${year}&hydrate=person`,
+    `https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=${rosterType}&season=${year}&hydrate=person`,
     3600
   );
 
@@ -243,10 +248,10 @@ export type FortyManSplit = {
 // so we split them back out here rather than trusting the raw list, and
 // also check the full-season roster in case a 60-day IL player has fallen
 // off the 40Man listing entirely.
-export async function getFortyManSplit(year: number): Promise<FortyManSplit> {
+export async function getFortyManSplit(year: number, teamId = CARDINALS_TEAM_ID): Promise<FortyManSplit> {
   const [rawFortyMan, fullSeason] = await Promise.all([
-    getCardinalsRoster(year, "40Man"),
-    getCardinalsRoster(year, "fullSeason"),
+    getTeamRoster(teamId, year, "40Man"),
+    getTeamRoster(teamId, year, "fullSeason"),
   ]);
 
   const isSixtyDayIL = (player: RosterEntry) => player.status?.includes("60-Day") ?? false;

@@ -1,4 +1,4 @@
-import { playerHeadshotUrl, teamLogoUrl, CARDINALS_TEAM_ID } from "@/lib/mlb";
+import { playerHeadshotUrl, teamLogoUrl } from "@/lib/mlb";
 
 // A shareable PNG of the built roster: headshots for the 26-man roster up
 // top, the session's transactions in smaller print underneath. Drawn
@@ -23,8 +23,13 @@ export type GraphicSection = { title: string; rows: GraphicRow[] };
 
 export type GraphicTransaction = { label: string; color: string; summary: string; detail?: string };
 
+// The club's colors (see lib/teams.ts): `primary` behind the header and
+// numbers, `accent` for the stripe, `highlight` for titles and positions.
+export type GraphicTeam = { id: number; name: string; primary: string; accent: string; highlight: string };
+
 export type RosterGraphicData = {
   season: number;
+  team: GraphicTeam;
   left: GraphicSection[];
   right: GraphicSection[];
   stats: { label: string; value: string }[];
@@ -50,8 +55,6 @@ const COLORS = {
   line: "#dcd3c0",
   text: "#17181c",
   muted: "#5a5c63",
-  red: "#c41e3a",
-  navy: "#0f2a52",
 };
 
 const DISPLAY_FONT = `"Anton", Impact, sans-serif`;
@@ -94,6 +97,7 @@ function initials(name: string) {
 
 function drawHeadshot(
   ctx: CanvasRenderingContext2D,
+  team: GraphicTeam,
   image: HTMLImageElement | null,
   name: string,
   cx: number,
@@ -104,7 +108,7 @@ function drawHeadshot(
   ctx.beginPath();
   ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
   ctx.closePath();
-  ctx.fillStyle = image ? "#e8e2d4" : COLORS.navy;
+  ctx.fillStyle = image ? "#e8e2d4" : team.primary;
   ctx.fill();
   ctx.clip();
 
@@ -179,12 +183,13 @@ function drawColumn(
   sections: GraphicSection[],
   x: number,
   top: number,
-  headshots: Map<number, HTMLImageElement | null>
+  headshots: Map<number, HTMLImageElement | null>,
+  team: GraphicTeam
 ) {
   let y = top;
 
   for (const section of sections) {
-    ctx.fillStyle = COLORS.red;
+    ctx.fillStyle = team.highlight;
     ctx.font = `30px ${DISPLAY_FONT}`;
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
@@ -214,7 +219,7 @@ function drawColumn(
       let cursor = x + 14;
 
       if (row.badge) {
-        ctx.fillStyle = COLORS.navy;
+        ctx.fillStyle = team.primary;
         ctx.font = `26px ${DISPLAY_FONT}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -223,7 +228,7 @@ function drawColumn(
       cursor += 36;
 
       if (row.tag) {
-        ctx.fillStyle = row.player ? COLORS.red : COLORS.muted;
+        ctx.fillStyle = row.player ? team.highlight : COLORS.muted;
         ctx.font = `800 20px ${BODY_FONT}`;
         ctx.textAlign = "right";
         ctx.textBaseline = "middle";
@@ -232,7 +237,7 @@ function drawColumn(
       const tagSpace = row.tag ? 70 : 18;
 
       if (row.player) {
-        drawHeadshot(ctx, headshots.get(row.player.id) ?? null, row.player.name, cursor + HEADSHOT / 2, midY, HEADSHOT);
+        drawHeadshot(ctx, team, headshots.get(row.player.id) ?? null, row.player.name, cursor + HEADSHOT / 2, midY, HEADSHOT);
         cursor += HEADSHOT + 14;
 
         const handText = row.player.hand ? ` (${row.player.hand})` : "";
@@ -279,7 +284,7 @@ export async function renderRosterGraphic(data: RosterGraphicData): Promise<Blob
   );
   const [siteLogo, teamLogo, ...photos] = await Promise.all([
     loadImage("/images/logo.png"),
-    loadImage(teamLogoUrl(CARDINALS_TEAM_ID).replace("team-cap-on-light", "team-cap-on-dark")),
+    loadImage(teamLogoUrl(data.team.id).replace("team-cap-on-light", "team-cap-on-dark")),
     ...playerIds.map(loadHeadshot),
   ]);
   const headshots = new Map(playerIds.map((id, index) => [id, photos[index]]));
@@ -321,9 +326,9 @@ export async function renderRosterGraphic(data: RosterGraphicData): Promise<Blob
   ctx.fillRect(0, 0, WIDTH, height);
 
   // Header band.
-  ctx.fillStyle = COLORS.navy;
+  ctx.fillStyle = data.team.primary;
   ctx.fillRect(0, 0, WIDTH, HEADER_HEIGHT);
-  ctx.fillStyle = COLORS.red;
+  ctx.fillStyle = data.team.accent;
   ctx.fillRect(0, HEADER_HEIGHT - 10, WIDTH, 10);
 
   let titleX = PAD;
@@ -336,8 +341,8 @@ export async function renderRosterGraphic(data: RosterGraphicData): Promise<Blob
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.font = `800 22px ${BODY_FONT}`;
-  ctx.fillStyle = "#f2b8c2";
-  ctx.fillText(`${data.season} ST. LOUIS CARDINALS`, titleX, 78);
+  ctx.fillStyle = "rgba(255,255,255,0.75)";
+  ctx.fillText(`${data.season} ${data.team.name.toUpperCase()}`, titleX, 78);
   ctx.fillStyle = "#ffffff";
   ctx.font = `64px ${DISPLAY_FONT}`;
   ctx.fillText("PROJECTED ROSTER", titleX, 148);
@@ -362,8 +367,8 @@ export async function renderRosterGraphic(data: RosterGraphicData): Promise<Blob
     statX += labelWidth + ctx.measureText(stat.value).width + 40;
   }
 
-  drawColumn(ctx, data.left, PAD, bodyTop, headshots);
-  drawColumn(ctx, data.right, PAD + COLUMN_WIDTH + COLUMN_GAP, bodyTop, headshots);
+  drawColumn(ctx, data.left, PAD, bodyTop, headshots, data.team);
+  drawColumn(ctx, data.right, PAD + COLUMN_WIDTH + COLUMN_GAP, bodyTop, headshots, data.team);
 
   // Transactions, in smaller print.
   let y = bodyTop + bodyHeight + 36;
@@ -375,7 +380,7 @@ export async function renderRosterGraphic(data: RosterGraphicData): Promise<Blob
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    ctx.fillStyle = COLORS.navy;
+    ctx.fillStyle = data.team.primary;
     ctx.font = `22px ${DISPLAY_FONT}`;
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";

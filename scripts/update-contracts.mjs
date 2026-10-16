@@ -159,6 +159,56 @@ async function findPlayerId(name, teamId) {
   return matches.length === 1 ? matches[0].id : null;
 }
 
+// FanGraphs describes deferrals in a free-text note. Phrasings that pin
+// down how much of SEASON's salary is deferred are read into a number:
+// "$68 million deferred annually", "$7.75M each year is deferred",
+// "$5.25M of each guaranteed year's salary is deferred", "$10M each from
+// 2027-29", "$3M from 2027". Anything else is kept as the note only.
+function deferralFrom(summary) {
+  const note = [summary.LongContractSummaryPayrollNote, summary.ContractSummaryPayrollNote].find((text) =>
+    /defer/i.test(text ?? "")
+  );
+  if (!note) {
+    return {};
+  }
+
+  const amount = (text) => Math.round(Number(text) * 1_000_000);
+  const M = String.raw`\$([\d.]+)\s*(?:million|MM|M)`;
+  let perSeason = null;
+
+  const everyYear = [
+    new RegExp(`${M}\\s+(?:is\\s+)?deferred\\s+(?:annually|each year|per year|per season)`, "i"),
+    new RegExp(`${M}\\s+(?:each year|annually)\\s+is\\s+deferred`, "i"),
+    new RegExp(`${M}\\s+of each (?:guaranteed )?year'?s salary is deferred`, "i"),
+  ];
+  for (const pattern of everyYear) {
+    const match = note.match(pattern);
+    if (match) {
+      perSeason = amount(match[1]);
+      break;
+    }
+  }
+
+  if (perSeason === null) {
+    for (const match of note.matchAll(new RegExp(`${M}\\s+each\\s+from\\s+(\\d{4})[-–](\\d{2,4})`, "gi"))) {
+      const start = Number(match[2]);
+      const end = Number(match[3].length === 2 ? String(start).slice(0, 2) + match[3] : match[3]);
+      if (SEASON >= start && SEASON <= end) {
+        perSeason = amount(match[1]);
+      }
+    }
+  }
+
+  if (perSeason === null) {
+    const exact = note.match(new RegExp(`${M}\\s+from\\s+${SEASON}\\b`, "i"));
+    if (exact) {
+      perSeason = amount(exact[1]);
+    }
+  }
+
+  return { deferralNote: decodeEntities(note).trim(), ...(perSeason ? { deferredPerSeason: perSeason } : {}) };
+}
+
 function buildContract(summary, years, allYears, arbitration) {
   const current = years.find((year) => year.Season === SEASON);
   const type = current.Type.toUpperCase();
@@ -173,12 +223,19 @@ function buildContract(summary, years, allYears, arbitration) {
       ? ` · ${/MUTUAL/i.test(options[0].Type) ? "mutual" : "club"} option ${seasonRange(options[0].Season, options[options.length - 1].Season)}`
       : "";
 
+    const deferral = deferralFrom(summary);
+    // Luxury-tax hit: the deal's AAV, with deferred money at present value.
+    const cbt = current.TotalCBTHit ? Math.round(current.TotalCBTHit) : null;
+
     return {
       status: "guaranteed",
       salary: Math.round(current.Salary),
       detail: `${summary.YearsTotal} yr / ${money(summary.ContractTotal)} (${seasonRange(summary.startSeason, summary.endSeason)})${optionNote}`,
       freeAgentAfter: lastGuaranteed,
       salaryBySeason,
+      ...(cbt !== null && Math.abs(cbt - current.Salary) >= 1 ? { cbt } : {}),
+      ...(deferral.deferralNote ? { deferralNote: deferral.deferralNote } : {}),
+      ...(deferral.deferredPerSeason ? { deferred: Math.min(deferral.deferredPerSeason, Math.round(current.Salary)) } : {}),
     };
   }
 
@@ -220,6 +277,8 @@ async function main() {
   const contracts = {};
   const preArbFreeAgentAfter = {};
   const otherPayments = {};
+  const taxAdjustments = {};
+  let playerBenefits = null;
   const fanGraphsArbIds = new Map();
   const unmatchedArb = [];
 
@@ -304,6 +363,25 @@ async function main() {
     if (payments.length) {
       otherPayments[teamId] = payments;
     }
+
+    // Luxury-tax-only entries: e.g. AAV credits and debits when cash
+    // changed hands in a trade.
+    const adjustments = (data.dataOtherPaymentsLuxuryTax ?? [])
+      .filter((payment) => payment.Season === SEASON && payment.PaymentAmount)
+      .map((payment) => ({
+        amount: Math.round(payment.PaymentAmount),
+        description: decodeEntities(payment.PaymentDescription ?? ""),
+      }));
+    if (adjustments.length) {
+      taxAdjustments[teamId] = adjustments;
+    }
+
+    // FanGraphs' league-wide estimate of player benefits, which count
+    // toward every club's luxury-tax payroll.
+    const overall = (data.dataOverall ?? []).find((row) => row.Season === SEASON);
+    if (overall?.estPlayerBenefits) {
+      playerBenefits = Math.round(overall.estPlayerBenefits);
+    }
   }
 
   // Projections that didn't match by team — usually a player FanGraphs has
@@ -350,11 +428,15 @@ async function main() {
     contracts,
     preArbFreeAgentAfter,
     otherPayments,
+    taxAdjustments,
+    playerBenefits,
   };
   await writeFile(OUTPUT, `${JSON.stringify(output)}\n`);
 
   console.log(`Wrote ${Object.keys(contracts).length} contracts, ${Object.keys(preArbFreeAgentAfter).length} pre-arb FA years, other payments for ${Object.keys(otherPayments).length} teams`);
   console.log(`Arbitration: ${unmatchedArb.length} of ${arbitration.length} projections unmatched`);
+  const deferrals = Object.entries(contracts).filter(([, contract]) => contract.deferralNote);
+  console.log(`Deferrals: ${deferrals.length} contracts with notes, ${deferrals.filter(([, c]) => c.deferred).length} with a per-season amount`);
   if (unmatchedArb.length) {
     console.log(`  Unmatched: ${unmatchedArb.join(", ")}`);
   }
