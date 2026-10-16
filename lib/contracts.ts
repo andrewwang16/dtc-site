@@ -18,6 +18,12 @@ export const CONTRACTS_UPDATED = contractData.updated;
 // pre-arb salaries are an estimate until that's settled.
 export const PRE_ARB_SALARY_ESTIMATE = 780_000;
 
+// What a 40-man player earns while in the minors on a split contract (2026
+// CBA figures, used until the next CBA sets 2027's): less on a player's
+// first major league contract, more on any later one.
+export const MINOR_LEAGUE_SALARY_FIRST_CONTRACT = 63_600;
+export const MINOR_LEAGUE_SALARY = 127_100;
+
 // "signed" is a deal made inside the roster builder (a created player, a
 // free agent, or an extension that replaces the current deal), not a real
 // contract. "extended" is a real current deal plus a builder extension that
@@ -71,6 +77,10 @@ const CONTRACT_OVERRIDES: Record<number, Partial<ContractInfo>> = {
 
 // Free-agency year for pre-arb players, from FanGraphs.
 const PRE_ARB_FREE_AGENT_AFTER = contractData.preArbFreeAgentAfter as Record<string, number>;
+
+// Pre-arb players' prior-season salaries (FanGraphs) — clubs pay them a bit
+// over the minimum, so these differ player to player.
+const PRE_ARB_PRIOR_SALARY = contractData.preArbPriorSalary as Record<string, number>;
 
 const OTHER_PAYMENTS = contractData.otherPayments as Record<string, OtherPayment[]>;
 
@@ -126,11 +136,17 @@ function estimateFreeAgentAfter(debutDate?: string): number {
 
 function preArbContract(playerId: number, debutDate?: string): ContractInfo {
   const known = PRE_ARB_FREE_AGENT_AFTER[playerId];
+  const prior = PRE_ARB_PRIOR_SALARY[playerId];
+  // At least last season's salary, and never under the minimum.
+  const salary = Math.max(PRE_ARB_SALARY_ESTIMATE, prior ?? 0);
 
   return {
     status: "pre-arb",
-    salary: PRE_ARB_SALARY_ESTIMATE,
-    detail: "Pre-arb · near league minimum",
+    salary,
+    detail:
+      prior && prior > PRE_ARB_SALARY_ESTIMATE
+        ? `Pre-arb · ${formatSalary(prior)} in ${CONTRACT_SEASON - 1}`
+        : "Pre-arb · near league minimum",
     freeAgentAfter: known ?? estimateFreeAgentAfter(debutDate),
     freeAgentEstimated: known === undefined,
   };

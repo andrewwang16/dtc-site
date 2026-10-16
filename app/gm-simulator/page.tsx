@@ -33,6 +33,11 @@ export default async function GmSimulatorPage({ searchParams }: GmSimulatorPageP
     <div style={{ display: "grid", gap: "1rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up">
         <h1 className="section-title">GM Simulator</h1>
+        <p style={{ marginTop: "0.6rem", color: "var(--muted)", maxWidth: "68ch", lineHeight: 1.5 }}>
+          Run any club&apos;s 2027 roster: pick a team, then trade, sign free agents, and extend players while payroll
+          and the luxury tax update live. Drag players into the lineup, rotation, bullpen, and bench to set your 26-man,
+          then download a graphic of it.
+        </p>
       </section>
 
       <section className="container fade-up" style={{ animationDelay: "0.06s" }}>

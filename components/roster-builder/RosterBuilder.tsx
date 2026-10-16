@@ -21,6 +21,9 @@ import {
   CONTRACTS_UPDATED,
   DEFERRAL_DISCOUNT_RATE,
   PLAYER_BENEFITS_ESTIMATE,
+  MINOR_LEAGUE_SALARY,
+  MINOR_LEAGUE_SALARY_FIRST_CONTRACT,
+  PRE_ARB_SALARY_ESTIMATE,
   signedContract,
   flatSalaries,
   type ContractInfo,
@@ -967,71 +970,6 @@ export default function RosterBuilder({
     [transactions, contractFor]
   );
 
-  // Everyone on the 40-man or the 60-day IL is paid. Non-tendered players
-  // and declined options cost nothing; DFA'd guaranteed deals are dead money,
-  // on top of what the club already owes players it's moved on from
-  // (cash sent in trades, releases, buyouts).
-  const payroll = useMemo(() => {
-    const otherPayments = getOtherPayments(teamId);
-    const currentOtherPayments = otherPayments.filter((payment) => payment.season === CONTRACT_SEASON);
-    const paidPlayers = [...fortyMan, ...reserveIL];
-    const rows = paidPlayers
-      .map((player) => ({ player, contract: contractFor(player) }))
-      .sort((a, b) => (b.contract?.salary ?? -1) - (a.contract?.salary ?? -1));
-
-    const totals = { guaranteed: 0, arbitration: 0, preArb: 0, deadMoney: 0, unknownCount: 0 };
-
-    for (const { contract } of rows) {
-      if (!contract) {
-        totals.unknownCount += 1;
-      } else if (contract.status === "arbitration") {
-        totals.arbitration += contract.salary;
-      } else if (contract.status === "pre-arb") {
-        totals.preArb += contract.salary;
-      } else {
-        totals.guaranteed += contract.salary;
-      }
-    }
-
-    for (const entry of deadMoney) {
-      totals.deadMoney += entry.amount;
-    }
-    for (const payment of currentOtherPayments) {
-      totals.deadMoney += payment.amount;
-    }
-
-    const total = totals.guaranteed + totals.arbitration + totals.preArb + totals.deadMoney;
-
-    // Later seasons only count money that's actually guaranteed (real
-    // multi-year deals and builder signings, including dead money) —
-    // arbitration and pre-arb salaries past next season aren't projected.
-    const future = Array.from({ length: FUTURE_COMMITMENT_SEASONS }, (_, index) => {
-      const season = CONTRACT_SEASON + 1 + index;
-      const committed =
-        rows.reduce((sum, { contract }) => sum + (contract?.salaryBySeason?.[season] ?? 0), 0) +
-        deadMoney.reduce((sum, entry) => sum + (entry.salaryBySeason?.[season] ?? 0), 0) +
-        otherPayments.filter((payment) => payment.season === season).reduce((sum, payment) => sum + payment.amount, 0);
-      return { season, committed };
-    });
-
-    // Part of this season's salaries paid in later years (real deferrals
-    // FanGraphs spells out, and builder deals).
-    const deferred = rows.reduce((sum, { contract }) => sum + (contract?.deferred ?? 0), 0);
-
-    // Luxury-tax payroll: each contract at its tax hit (a guaranteed deal's
-    // AAV, deferred money at present value), money owed to former players,
-    // FanGraphs' tax-only adjustments, and player benefits.
-    const taxAdjustments = getTaxAdjustments(teamId);
-    const taxPayroll =
-      rows.reduce((sum, { contract }) => sum + (contract ? contract.cbt ?? contract.salary : 0), 0) +
-      deadMoney.reduce((sum, entry) => sum + entry.taxAmount, 0) +
-      currentOtherPayments.reduce((sum, payment) => sum + payment.amount, 0) +
-      taxAdjustments.reduce((sum, adjustment) => sum + adjustment.amount, 0) +
-      PLAYER_BENEFITS_ESTIMATE;
-    const luxuryTax = computeLuxuryTax(taxPayroll, payorStatus);
-
-    return { rows, totals, total, future, currentOtherPayments, deferred, taxPayroll, taxAdjustments, luxuryTax };
-  }, [fortyMan, reserveIL, deadMoney, contractFor, teamId, payorStatus]);
 
   const fortyManIds = useMemo(() => new Set(fortyMan.map((player) => player.id)), [fortyMan]);
   const fortyManById = useMemo(() => new Map(fortyMan.map((player) => [player.id, player])), [fortyMan]);
@@ -1091,6 +1029,120 @@ export default function RosterBuilder({
       });
     }
   }, [extraSlot?.id, assignments]);
+
+  // Everyone on the 40-man or the 60-day IL is paid — but a pre-arb player
+  // who isn't on the 26-man is in the minors on a split contract, paid the
+  // minor league 40-man salary instead. Non-tendered players
+  // and declined options cost nothing; DFA'd guaranteed deals are dead money,
+  // on top of what the club already owes players it's moved on from
+  // (cash sent in trades, releases, buyouts).
+  const payroll = useMemo(() => {
+    const otherPayments = getOtherPayments(teamId);
+    const currentOtherPayments = otherPayments.filter((payment) => payment.season === CONTRACT_SEASON);
+    // The projected 26-man: everyone in a slot, then — while spots are still
+    // open — the unslotted 40-man players most likely to fill them: those on
+    // real big-league deals first, then pre-arb players by MLB debut.
+    const slottedIds = new Set(
+      allSlots.map((slot) => assignments[slot.id]).filter((id): id is number => id != null)
+    );
+    const openSpots = Math.max(0, TOTAL_SLOTS - slottedIds.size);
+    const isPreArb = (player: SimplePlayer) => contractFor(player)?.status === "pre-arb";
+    const projectedActive = new Set(slottedIds);
+    fortyMan
+      .filter((player) => !slottedIds.has(player.id))
+      .sort((a, b) => {
+        if (isPreArb(a) !== isPreArb(b)) {
+          return isPreArb(a) ? 1 : -1;
+        }
+        return (a.debutDate ?? "9999").localeCompare(b.debutDate ?? "9999");
+      })
+      .slice(0, openSpots)
+      .forEach((player) => projectedActive.add(player.id));
+
+    // Anyone on a 40-man before this offseason (the club's own or acquired
+    // from another's) is on at least their second major league contract;
+    // players newly added (selected) are on their first.
+    const priorFortyManIds = new Set([
+      ...roster.map((player) => player.id),
+      ...sixtyDayIL.map((player) => player.id),
+      ...transactions.filter((transaction) => transaction.kind === "trade").flatMap((transaction) => transaction.incoming.map((player) => player.id)),
+    ]);
+    const onFortyMan = new Set(fortyMan.map((player) => player.id));
+
+    const rows = [...fortyMan, ...reserveIL]
+      .map((player) => {
+        const contract = contractFor(player);
+        const inMinors = onFortyMan.has(player.id) && contract?.status === "pre-arb" && !projectedActive.has(player.id);
+        const minorSalary = priorFortyManIds.has(player.id) ? MINOR_LEAGUE_SALARY : MINOR_LEAGUE_SALARY_FIRST_CONTRACT;
+        return { player, contract, inMinors, salary: inMinors ? minorSalary : contract?.salary ?? 0 };
+      })
+      .sort((a, b) => (b.contract ? b.salary : -1) - (a.contract ? a.salary : -1));
+
+    const totals = { guaranteed: 0, arbitration: 0, preArb: 0, deadMoney: 0, unknownCount: 0 };
+
+    for (const { contract, salary } of rows) {
+      if (!contract) {
+        totals.unknownCount += 1;
+      } else if (contract.status === "arbitration") {
+        totals.arbitration += salary;
+      } else if (contract.status === "pre-arb") {
+        totals.preArb += salary;
+      } else {
+        totals.guaranteed += salary;
+      }
+    }
+    const minorsCount = rows.filter((row) => row.inMinors).length;
+
+    for (const entry of deadMoney) {
+      totals.deadMoney += entry.amount;
+    }
+    for (const payment of currentOtherPayments) {
+      totals.deadMoney += payment.amount;
+    }
+
+    const total = totals.guaranteed + totals.arbitration + totals.preArb + totals.deadMoney;
+
+    // Later seasons only count money that's actually guaranteed (real
+    // multi-year deals and builder signings, including dead money) —
+    // arbitration and pre-arb salaries past next season aren't projected.
+    const future = Array.from({ length: FUTURE_COMMITMENT_SEASONS }, (_, index) => {
+      const season = CONTRACT_SEASON + 1 + index;
+      const committed =
+        rows.reduce((sum, { contract }) => sum + (contract?.salaryBySeason?.[season] ?? 0), 0) +
+        deadMoney.reduce((sum, entry) => sum + (entry.salaryBySeason?.[season] ?? 0), 0) +
+        otherPayments.filter((payment) => payment.season === season).reduce((sum, payment) => sum + payment.amount, 0);
+      return { season, committed };
+    });
+
+    // Part of this season's salaries paid in later years (real deferrals
+    // FanGraphs spells out, and builder deals).
+    const deferred = rows.reduce((sum, { contract }) => sum + (contract?.deferred ?? 0), 0);
+
+    // Luxury-tax payroll: each contract at its tax hit (a guaranteed deal's
+    // AAV, deferred money at present value), money owed to former players,
+    // FanGraphs' tax-only adjustments, and player benefits.
+    const taxAdjustments = getTaxAdjustments(teamId);
+    const taxPayroll =
+      rows.reduce((sum, { contract, salary, inMinors }) => sum + (contract ? (inMinors ? salary : contract.cbt ?? salary) : 0), 0) +
+      deadMoney.reduce((sum, entry) => sum + entry.taxAmount, 0) +
+      currentOtherPayments.reduce((sum, payment) => sum + payment.amount, 0) +
+      taxAdjustments.reduce((sum, adjustment) => sum + adjustment.amount, 0) +
+      PLAYER_BENEFITS_ESTIMATE;
+    const luxuryTax = computeLuxuryTax(taxPayroll, payorStatus);
+
+    return {
+      rows,
+      totals,
+      total,
+      future,
+      currentOtherPayments,
+      deferred,
+      taxPayroll,
+      taxAdjustments,
+      luxuryTax,
+      minorsCount,
+    };
+  }, [fortyMan, reserveIL, deadMoney, contractFor, teamId, payorStatus, allSlots, assignments, roster, sixtyDayIL, transactions]);
 
   const addPool = useMemo((): SimplePlayer[] => {
     const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
@@ -1908,7 +1960,7 @@ export default function RosterBuilder({
                 background: "rgba(196,30,58,0.12)",
               }}
             >
-              {positionView === "defense" ? "LINEUP" : "DEFENSE"}
+              {positionView === "defense" ? "EDIT LINEUP" : "EDIT DEFENSE"}
             </button>
           </div>
           {positionView === "lineup" ? (
@@ -2423,7 +2475,7 @@ export default function RosterBuilder({
                   </tr>
                 </thead>
                 <tbody>
-                  {payroll.rows.map(({ player, contract }) => {
+                  {payroll.rows.map(({ player, contract, salary, inMinors }) => {
                     // Created players get a contract set directly; real players
                     // can be extended (a logged, undoable move), and a deal the
                     // builder already made can be edited in place.
@@ -2443,9 +2495,17 @@ export default function RosterBuilder({
                         </td>
                         <td style={{ padding: "0.4rem 0.5rem", whiteSpace: "nowrap" }}>
                           {contract ? CONTRACT_STATUS_LABELS[contract.status] : "Unknown"}
+                          {inMinors && (
+                            <span
+                              style={{ display: "block", fontSize: "0.7rem", color: "var(--muted)" }}
+                              title="Not on the 26-man, so paid the minor league 40-man salary"
+                            >
+                              In minors · 40-man
+                            </span>
+                          )}
                         </td>
                         <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 700, whiteSpace: "nowrap" }}>
-                          {contract ? formatSalary(contract.salary) : "—"}
+                          {contract ? formatSalary(salary) : "—"}
                           {contract?.deferred ? (
                             <span style={{ display: "block", fontSize: "0.7rem", color: "var(--muted)", fontWeight: 600 }}>
                               {formatSalary(contract.deferred)} deferred
@@ -2554,8 +2614,12 @@ export default function RosterBuilder({
             <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.78rem" }}>
               All salary figures are estimates. Contracts, options and dead money come from FanGraphs RosterResource for
               every club (so players acquired in trades bring their real salaries), and arbitration figures are MLB
-              Trade Rumors projections — both as of {CONTRACTS_UPDATED}. Pre-arb salaries use the{" "}
-              {CONTRACT_SEASON - 1} league minimum. Pre-arb free-agency years come from FanGraphs where listed; years
+              Trade Rumors projections — both as of {CONTRACTS_UPDATED}. Pre-arb players on the 26-man earn their{" "}
+              {CONTRACT_SEASON - 1} salary or the {formatSalary(PRE_ARB_SALARY_ESTIMATE)} minimum, whichever is more;
+              pre-arb 40-man players in the minors earn the minor league 40-man salary (
+              {formatSalary(MINOR_LEAGUE_SALARY_FIRST_CONTRACT)} on a first major league contract,{" "}
+              {formatSalary(MINOR_LEAGUE_SALARY)} after; {CONTRACT_SEASON - 1} CBA figures). Until all 26 spots are set,
+              the open spots are assumed to go to the most experienced unassigned 40-man players. Pre-arb free-agency years come from FanGraphs where listed; years
               marked &ldquo;est.&rdquo; are the earliest possible, based on MLB debut date. Includes the 40-man, the
               60-day IL, and money still owed to players no longer on the roster (cash sent in trades, buyouts).
               Removing a player from the 40-man declines a club or mutual option (the salary comes off, but any buyout stays
