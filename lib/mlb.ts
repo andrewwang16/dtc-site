@@ -1080,3 +1080,76 @@ export async function getWildCardStandings(season: number): Promise<TeamStanding
     }))
     .sort((a, b) => Number(a.rank) - Number(b.rank));
 }
+
+// How a player was used in one MLB season: games at each fielding position
+// (DH included) and, for pitchers, starts, relief outings, saves and holds.
+// The GM Simulator ranks players for an open roster spot by this.
+export type PositionUsage = {
+  games: Record<string, number>;
+  starts: number;
+  relief: number;
+  saves: number;
+  holds: number;
+};
+
+type UsageStatsPerson = {
+  id: number;
+  stats?: Array<{
+    group?: { displayName?: string };
+    splits?: Array<{
+      team?: { id?: number };
+      position?: { abbreviation?: string };
+      stat?: { gamesPlayed?: number; gamesStarted?: number; saves?: number; holds?: number };
+    }>;
+  }>;
+};
+
+export async function getPositionUsage(playerIds: number[], season: number): Promise<Record<number, PositionUsage>> {
+  const usage: Record<number, PositionUsage> = {};
+  const ids = [...new Set(playerIds.filter((id) => id > 0))];
+
+  // The people endpoint takes a list of ids; keep URLs a reasonable length.
+  const batches: number[][] = [];
+  for (let index = 0; index < ids.length; index += 50) {
+    batches.push(ids.slice(index, index + 50));
+  }
+
+  const responses = await Promise.all(
+    batches.map((batch) =>
+      fetchJson<{ people?: UsageStatsPerson[] }>(
+        `https://statsapi.mlb.com/api/v1/people?personIds=${batch.join(",")}&hydrate=stats(group=[fielding,pitching],type=[season],season=${season})`,
+        21_600
+      )
+    )
+  );
+
+  for (const person of responses.flatMap((response) => response?.people ?? [])) {
+    const entry: PositionUsage = { games: {}, starts: 0, relief: 0, saves: 0, holds: 0 };
+
+    for (const block of person.stats ?? []) {
+      const splits = block.splits ?? [];
+      // A traded player gets one split per team (and sometimes a combined
+      // one without a team) — count per-team splits so nothing doubles.
+      const counted = splits.some((split) => split.team?.id) ? splits.filter((split) => split.team?.id) : splits;
+
+      for (const split of counted) {
+        const stat = split.stat ?? {};
+        if (block.group?.displayName === "fielding") {
+          const position = split.position?.abbreviation;
+          if (position && position !== "P") {
+            entry.games[position] = (entry.games[position] ?? 0) + (stat.gamesPlayed ?? 0);
+          }
+        } else if (block.group?.displayName === "pitching") {
+          entry.starts += stat.gamesStarted ?? 0;
+          entry.relief += (stat.gamesPlayed ?? 0) - (stat.gamesStarted ?? 0);
+          entry.saves += stat.saves ?? 0;
+          entry.holds += stat.holds ?? 0;
+        }
+      }
+    }
+
+    usage[person.id] = entry;
+  }
+
+  return usage;
+}

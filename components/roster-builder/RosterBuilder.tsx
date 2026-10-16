@@ -7,6 +7,7 @@ import {
   teamLogoUrl,
   playerHeadshotUrl,
   stripDiacritics,
+  type PositionUsage,
   type RosterEntry,
 } from "@/lib/mlb";
 import PlayerHeadshot from "@/components/shared/PlayerHeadshot";
@@ -193,6 +194,51 @@ function displayLastName(player: SimplePlayer) {
 
   const parts = player.fullName.trim().split(/\s+/);
   return parts[parts.length - 1];
+}
+
+// Player lists are alphabetical by last name ("De La Cruz" under D).
+function compareByLastName(a: SimplePlayer, b: SimplePlayer) {
+  return (
+    displayLastName(a).localeCompare(displayLastName(b), undefined, { sensitivity: "base" }) ||
+    a.fullName.localeCompare(b.fullName, undefined, { sensitivity: "base" })
+  );
+}
+
+function sortByLastName<T extends SimplePlayer>(players: T[]): T[] {
+  return [...players].sort(compareByLastName);
+}
+
+// How well a player fits an open roster spot, from last season's usage:
+// games at that position, starts for the rotation, relief outings for the
+// bullpen, holds for setup, saves for the closer, and total games for the
+// bench. Players without MLB stats fall back to their listed position.
+// `hint` explains the ranking in the picker ("135 G at SS").
+function slotFit(player: SimplePlayer, slot: SlotDef, usage: PositionUsage | undefined): { score: number; hint?: string } {
+  const listed = (position: string) => (player.position === position ? 0.5 : 0);
+
+  if (slot.group === "diamond") {
+    const games = usage?.games[slot.id] ?? 0;
+    return { score: games + listed(slot.id), hint: games > 0 ? `${games} G at ${slot.id}` : undefined };
+  }
+  if (slot.group === "bench") {
+    const games = Object.values(usage?.games ?? {}).reduce((sum, count) => sum + count, 0);
+    return { score: games, hint: games > 0 ? `${games} G` : undefined };
+  }
+  if (slot.group === "rotation") {
+    const starts = usage?.starts ?? 0;
+    return { score: starts, hint: starts > 0 ? `${starts} GS` : undefined };
+  }
+
+  const relief = usage?.relief ?? 0;
+  if (slot.id === "CL") {
+    const saves = usage?.saves ?? 0;
+    return { score: saves * 1000 + relief, hint: saves > 0 ? `${saves} SV` : relief > 0 ? `${relief} relief G` : undefined };
+  }
+  if (slot.id === "SU") {
+    const holds = usage?.holds ?? 0;
+    return { score: holds * 1000 + relief, hint: holds > 0 ? `${holds} HLD` : relief > 0 ? `${relief} relief G` : undefined };
+  }
+  return { score: relief, hint: relief > 0 ? `${relief} relief G` : undefined };
 }
 
 const HAND_NAMES: Record<string, string> = { L: "left", R: "right", S: "switch" };
@@ -626,7 +672,7 @@ function SlotCell({
   onClear: (slot: SlotDef) => void;
   query: string;
   onQueryChange: (value: string) => void;
-  eligiblePlayers: SimplePlayer[];
+  eligiblePlayers: Array<SimplePlayer & { fitHint?: string }>;
   onSelect: (slot: SlotDef, player: SimplePlayer) => void;
 }) {
   const isDiamond = slot.group === "diamond";
@@ -734,8 +780,8 @@ function SlotCell({
                   <span style={{ fontWeight: 700 }}>
                     <PlayerName player={eligible} />
                   </span>
-                  <span style={{ color: "var(--muted)", marginLeft: "auto" }} title={handTitle(eligible)}>
-                    {positionLabel(eligible)}
+                  <span style={{ color: "var(--muted)", marginLeft: "auto", whiteSpace: "nowrap" }} title={handTitle(eligible)}>
+                    {eligible.fitHint ?? positionLabel(eligible)}
                   </span>
                 </button>
               ))
@@ -862,6 +908,7 @@ export default function RosterBuilder({
   prospects,
   sixtyDayIL,
   departingFreeAgents = [],
+  positionUsage = {},
 }: {
   teamId: number;
   roster: RosterEntry[];
@@ -869,6 +916,8 @@ export default function RosterBuilder({
   sixtyDayIL: RosterEntry[];
   // Names of players left off because their contracts are up.
   departingFreeAgents?: string[];
+  // Last season's usage by player id (see slotFit).
+  positionUsage?: Record<number, PositionUsage>;
 }) {
   const router = useRouter();
   const team = getTeamInfo(teamId);
@@ -902,6 +951,9 @@ export default function RosterBuilder({
   // real contract data for that player.
   const [signings, setSignings] = useState<Record<number, Signing>>({});
   const [payrollOpen, setPayrollOpen] = useState(false);
+  // Starts with this club's players; trade partners' 40-man usage is added
+  // as their systems load.
+  const [usageById, setUsageById] = useState<Record<number, PositionUsage>>(positionUsage);
   const [payorStatus, setPayorStatus] = useState<PayorStatus>("first");
   // Where the extra slot goes while a two-way player is both hitting and
   // pitching.
@@ -1175,7 +1227,7 @@ export default function RosterBuilder({
       !fortyManIds.has(player.id) && (!trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed));
 
     if (addTab === "prospects") {
-      return systemProspects.filter(matches).slice(0, 8);
+      return sortByLastName(systemProspects.filter(matches)).slice(0, 8);
     }
 
     return [];
@@ -1184,9 +1236,11 @@ export default function RosterBuilder({
   const freeAgentPool = useMemo(() => {
     const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
 
-    return FREE_AGENTS.filter((player) => !fortyManIds.has(player.id))
-      .filter((player) => freeAgentFilter === "all" || player.groups.includes(freeAgentFilter))
-      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed));
+    return sortByLastName(
+      FREE_AGENTS.filter((player) => !fortyManIds.has(player.id))
+        .filter((player) => freeAgentFilter === "all" || player.groups.includes(freeAgentFilter))
+        .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
+    );
   }, [addQuery, freeAgentFilter, fortyManIds]);
 
   const openSlotDef = allSlots.find((slot) => slot.id === openSlotId) ?? null;
@@ -1207,8 +1261,12 @@ export default function RosterBuilder({
         return !side || (isTwoWay(player) && !(wantsPitcher ? side.pitching : side.hitting));
       })
       .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
-      .slice(0, 8);
-  }, [openSlotDef, fortyMan, assignedSides, slotQuery]);
+      // Best fit for the spot first (see slotFit), then by last name.
+      .map((player) => ({ player, fit: slotFit(player, openSlotDef, usageById[player.id]) }))
+      .sort((a, b) => b.fit.score - a.fit.score || compareByLastName(a.player, b.player))
+      .slice(0, 12)
+      .map(({ player, fit }) => ({ ...player, fitHint: fit.hint }));
+  }, [openSlotDef, fortyMan, assignedSides, slotQuery, usageById]);
 
   // Created players have negative ids, so slot lookups can't use a
   // sentinel id for "empty" — check for an assignment explicitly.
@@ -1371,9 +1429,11 @@ export default function RosterBuilder({
   // Everyone currently with the club, for the Extensions tab.
   const extensionPool = useMemo(() => {
     const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
-    return [...fortyMan, ...reserveIL]
-      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
-      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+    return sortByLastName(
+      [...fortyMan, ...reserveIL].filter(
+        (player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed)
+      )
+    );
   }, [fortyMan, reserveIL, addQuery]);
 
   // When an extension can start: right away (replacing the current deal) or
@@ -1425,8 +1485,9 @@ export default function RosterBuilder({
 
     fetch(`/api/org-players?teamId=${teamId}`)
       .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
-      .then((data: { players: ProspectPlayer[] }) => {
+      .then((data: { players: ProspectPlayer[]; usage?: Record<number, PositionUsage> }) => {
         setOrgPlayers((current) => ({ ...current, [teamId]: data.players.map((player) => ({ ...player, teamId })) }));
+        setUsageById((current) => ({ ...data.usage, ...current }));
       })
       .catch(() => setOrgPlayers((current) => ({ ...current, [teamId]: "error" })));
   }, [tradeTeamId, orgPlayers]);
@@ -1437,8 +1498,9 @@ export default function RosterBuilder({
       return [];
     }
     const trimmed = stripDiacritics(addQuery.trim().toLowerCase());
-    return tradeTeamPlayers
-      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed));
+    return sortByLastName(
+      tradeTeamPlayers.filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
+    );
   }, [tradeTeamPlayers, addQuery]);
 
   // A club's system is loaded once and cached, so it still lists players
@@ -1482,10 +1544,12 @@ export default function RosterBuilder({
 
   const tradeCandidates = useMemo(() => {
     const trimmed = stripDiacritics(tradeQuery.trim().toLowerCase());
-    return orgSystem
-      .filter((player) => !tradeOutgoingIds.includes(player.id))
-      .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
-      .slice(0, 40);
+    // The whole system, by last name (the list scrolls).
+    return sortByLastName(
+      orgSystem
+        .filter((player) => !tradeOutgoingIds.includes(player.id))
+        .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
+    );
   }, [orgSystem, tradeOutgoingIds, tradeQuery]);
 
   function describeTradePiece(player: SystemPlayer & { teamId?: number }) {
@@ -2201,7 +2265,7 @@ export default function RosterBuilder({
           {fortyMan.length === 0 ? (
             <p style={{ margin: 0, color: "var(--muted)" }}>No players on the 40-man roster.</p>
           ) : (
-            fortyMan.map((player) => (
+            sortByLastName(fortyMan).map((player) => (
               <span
                 key={player.id}
                 draggable
@@ -2268,7 +2332,7 @@ export default function RosterBuilder({
               No players currently on the 60-day IL outside the 40-man.
             </p>
           ) : (
-            reserveIL.map((player) => (
+            sortByLastName(reserveIL).map((player) => (
               <span
                 key={player.id}
                 style={{
@@ -2332,7 +2396,7 @@ export default function RosterBuilder({
               style={addTabButtonStyle(addTab === "prospects")}
               onClick={() => { setAddTab("prospects"); setAddQuery(""); }}
             >
-              Prospects
+              Call-Ups
             </button>
             <button
               type="button"
@@ -2778,7 +2842,7 @@ export default function RosterBuilder({
                 placeholder={
                   addTab === "free-agents"
                     ? `Search ${FREE_AGENTS.length} impending free agents...`
-                    : `Search ${team.shortName} prospects...`
+                    : `Search ${team.shortName} minor leaguers to call up...`
                 }
                 style={{
                   width: "100%",
@@ -2919,7 +2983,7 @@ export default function RosterBuilder({
                             fontSize: "0.8rem",
                           }}
                         >
-                          Select contract
+                          Select
                         </button>
                       </div>
                     ))

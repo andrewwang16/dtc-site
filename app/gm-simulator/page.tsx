@@ -1,7 +1,7 @@
-import { getFortyManSplit } from "@/lib/mlb";
+import { getFortyManSplit, getPositionUsage } from "@/lib/mlb";
 import { getOrganizationProspects } from "@/lib/prospects";
 import { parseTeamParam } from "@/lib/teams";
-import { isImpendingFreeAgent } from "@/lib/contracts";
+import { CONTRACT_SEASON, isImpendingFreeAgent } from "@/lib/contracts";
 import RosterBuilder from "@/components/roster-builder/RosterBuilder";
 
 type GmSimulatorPageProps = {
@@ -29,6 +29,13 @@ export default async function GmSimulatorPage({ searchParams }: GmSimulatorPageP
   const sixtyDayIL = staying(fullSixtyDayIL);
   const prospects = staying(allProspects);
 
+  // Last season's games at each position (and pitching roles), for ranking
+  // who fits an open roster spot.
+  const positionUsage = await getPositionUsage(
+    [...roster, ...sixtyDayIL].map((player) => player.id),
+    CONTRACT_SEASON - 1
+  );
+
   return (
     <div style={{ display: "grid", gap: "1rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
       <section className="container fade-up">
@@ -49,6 +56,7 @@ export default async function GmSimulatorPage({ searchParams }: GmSimulatorPageP
           prospects={prospects}
           sixtyDayIL={sixtyDayIL}
           departingFreeAgents={departing.map((player) => player.fullName)}
+          positionUsage={positionUsage}
         />
       </section>
     </div>
