@@ -410,7 +410,7 @@ export async function renderRosterGraphic(data: RosterGraphicData): Promise<Blob
   ctx.fillStyle = COLORS.muted;
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  ctx.fillText("Built with the Dealin' the Cards Roster Builder", WIDTH / 2, height - 30);
+  ctx.fillText("Built with the Dealin' the Cards GM Simulator", WIDTH / 2, height - 30);
 
   return new Promise((resolve, reject) =>
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Couldn't create the image"))), "image/png")

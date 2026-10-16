@@ -7,6 +7,7 @@
 // estimate until a team's payroll is final.
 
 import contractData from "./contracts-data.json";
+import { FREE_AGENTS } from "./free-agents";
 
 export const CONTRACT_SEASON = 2027;
 
@@ -72,6 +73,20 @@ const CONTRACT_OVERRIDES: Record<number, Partial<ContractInfo>> = {
 const PRE_ARB_FREE_AGENT_AFTER = contractData.preArbFreeAgentAfter as Record<string, number>;
 
 const OTHER_PAYMENTS = contractData.otherPayments as Record<string, OtherPayment[]>;
+
+// Players whose contracts run out after this season: FanGraphs' list plus
+// the Free Agents tab's (MLB Trade Rumors). Anyone with a CONTRACT_SEASON
+// deal, option, or arbitration year in the data is still under control.
+const IMPENDING_FREE_AGENT_IDS = new Set<number>([
+  ...(contractData.freeAgents as number[]),
+  ...FREE_AGENTS.map((player) => player.id),
+]);
+
+// The roster builder simulates CONTRACT_SEASON, so these players are left
+// off every club's roster (they can be signed back as free agents).
+export function isImpendingFreeAgent(playerId: number): boolean {
+  return IMPENDING_FREE_AGENT_IDS.has(playerId) && !CONTRACTS[playerId];
+}
 
 export function getOtherPayments(teamId: number): OtherPayment[] {
   return OTHER_PAYMENTS[teamId] ?? [];

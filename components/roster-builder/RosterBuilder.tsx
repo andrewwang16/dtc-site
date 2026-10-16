@@ -852,11 +852,14 @@ export default function RosterBuilder({
   roster,
   prospects,
   sixtyDayIL,
+  departingFreeAgents = [],
 }: {
   teamId: number;
   roster: RosterEntry[];
   prospects: ProspectPlayer[];
   sixtyDayIL: RosterEntry[];
+  // Names of players left off because their contracts are up.
+  departingFreeAgents?: string[];
 }) {
   const router = useRouter();
   const team = getTeamInfo(teamId);
@@ -1675,7 +1678,7 @@ export default function RosterBuilder({
     ) {
       return;
     }
-    router.push(`/roster-builder?team=${getTeamAbbreviation(nextTeamId).toLowerCase()}`);
+    router.push(`/gm-simulator?team=${getTeamAbbreviation(nextTeamId).toLowerCase()}`);
   }
 
   async function downloadGraphic() {
@@ -2075,6 +2078,11 @@ export default function RosterBuilder({
         <p className="kicker" style={{ marginBottom: "0.6rem" }}>
           40-Man Roster ({fortyMan.length} / {FORTY_MAN_LIMIT})
         </p>
+        {departingFreeAgents.length > 0 && (
+          <p style={{ margin: "-0.25rem 0 0.6rem", color: "var(--muted)", fontSize: "0.8rem" }}>
+            Left off as impending free agents: {departingFreeAgents.join(", ")}. Re-sign them from the Free Agents tab.
+          </p>
+        )}
         <div
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleDropOnRosterList}

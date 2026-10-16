@@ -276,6 +276,9 @@ async function main() {
 
   const contracts = {};
   const preArbFreeAgentAfter = {};
+  // Players whose contracts are up: FanGraphs' only SEASON row for them is
+  // a free-agent one (no deal, option, or arbitration year).
+  const freeAgents = new Set();
   const otherPayments = {};
   const taxAdjustments = {};
   let playerBenefits = null;
@@ -320,6 +323,11 @@ async function main() {
       const best = candidates[0];
 
       if (!best) {
+        continue;
+      }
+
+      if (best.current.Type.toUpperCase().startsWith("FREE AGENT")) {
+        freeAgents.add(id);
         continue;
       }
 
@@ -430,11 +438,15 @@ async function main() {
     otherPayments,
     taxAdjustments,
     playerBenefits,
+    // Drop anyone a later entry signed (e.g. an arbitration projection
+    // matched by name).
+    freeAgents: [...freeAgents].filter((id) => !contracts[id]).sort((a, b) => a - b),
   };
   await writeFile(OUTPUT, `${JSON.stringify(output)}\n`);
 
   console.log(`Wrote ${Object.keys(contracts).length} contracts, ${Object.keys(preArbFreeAgentAfter).length} pre-arb FA years, other payments for ${Object.keys(otherPayments).length} teams`);
   console.log(`Arbitration: ${unmatchedArb.length} of ${arbitration.length} projections unmatched`);
+  console.log(`Impending free agents (FanGraphs): ${output.freeAgents.length}`);
   const deferrals = Object.entries(contracts).filter(([, contract]) => contract.deferralNote);
   console.log(`Deferrals: ${deferrals.length} contracts with notes, ${deferrals.filter(([, c]) => c.deferred).length} with a per-season amount`);
   if (unmatchedArb.length) {

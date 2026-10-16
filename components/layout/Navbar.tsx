@@ -28,7 +28,6 @@ const navItems: NavItem[] = [
       { label: "Leaders", href: "/stats" },
       { label: "Trends", href: "/hot-cold" },
       { label: "Transactions", href: "/transactions" },
-      { label: "Roster Builder", href: "/roster-builder" },
       { label: "Compare Players", href: "/compare" },
     ],
   },
@@ -36,6 +35,9 @@ const navItems: NavItem[] = [
   { label: "Shop", href: "/shop" },
   { label: "About Us", href: "/about-us" },
 ];
+
+// Its own tab at the right end of the links, outlined in gold.
+const GM_SIMULATOR = { label: "GM Simulator", href: "/gm-simulator" };
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -358,6 +360,25 @@ export default function Navbar() {
               </div>
             );
           })}
+
+          <Link
+            href={GM_SIMULATOR.href}
+            className="nav-gm-simulator"
+            aria-current={pathname === GM_SIMULATOR.href ? "page" : undefined}
+            onClick={() => setMobileMenuOpen(false)}
+            style={{
+              marginLeft: "auto",
+              padding: "0.2rem 0.85rem",
+              borderRadius: "999px",
+              border: "1.5px solid #f2c14e",
+              background: pathname === GM_SIMULATOR.href ? "rgba(242,193,78,0.22)" : "rgba(242,193,78,0.08)",
+              color: "#ffe9a8",
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {GM_SIMULATOR.label}
+          </Link>
         </div>
       </nav>
     </header>

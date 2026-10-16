@@ -210,6 +210,16 @@ textarea {
     font-size: 1.05rem;
   }
 
+  /* The gold GM Simulator pill keeps its outline in the mobile drawer
+     instead of becoming a full-width row. */
+  .nav-links-row:not(.nav-links-row-collapsed) > a.nav-gm-simulator {
+    width: auto;
+    align-self: flex-start;
+    margin: 1rem 0 0 !important;
+    padding: 0.5rem 1.1rem !important;
+    border: 1.5px solid #f2c14e;
+  }
+
   .nav-links-row:not(.nav-links-row-collapsed) > div > span {
     display: flex;
     width: 100%;
