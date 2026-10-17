@@ -227,33 +227,25 @@ function sortWithinLevels<T extends SystemPlayer>(players: T[]): T[] {
 // games at that position, starts for the rotation, relief outings for the
 // bullpen, holds for setup, saves for the closer, and total games for the
 // bench. Players without MLB stats fall back to their listed position.
-// `hint` explains the ranking in the picker ("135 G at SS").
-function slotFit(player: SimplePlayer, slot: SlotDef, usage: PositionUsage | undefined): { score: number; hint?: string } {
-  const listed = (position: string) => (player.position === position ? 0.5 : 0);
-
+function slotFit(player: SimplePlayer, slot: SlotDef, usage: PositionUsage | undefined): number {
   if (slot.group === "diamond") {
-    const games = usage?.games[slot.id] ?? 0;
-    return { score: games + listed(slot.id), hint: games > 0 ? `${games} G at ${slot.id}` : undefined };
+    return (usage?.games[slot.id] ?? 0) + (player.position === slot.id ? 0.5 : 0);
   }
   if (slot.group === "bench") {
-    const games = Object.values(usage?.games ?? {}).reduce((sum, count) => sum + count, 0);
-    return { score: games, hint: games > 0 ? `${games} G` : undefined };
+    return Object.values(usage?.games ?? {}).reduce((sum, count) => sum + count, 0);
   }
   if (slot.group === "rotation") {
-    const starts = usage?.starts ?? 0;
-    return { score: starts, hint: starts > 0 ? `${starts} GS` : undefined };
+    return usage?.starts ?? 0;
   }
 
   const relief = usage?.relief ?? 0;
   if (slot.id === "CL") {
-    const saves = usage?.saves ?? 0;
-    return { score: saves * 1000 + relief, hint: saves > 0 ? `${saves} SV` : relief > 0 ? `${relief} relief G` : undefined };
+    return (usage?.saves ?? 0) * 1000 + relief;
   }
   if (slot.id === "SU") {
-    const holds = usage?.holds ?? 0;
-    return { score: holds * 1000 + relief, hint: holds > 0 ? `${holds} HLD` : relief > 0 ? `${relief} relief G` : undefined };
+    return (usage?.holds ?? 0) * 1000 + relief;
   }
-  return { score: relief, hint: relief > 0 ? `${relief} relief G` : undefined };
+  return relief;
 }
 
 const HAND_NAMES: Record<string, string> = { L: "left", R: "right", S: "switch" };
@@ -687,7 +679,7 @@ function SlotCell({
   onClear: (slot: SlotDef) => void;
   query: string;
   onQueryChange: (value: string) => void;
-  eligiblePlayers: Array<SimplePlayer & { fitHint?: string }>;
+  eligiblePlayers: SimplePlayer[];
   onSelect: (slot: SlotDef, player: SimplePlayer) => void;
 }) {
   const isDiamond = slot.group === "diamond";
@@ -796,7 +788,7 @@ function SlotCell({
                     <PlayerName player={eligible} />
                   </span>
                   <span style={{ color: "var(--muted)", marginLeft: "auto", whiteSpace: "nowrap" }} title={handTitle(eligible)}>
-                    {eligible.fitHint ?? positionLabel(eligible)}
+                    {positionLabel(eligible)}
                   </span>
                 </button>
               ))
@@ -1278,9 +1270,9 @@ export default function RosterBuilder({
       .filter((player) => !trimmed || stripDiacritics(player.fullName.toLowerCase()).includes(trimmed))
       // Best fit for the spot first (see slotFit), then by last name.
       .map((player) => ({ player, fit: slotFit(player, openSlotDef, usageById[player.id]) }))
-      .sort((a, b) => b.fit.score - a.fit.score || compareByLastName(a.player, b.player))
+      .sort((a, b) => b.fit - a.fit || compareByLastName(a.player, b.player))
       .slice(0, 12)
-      .map(({ player, fit }) => ({ ...player, fitHint: fit.hint }));
+      .map(({ player }) => player);
   }, [openSlotDef, fortyMan, assignedSides, slotQuery, usageById]);
 
   // Created players have negative ids, so slot lookups can't use a
