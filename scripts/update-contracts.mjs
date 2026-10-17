@@ -89,7 +89,8 @@ async function loadFanGraphsTeam(slug) {
   const query = JSON.parse(match[1]).props.pageProps.dehydratedState.queries.find((entry) =>
     String(entry.queryKey?.[0]).startsWith("roster-resource/payroll")
   );
-  return query.state.data;
+  // FanGraphs' own team id, to tell which contract rows this club pays.
+  return { ...query.state.data, fanGraphsTeamId: query.queryKey?.[1]?.teamid };
 }
 
 // MLB Trade Rumors lists projections under a heading per team:
@@ -125,12 +126,25 @@ async function loadArbitrationProjections() {
   return projections;
 }
 
-const TYPE_PRIORITY = ["GUARANTEED", "CLUB OPTION", "MUTUAL OPTION", "ARB", "PRE-ARB"];
+// Seasons the club owes no matter what it decides: guaranteed years, plus
+// years the player controls (a player option, or a deal with an opt-out the
+// player hasn't used). FanGraphs counts these as guaranteed money too.
+function isGuaranteedType(type) {
+  return /^(GUARANTEED|PLAYER OPTION|OPT OUT|POST OPT OUT)/i.test(type);
+}
+
+// Seasons the club decides on, or that depend on whether a vesting
+// threshold was met.
+function isOptionType(type) {
+  return /^(CLUB OPTION|MUTUAL OPTION|VESTING)/i.test(type);
+}
 
 function typeRank(type) {
-  const upper = type.toUpperCase();
-  const index = TYPE_PRIORITY.findIndex((prefix) => upper.startsWith(prefix));
-  return index === -1 ? Infinity : index;
+  if (isGuaranteedType(type)) return 0;
+  if (isOptionType(type)) return /^MUTUAL/i.test(type) ? 2 : 1;
+  if (/^ARB/i.test(type)) return 3;
+  if (/^PRE-ARB/i.test(type)) return 4;
+  return Infinity;
 }
 
 // Last season before the first free-agent row, across every contract entry
@@ -214,23 +228,41 @@ function buildContract(summary, years, allYears, arbitration) {
   const type = current.Type.toUpperCase();
   const faAfter = freeAgentAfter(allYears);
 
-  if (type.startsWith("GUARANTEED")) {
-    const guaranteed = years.filter((year) => year.Season >= SEASON && year.Type.toUpperCase().startsWith("GUARANTEED"));
+  if (isGuaranteedType(type)) {
+    const guaranteed = years.filter((year) => year.Season >= SEASON && isGuaranteedType(year.Type));
     const salaryBySeason = Object.fromEntries(guaranteed.map((year) => [year.Season, Math.round(year.Salary)]));
     const lastGuaranteed = Math.max(...guaranteed.map((year) => year.Season));
-    const options = years.filter((year) => year.Season > lastGuaranteed && /OPTION/i.test(year.Type));
-    const optionNote = options.length
-      ? ` · ${/MUTUAL/i.test(options[0].Type) ? "mutual" : "club"} option ${seasonRange(options[0].Season, options[options.length - 1].Season)}`
-      : "";
+    const options = years.filter((year) => year.Season > lastGuaranteed && isOptionType(year.Type));
+    // Player-controlled seasons this deal includes, called out in the detail.
+    const playerOptionYears = guaranteed.filter((year) => /^PLAYER OPTION/i.test(year.Type)).map((year) => year.Season);
+    const optOutPending = guaranteed.some((year) => /^OPT OUT/i.test(year.Type));
+    const playerNote = playerOptionYears.length
+      ? ` · player option ${seasonRange(playerOptionYears[0], playerOptionYears[playerOptionYears.length - 1])}`
+      : optOutPending
+        ? " · player can opt out"
+        : "";
+    const optionNote = playerNote + (options.length
+      ? ` · ${/MUTUAL/i.test(options[0].Type) ? "mutual" : /VESTING/i.test(options[0].Type) ? "vesting" : "club"} option ${seasonRange(options[0].Season, options[options.length - 1].Season)}`
+      : "");
 
     const deferral = deferralFrom(summary);
     // Luxury-tax hit: the deal's AAV, with deferred money at present value.
     const cbt = current.TotalCBTHit ? Math.round(current.TotalCBTHit) : null;
 
+    // This season is the player's call (a player option, or an opt-out he
+    // hasn't used yet): kept on the payroll unless he opts out, when only
+    // any buyout is still owed.
+    const playerDecides = /^(PLAYER OPTION|OPT OUT)/i.test(current.Type);
+    const playerBuyout = playerDecides ? current.OptionBuyout ?? null : null;
+
+    const buyoutNote = playerBuyout ? `, ${money(playerBuyout)} opt-out buyout` : "";
+
     return {
-      status: "guaranteed",
+      status: playerDecides ? "player-option" : "guaranteed",
+      ...(playerBuyout ? { buyout: Math.round(playerBuyout) } : {}),
       salary: Math.round(current.Salary),
-      detail: `${summary.YearsTotal} yr / ${money(summary.ContractTotal)} (${seasonRange(summary.startSeason, summary.endSeason)})${optionNote}`,
+      // FanGraphs' end season stops before player-option years.
+      detail: `${summary.YearsTotal} yr / ${money(summary.ContractTotal)} (${seasonRange(summary.startSeason, Math.max(summary.endSeason, lastGuaranteed))})${optionNote}${buyoutNote}`,
       freeAgentAfter: lastGuaranteed,
       salaryBySeason,
       ...(cbt !== null && Math.abs(cbt - current.Salary) >= 1 ? { cbt } : {}),
@@ -239,16 +271,16 @@ function buildContract(summary, years, allYears, arbitration) {
     };
   }
 
-  if (type.includes("OPTION")) {
+  if (isOptionType(type)) {
     if (!current.Salary) {
       return null;
     }
-    const mutual = type.startsWith("MUTUAL");
+    const kind = type.startsWith("MUTUAL") ? "mutual" : type.startsWith("VESTING") ? "vesting" : "club";
     const buyout = current.OptionBuyout ?? (summary.TotalPotentialBuyout || null);
     return {
-      status: mutual ? "mutual-option" : "club-option",
+      status: `${kind}-option`,
       salary: Math.round(current.Salary),
-      detail: `${money(current.Salary)} ${mutual ? "mutual" : "club"} option${buyout ? `, ${money(buyout)} buyout` : ""}`,
+      detail: `${money(current.Salary)} ${kind} option${buyout ? `, ${money(buyout)} buyout` : ""}`,
       freeAgentAfter: SEASON,
       ...(buyout ? { buyout: Math.round(buyout) } : {}),
     };
@@ -365,6 +397,11 @@ async function main() {
       if (contract) {
         // Only used below to recognize option players MLBTR also projects.
         contract.matchName = normalizeName(name);
+        // The club paying SEASON, so a contracted player missing from its
+        // roster feed (e.g. on the restricted list) still counts.
+        if (best.current.TeamId === data.fanGraphsTeamId) {
+          contract.teamId = teamId;
+        }
         contracts[id] = contract;
       }
     }
@@ -375,7 +412,31 @@ async function main() {
         season: payment.Season,
         amount: Math.round(payment.PaymentAmount),
         description: decodeEntities(payment.PaymentDescription ?? "").replace(/^\$ /, ""),
-      }));
+      }))
+      // FanGraphs adds a "potential buyout" for every pending option because
+      // it leaves the option salary out. We count the SEASON option salary
+      // instead, so that buyout belongs on the contract — owed only if the
+      // option is declined (or the player opts out) — not on top of it.
+      .filter((payment) => {
+        const potential = payment.description.match(/^due for potential buyout of (.+)$/i);
+        if (!potential) {
+          return true;
+        }
+        const contract = Object.values(contracts).find((entry) => entry.matchName === normalizeName(potential[1]));
+        // A later season whose salary we already count (a player-option
+        // year) doesn't also owe the buyout.
+        if (contract?.salaryBySeason?.[payment.season] && payment.season !== SEASON) {
+          return false;
+        }
+        if (payment.season !== SEASON || !contract || !/option$/.test(contract.status)) {
+          return true;
+        }
+        if (!contract.buyout) {
+          contract.buyout = payment.amount;
+          contract.detail += `, ${money(payment.amount)} buyout`;
+        }
+        return false;
+      });
     if (payments.length) {
       otherPayments[teamId] = payments;
     }
@@ -415,11 +476,14 @@ async function main() {
         continue;
       }
     }
-    // Already listed with an option for SEASON (MLBTR projects those too).
-    const listed = Object.entries(contracts).some(
-      ([, contract]) => contract.status.endsWith("option") && contract.matchName === normalizeName(projection.name)
+    // Already listed with an option for SEASON. MLBTR also projects an
+    // arbitration salary for these players (what they'd get if the club
+    // declined), which the detail notes.
+    const listed = Object.values(contracts).find(
+      (contract) => contract.status.endsWith("option") && contract.matchName === normalizeName(projection.name)
     );
     if (listed) {
+      listed.detail += ` (${money(projection.salary)} arb projection if declined)`;
       continue;
     }
     const id = await findPlayerId(projection.name, projection.teamId);

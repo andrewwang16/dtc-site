@@ -1084,6 +1084,35 @@ export async function getWildCardStandings(season: number): Promise<TeamStanding
 // How a player was used in one MLB season: games at each fielding position
 // (DH included) and, for pitchers, starts, relief outings, saves and holds.
 // The GM Simulator ranks players for an open roster spot by this.
+// Basic details for players by id, in RosterEntry shape (for players a
+// club pays who aren't in its roster feed).
+export async function getPlayersById(playerIds: number[]): Promise<RosterEntry[]> {
+  if (playerIds.length === 0) {
+    return [];
+  }
+  const data = await fetchJson<{
+    people?: Array<{
+      id: number;
+      fullName: string;
+      useLastName?: string;
+      mlbDebutDate?: string;
+      batSide?: { code?: string };
+      pitchHand?: { code?: string };
+      primaryPosition?: { abbreviation?: string };
+    }>;
+  }>(`https://statsapi.mlb.com/api/v1/people?personIds=${playerIds.join(",")}`, 21_600);
+
+  return (data?.people ?? []).map((person) => ({
+    id: person.id,
+    fullName: person.fullName,
+    lastName: person.useLastName,
+    position: person.primaryPosition?.abbreviation ?? "",
+    debutDate: person.mlbDebutDate,
+    bats: person.batSide?.code,
+    throws: person.pitchHand?.code,
+  }));
+}
+
 export type PositionUsage = {
   games: Record<string, number>;
   starts: number;

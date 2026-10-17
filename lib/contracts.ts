@@ -34,6 +34,10 @@ export type ContractStatus =
   | "extended"
   | "club-option"
   | "mutual-option"
+  | "vesting-option"
+  // The player decides on this season (a player option or a pending
+  // opt-out); counted until he opts out.
+  | "player-option"
   | "arbitration"
   | "pre-arb";
 
@@ -98,6 +102,19 @@ export function isImpendingFreeAgent(playerId: number): boolean {
   return IMPENDING_FREE_AGENT_IDS.has(playerId) && !CONTRACTS[playerId];
 }
 
+// Players a club owes guaranteed CONTRACT_SEASON money (per FanGraphs) —
+// including any missing from its MLB roster feed, like a player on the
+// restricted list.
+export function getContractedPlayerIds(teamId: number): number[] {
+  return Object.entries(CONTRACTS)
+    .filter(
+      ([, contract]) =>
+        (contract as ContractInfo & { teamId?: number }).teamId === teamId &&
+        (contract.status === "guaranteed" || contract.status === "player-option")
+    )
+    .map(([id]) => Number(id));
+}
+
 export function getOtherPayments(teamId: number): OtherPayment[] {
   return OTHER_PAYMENTS[teamId] ?? [];
 }
@@ -115,6 +132,10 @@ export function getTaxAdjustments(teamId: number): TaxAdjustment[] {
 // Player benefits count toward every club's luxury-tax payroll (FanGraphs'
 // league-wide estimate).
 export const PLAYER_BENEFITS_ESTIMATE: number = contractData.playerBenefits ?? 18_500_000;
+
+// Each club's share of the CBA's $50M pre-arbitration bonus pool, which also
+// counts toward the luxury-tax payroll.
+export const PRE_ARB_BONUS_POOL_SHARE = Math.round(50_000_000 / 30);
 
 // Free agency comes after six years of MLB service. Without service-time
 // data, assume a player has been up continuously since debuting: a debut
@@ -269,6 +290,11 @@ export function signedContract(signing: Signing, current: ContractInfo | null = 
 export function formatSalary(amount: number): string {
   if (amount === 0) {
     return "$0";
+  }
+
+  // Money coming in (e.g. cash received in a trade): "-$10.83M".
+  if (amount < 0) {
+    return `-${formatSalary(-amount)}`;
   }
 
   if (Math.abs(amount) >= 1_000_000) {

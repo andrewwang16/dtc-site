@@ -1,7 +1,7 @@
-import { getFortyManSplit, getPositionUsage } from "@/lib/mlb";
+import { getFortyManSplit, getPlayersById, getPositionUsage } from "@/lib/mlb";
 import { getOrganizationProspects } from "@/lib/prospects";
 import { parseTeamParam } from "@/lib/teams";
-import { CONTRACT_SEASON, isImpendingFreeAgent } from "@/lib/contracts";
+import { CONTRACT_SEASON, getContractedPlayerIds, isImpendingFreeAgent } from "@/lib/contracts";
 import RosterBuilder from "@/components/roster-builder/RosterBuilder";
 
 type GmSimulatorPageProps = {
@@ -26,8 +26,13 @@ export default async function GmSimulatorPage({ searchParams }: GmSimulatorPageP
     return players.filter((player) => !isImpendingFreeAgent(player.id));
   }
   const roster = staying(fullRoster);
-  const sixtyDayIL = staying(fullSixtyDayIL);
   const prospects = staying(allProspects);
+
+  // Players the club still owes a guaranteed 2027 salary who aren't in its
+  // roster feed (e.g. on the restricted list) are paid outside the 40-man.
+  const listedIds = new Set([...fullRoster, ...fullSixtyDayIL, ...allProspects].map((player) => player.id));
+  const unlisted = await getPlayersById(getContractedPlayerIds(teamId).filter((id) => !listedIds.has(id)));
+  const sixtyDayIL = [...staying(fullSixtyDayIL), ...unlisted];
 
   // Last season's games at each position (and pitching roles), for ranking
   // who fits an open roster spot.

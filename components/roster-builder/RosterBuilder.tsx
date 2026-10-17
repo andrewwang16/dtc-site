@@ -22,6 +22,7 @@ import {
   CONTRACTS_UPDATED,
   DEFERRAL_DISCOUNT_RATE,
   PLAYER_BENEFITS_ESTIMATE,
+  PRE_ARB_BONUS_POOL_SHARE,
   MINOR_LEAGUE_SALARY,
   MINOR_LEAGUE_SALARY_FIRST_CONTRACT,
   PRE_ARB_SALARY_ESTIMATE,
@@ -108,6 +109,7 @@ const INJURED_LEVEL = "60-day IL";
 
 type TransactionKind =
   | "trade"
+  | "opt-out"
   | "signing"
   | "extension"
   | "selection"
@@ -121,6 +123,7 @@ const TRANSACTION_LABELS: Record<TransactionKind, { label: string; color: string
   trade: { label: "Trade", color: "#c41e3a" },
   signing: { label: "Signing", color: "#0f7a38" },
   extension: { label: "Extension", color: "#0f7a38" },
+  "opt-out": { label: "Opted out", color: "#8a5a00" },
   selection: { label: "Contract selected", color: "#0f2a52" },
   activation: { label: "Activated", color: "#0f7a38" },
   option: { label: "Option declined", color: "#8a5a00" },
@@ -181,6 +184,8 @@ const CONTRACT_STATUS_LABELS: Record<ContractInfo["status"], string> = {
   extended: "Extended",
   "club-option": "Club option",
   "mutual-option": "Mutual option",
+  "vesting-option": "Vesting option",
+  "player-option": "Player option",
   arbitration: "Arbitration",
   "pre-arb": "Pre-arb",
 };
@@ -292,8 +297,14 @@ function handTitle(player: { position: string; bats?: string; throws?: string })
 }
 
 // What dropping a player from the 40-man means for their contract.
-function removalKind(contract: ContractInfo | null): "option" | "non-tender" | "dfa" {
-  if (contract?.status === "club-option" || contract?.status === "mutual-option") {
+function removalKind(contract: ContractInfo | null): "option" | "opt-out" | "non-tender" | "dfa" {
+  // A player option or pending opt-out is the player's call: removing him
+  // means he opted out.
+  if (contract?.status === "player-option") {
+    return "opt-out";
+  }
+
+  if (contract?.status === "club-option" || contract?.status === "mutual-option" || contract?.status === "vesting-option") {
     return "option";
   }
 
@@ -304,8 +315,9 @@ function removalKind(contract: ContractInfo | null): "option" | "non-tender" | "
   return "dfa";
 }
 
-const REMOVAL_ACTIONS: Record<"option" | "non-tender" | "dfa", string> = {
+const REMOVAL_ACTIONS: Record<"option" | "opt-out" | "non-tender" | "dfa", string> = {
   option: "Decline option",
+  "opt-out": "Player opts out",
   "non-tender": "Non-tender",
   dfa: "Designate for assignment",
 };
@@ -1018,7 +1030,7 @@ export default function RosterBuilder({
               },
             ];
           }
-          if (transaction.kind === "option" && contract?.buyout) {
+          if ((transaction.kind === "option" || transaction.kind === "opt-out") && contract?.buyout) {
             return [
               {
                 player,
@@ -1210,7 +1222,8 @@ export default function RosterBuilder({
       currentOtherPayments.reduce((sum, payment) => sum + payment.amount, 0) +
       tradeCash.reduce((sum, entry) => sum + entry.amount, 0) +
       taxAdjustments.reduce((sum, adjustment) => sum + adjustment.amount, 0) +
-      PLAYER_BENEFITS_ESTIMATE;
+      PLAYER_BENEFITS_ESTIMATE +
+      PRE_ARB_BONUS_POOL_SHARE;
     const luxuryTax = computeLuxuryTax(taxPayroll, payorStatus);
 
     return {
@@ -1449,7 +1462,9 @@ export default function RosterBuilder({
     const current = getContract(player);
     const guaranteedSeasons = Object.keys(current?.salaryBySeason ?? {}).map(Number);
     const lastCurrentSeason =
-      current?.status === "guaranteed" && guaranteedSeasons.length > 0 ? Math.max(...guaranteedSeasons) : CONTRACT_SEASON;
+      (current?.status === "guaranteed" || current?.status === "player-option") && guaranteedSeasons.length > 0
+        ? Math.max(...guaranteedSeasons)
+        : CONTRACT_SEASON;
     return [CONTRACT_SEASON, lastCurrentSeason + 1];
   }
 
@@ -1815,13 +1830,21 @@ export default function RosterBuilder({
     logTransaction({
       kind,
       summary:
-        kind === "option"
-          ? `Declined ${player.fullName}'s ${contract?.status === "mutual-option" ? "mutual" : "club"} option`
+        kind === "opt-out"
+          ? `${player.fullName} opted out of his contract`
+          : kind === "option"
+          ? `Declined ${player.fullName}'s ${
+              contract?.status === "mutual-option" ? "mutual" : contract?.status === "vesting-option" ? "vesting" : "club"
+            } option`
           : kind === "non-tender"
             ? `Non-tendered ${player.fullName}`
             : `Designated ${player.fullName} for assignment`,
       detail:
-        kind === "option" && contract
+        kind === "opt-out" && contract
+          ? contract.buyout
+            ? `${formatSalary(contract.salary)} comes off the payroll; the ${formatSalary(contract.buyout)} buyout stays on as dead money`
+            : `${formatSalary(contract.salary)} comes off the payroll`
+          : kind === "option" && contract
           ? contract.buyout
             ? `${formatSalary(contract.salary)} option comes off the payroll; the ${formatSalary(contract.buyout)} buyout stays on as dead money`
             : `${formatSalary(contract.salary)} option comes off the payroll`
@@ -2321,7 +2344,7 @@ export default function RosterBuilder({
 
       <div>
         <p className="kicker" style={{ marginBottom: "0.6rem" }}>
-          60-Day IL (Outside 40-Man)
+          60-Day IL &amp; Restricted (Outside 40-Man)
         </p>
         <div
           style={{
@@ -3258,7 +3281,8 @@ export default function RosterBuilder({
                 Tax payroll counts each contract at its AAV (deferred money at present value, ~
                 {Math.round(DEFERRAL_DISCOUNT_RATE * 1000) / 10}% discount), arbitration and pre-arb salaries, money owed to
                 former players{payroll.taxAdjustments.length > 0 ? ", FanGraphs' tax adjustments" : ""}, and an estimated{" "}
-                {formatSalary(PLAYER_BENEFITS_ESTIMATE)} in player benefits. Uses the 2026 thresholds and rates until the next
+                {formatSalary(PLAYER_BENEFITS_ESTIMATE)} in player benefits, plus the club&apos;s{" "}
+                {formatSalary(PRE_ARB_BONUS_POOL_SHARE)} share of the pre-arb bonus pool. Uses the 2026 thresholds and rates until the next
                 CBA sets 2027&apos;s. Going $40M+ over also moves a club&apos;s top draft pick back 10 spots.
               </p>
             </div>
