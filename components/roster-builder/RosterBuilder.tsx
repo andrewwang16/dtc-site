@@ -37,8 +37,8 @@ import { ALL_TEAMS, getTeamInfo } from "@/lib/teams";
 import {
   computeLuxuryTax,
   PAYOR_STATUS_LABELS,
+  getPayorHistory,
   TAX_THRESHOLDS,
-  type PayorStatus,
 } from "@/lib/luxury-tax";
 import { renderRosterGraphic, type GraphicRow, type GraphicPlayer } from "./rosterGraphic";
 
@@ -153,6 +153,9 @@ type Transaction = {
   incoming: SimplePlayer[];
   outgoing: SimplePlayer[];
   signingsBefore: Record<number, Signing | null>;
+  // The deals this move made, so undo can tell if a later move (another
+  // extension, a re-sign) has since replaced them.
+  signingsAfter?: Record<number, Signing>;
   // Trades can also move players who aren't on the 40-man.
   outgoingInjured?: SimplePlayer[];
   outgoingProspects?: SystemPlayer[];
@@ -973,7 +976,10 @@ export default function RosterBuilder({
   // Starts with this club's players; trade partners' 40-man usage is added
   // as their systems load.
   const [usageById, setUsageById] = useState<Record<number, PositionUsage>>(positionUsage);
-  const [payorStatus, setPayorStatus] = useState<PayorStatus>("first");
+  // How many straight seasons the club has been over the tax threshold,
+  // which sets its 2027 rate (see getPayorHistory).
+  const payorHistory = useMemo(() => getPayorHistory(teamId), [teamId]);
+  const payorStatus = payorHistory.status;
   // Where the extra slot goes while a two-way player is both hitting and
   // pitching.
   const [extraSpot, setExtraSpot] = useState<ExtraSpot>("bullpen");
@@ -1442,6 +1448,7 @@ export default function RosterBuilder({
         incoming: [toSimplePlayer(freeAgent)],
         outgoing: [],
         signingsBefore: { [freeAgent.id]: signingBefore },
+        signingsAfter: { [freeAgent.id]: signing },
       });
     }
   }
@@ -1480,6 +1487,7 @@ export default function RosterBuilder({
       incoming: [],
       outgoing: [],
       signingsBefore: { [player.id]: signingBefore },
+      signingsAfter: { [player.id]: signing },
     });
   }
 
@@ -1706,6 +1714,10 @@ export default function RosterBuilder({
       return "A player sent out in this move is back in the organization.";
     }
 
+    if (Object.entries(transaction.signingsAfter ?? {}).some(([id, signing]) => signings[Number(id)] !== signing)) {
+      return "This contract has since been changed by a later move — undo that move first.";
+    }
+
     return null;
   }
 
@@ -1773,6 +1785,7 @@ export default function RosterBuilder({
           incoming: [player],
           outgoing: [],
           signingsBefore: { [player.id]: null },
+          signingsAfter: { [player.id]: createSigning },
         });
       }
 
@@ -3193,19 +3206,34 @@ export default function RosterBuilder({
                 <p style={{ margin: 0, fontSize: "0.72rem", fontWeight: 800, color: "var(--muted)", textTransform: "uppercase" }}>
                   Luxury tax (CBT) · est.
                 </p>
-                <select
-                  value={payorStatus}
-                  onChange={(event) => setPayorStatus(event.target.value as PayorStatus)}
-                  aria-label="Luxury tax payor status"
-                  style={{ ...contractFieldStyle, marginLeft: "auto", width: "auto", fontWeight: 700 }}
+                <span
+                  title="Set by how many straight seasons the club has been over the threshold"
+                  style={{
+                    marginLeft: "auto",
+                    padding: "0.25rem 0.7rem",
+                    borderRadius: "999px",
+                    border: "1px solid var(--line)",
+                    background: "var(--panel)",
+                    fontSize: "0.8rem",
+                    fontWeight: 800,
+                  }}
                 >
-                  {(Object.keys(PAYOR_STATUS_LABELS) as PayorStatus[]).map((status) => (
-                    <option key={status} value={status}>
-                      {PAYOR_STATUS_LABELS[status]}
-                    </option>
-                  ))}
-                </select>
+                  {PAYOR_STATUS_LABELS[payorStatus]}
+                </span>
               </div>
+              <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--muted)" }}>
+                {team.shortName}: {payorHistory.overTwoSeasonsAgo ? "over" : "under"} the threshold in 2025,{" "}
+                {payorHistory.overPriorSeason ? "over" : "under"} in 2026
+                {payorHistory.priorEstimated && payorHistory.priorTaxPayroll !== null
+                  ? ` (est. ${formatSalary(payorHistory.priorTaxPayroll)} vs. $244M; final 2026 figures come in December)`
+                  : ""}
+                {" — "}
+                {payorStatus === "first"
+                  ? "so any 2027 overage is taxed at the first-time rate (20%)."
+                  : payorStatus === "second"
+                    ? "so a 2027 overage would be a second straight year (30%)."
+                    : "so a 2027 overage would be a third straight year or more (50%)."}
+              </p>
 
               <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
                 {[

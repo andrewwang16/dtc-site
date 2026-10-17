@@ -222,23 +222,31 @@ function deferredBySeason({ salaries, deferral }: Signing): number[] {
   return salaries.map((salary) => Math.round((deferral.total * salary) / total));
 }
 
-// The deal's luxury-tax AAV: money paid on time at face value plus the
-// deferred payouts discounted back to the deal's first season.
+// The deal's luxury-tax AAV. Money paid on time counts at face value; the
+// CBA counts deferred money at its present value in the season it was
+// earned. Each season's deferred share is paid out across the payout years,
+// so each installment is discounted back to the season that earned it.
+// (An Ohtani-style deal — $68M of $70M deferred ten years — comes out at
+// about $46M a year, as his real one does.)
 export function signingTaxAav(signing: Signing): number {
   const start = signing.startSeason ?? CONTRACT_SEASON;
   const deferred = deferredBySeason(signing);
-  const paidOnTime = signing.salaries.reduce((sum, salary, index) => sum + salary - deferred[index], 0);
-  let presentValue = 0;
+  let total = 0;
 
-  if (signing.deferral && signing.deferral.payoutYears > 0) {
-    const installment = signing.deferral.total / signing.deferral.payoutYears;
-    for (let index = 0; index < signing.deferral.payoutYears; index += 1) {
-      const season = signing.deferral.payoutStart + index;
-      presentValue += installment / (1 + DEFERRAL_DISCOUNT_RATE) ** (season - start);
+  signing.salaries.forEach((salary, index) => {
+    const earned = start + index;
+    total += salary - deferred[index];
+
+    if (signing.deferral && signing.deferral.payoutYears > 0 && deferred[index] > 0) {
+      const installment = deferred[index] / signing.deferral.payoutYears;
+      for (let payout = 0; payout < signing.deferral.payoutYears; payout += 1) {
+        const paid = signing.deferral.payoutStart + payout;
+        total += installment / (1 + DEFERRAL_DISCOUNT_RATE) ** Math.max(0, paid - earned);
+      }
     }
-  }
+  });
 
-  return Math.round((paidOnTime + presentValue) / signing.salaries.length);
+  return Math.round(total / signing.salaries.length);
 }
 
 // A builder deal as a contract. One that starts after CONTRACT_SEASON (an
@@ -297,7 +305,8 @@ export function formatSalary(amount: number): string {
     return `-${formatSalary(-amount)}`;
   }
 
-  if (Math.abs(amount) >= 1_000_000) {
+  // Anything that would round to "$1000K" reads as millions.
+  if (Math.abs(amount) >= 999_500) {
     const millions = (amount / 1_000_000).toFixed(2).replace(/\.?0+$/, "");
     return `$${millions}M`;
   }

@@ -317,6 +317,9 @@ async function main() {
   const freeAgents = new Set();
   const otherPayments = {};
   const taxAdjustments = {};
+  // Each club's luxury-tax payroll for the season before SEASON (FanGraphs'
+  // estimate until MLB's final figures), to tell who was over the threshold.
+  const priorTaxPayroll = {};
   let playerBenefits = null;
   const fanGraphsArbIds = new Map();
   const unmatchedArb = [];
@@ -455,6 +458,11 @@ async function main() {
 
     // FanGraphs' league-wide estimate of player benefits, which count
     // toward every club's luxury-tax payroll.
+    const prior = (data.dataOverall ?? []).find((row) => row.Season === SEASON - 1);
+    if (prior?.estLuxuryTaxPayroll) {
+      priorTaxPayroll[teamId] = Math.round(prior.estLuxuryTaxPayroll);
+    }
+
     const overall = (data.dataOverall ?? []).find((row) => row.Season === SEASON);
     if (overall?.estPlayerBenefits) {
       playerBenefits = Math.round(overall.estPlayerBenefits);
@@ -510,6 +518,7 @@ async function main() {
     preArbPriorSalary,
     otherPayments,
     taxAdjustments,
+    priorTaxPayroll,
     playerBenefits,
     // Drop anyone a later entry signed (e.g. an arbitration projection
     // matched by name).
