@@ -11,6 +11,8 @@ import {
   getPlayerBio,
   getPlayerCareerYears,
   getPlayerSituationSplits,
+  getPlayerAwards,
+  formatAwardSeasons,
   getPlayerYearStats,
   getTeamAbbreviation,
   HITTER_COLUMNS,
@@ -215,7 +217,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
   const statcastType = role === "Pitcher" ? "pitcher" : "batter";
 
-  const [yearStats, situationSplits, playerGrades, podcastMentions, statcastMetrics, seasonEnvironment] =
+  const [yearStats, situationSplits, playerGrades, podcastMentions, statcastMetrics, seasonEnvironment, awards] =
     await Promise.all([
       getPlayerYearStats(playerId, selectedYear, group),
       getPlayerSituationSplits(playerId, selectedYear, group, ["vl", "vr", "h", "a"]),
@@ -223,6 +225,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       getPodcastMentionsForPlayer(bio.fullName),
       getStatcastPercentiles(playerId, selectedYear, statcastType),
       getSeasonEnvironment(selectedYear),
+      getPlayerAwards(playerId),
     ]);
 
   // A player traded across leagues mid-season doesn't fit either league's
@@ -518,6 +521,41 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               label="Born"
               value={`${bio.birthDate ?? "-"}${born ? ` · ${born}` : ""}`}
             />
+
+            {/* Major career honors from the MLB Stats API (no section if none). */}
+            {awards.length > 0 && (
+              <div style={{ flexBasis: "100%", display: "grid", gap: "0.45rem" }}>
+                <p className="kicker" style={{ marginBottom: 0 }}>
+                  Awards
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                  {awards.map((award) => (
+                    <span
+                      key={award.label}
+                      title={`${award.label}: ${award.seasons.join(", ")}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "baseline",
+                        gap: "0.35rem",
+                        padding: "0.3rem 0.7rem",
+                        borderRadius: "999px",
+                        border: "1px solid #e3c46f",
+                        background: "rgba(242,193,78,0.14)",
+                        fontSize: "0.82rem",
+                      }}
+                    >
+                      <strong>
+                        {award.seasons.length > 1 ? `${award.seasons.length}× ` : ""}
+                        {award.label}
+                      </strong>
+                      <span style={{ color: "var(--muted)", fontSize: "0.76rem" }}>
+                        {formatAwardSeasons(award.seasons)}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </article>
         </div>
       </section>

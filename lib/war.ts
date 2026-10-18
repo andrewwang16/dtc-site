@@ -608,6 +608,12 @@ export async function getPitcherSplitWar(
   );
 }
 
+// Builds (and caches) a season's WAR inputs once, so many players computed
+// at the same time don't each start building them on a cold cache.
+export async function preloadWarEnvironment(season: number): Promise<void> {
+  await getWarEnvironment(season);
+}
+
 export function formatWar(value: number | null | undefined): string {
   return value === null || value === undefined || !Number.isFinite(value) ? "-" : value.toFixed(1);
 }

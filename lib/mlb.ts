@@ -1182,3 +1182,81 @@ export async function getPositionUsage(playerIds: number[], season: number): Pro
 
   return usage;
 }
+
+// Major MLB honors, keyed by the Stats API's award id. AL and NL versions
+// share a label so they combine. Weekly/monthly, team, minor league awards
+// and runner-up finishes aren't listed, so they're left out.
+const MAJOR_AWARDS: Record<string, string> = {
+  ALMVP: "MVP",
+  NLMVP: "MVP",
+  ALCY: "Cy Young",
+  NLCY: "Cy Young",
+  ALROY: "Rookie of the Year",
+  NLROY: "Rookie of the Year",
+  WSCHAMP: "World Series Champion",
+  WSMVP: "World Series MVP",
+  ALCSMVP: "ALCS MVP",
+  NLCSMVP: "NLCS MVP",
+  ALAS: "All-Star",
+  NLAS: "All-Star",
+  ASMVP: "All-Star Game MVP",
+  HRDERBYWIN: "Home Run Derby Champion",
+  ALSS: "Silver Slugger",
+  NLSS: "Silver Slugger",
+  ALGG: "Gold Glove",
+  NLGG: "Gold Glove",
+  ALPG: "Platinum Glove",
+  NLPG: "Platinum Glove",
+  ALHAA: "Hank Aaron Award",
+  NLHAA: "Hank Aaron Award",
+  ALCPOY: "Comeback Player of the Year",
+  NLCPOY: "Comeback Player of the Year",
+  ALREL: "Reliever of the Year",
+  NLREL: "Reliever of the Year",
+  DHOY: "Outstanding DH",
+  MLBAFIRST: "All-MLB First Team",
+  MLBSECOND: "All-MLB Second Team",
+  MLBRC: "Roberto Clemente Award",
+  MLBPCPOY: "Players Choice Player of the Year",
+  WBCMVP: "World Baseball Classic MVP",
+};
+
+// Display order: the biggest honors first.
+const AWARD_ORDER = [...new Set(Object.values(MAJOR_AWARDS))];
+
+export type PlayerAward = { label: string; seasons: number[] };
+
+export async function getPlayerAwards(playerId: number): Promise<PlayerAward[]> {
+  const data = await fetchJson<{ awards?: Array<{ id?: string; season?: string }> }>(
+    `https://statsapi.mlb.com/api/v1/people/${playerId}/awards`,
+    86_400
+  );
+
+  const seasonsByLabel = new Map<string, Set<number>>();
+  for (const award of data?.awards ?? []) {
+    const label = award.id ? MAJOR_AWARDS[award.id] : undefined;
+    const season = Number(award.season);
+    if (!label || !Number.isInteger(season)) {
+      continue;
+    }
+    seasonsByLabel.set(label, (seasonsByLabel.get(label) ?? new Set()).add(season));
+  }
+
+  return [...seasonsByLabel.entries()]
+    .map(([label, seasons]) => ({ label, seasons: [...seasons].sort((a, b) => a - b) }))
+    .sort((a, b) => AWARD_ORDER.indexOf(a.label) - AWARD_ORDER.indexOf(b.label));
+}
+
+// "2015–19, 2021–23": consecutive seasons collapse into ranges.
+export function formatAwardSeasons(seasons: number[]): string {
+  const ranges: string[] = [];
+  let start = seasons[0];
+  for (let index = 1; index <= seasons.length; index += 1) {
+    const previous = seasons[index - 1];
+    if (seasons[index] !== previous + 1) {
+      ranges.push(start === previous ? String(start) : `${start}–${String(previous).slice(2)}`);
+      start = seasons[index];
+    }
+  }
+  return ranges.join(", ");
+}

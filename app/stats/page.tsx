@@ -1,7 +1,7 @@
 import PlayerReportBrowser from "../../components/stats/PlayerReportBrowser";
 import type { StatLine } from "@/lib/mlb";
 import { computeEraPlus, computeWrcPlus, getSeasonEnvironment } from "@/lib/park-adjusted";
-import { getPitcherWar, getPositionPlayerWar } from "@/lib/war";
+import { getPitcherWar, getPositionPlayerWar, preloadWarEnvironment } from "@/lib/war";
 import type {
   LeaderboardCategory,
   LeaderboardPlayer,
@@ -26,6 +26,13 @@ type RosterResponse = {
 };
 
 const CARDINALS_TEAM_ID = 138;
+
+// Rendered per request, like the player pages: WAR and wRC+/ERA+ come from
+// the same season data the player pages use, which is fetched uncached and
+// so can't be read while pre-rendering a static page at build time (that
+// left these leaderboards empty in production). The fetches underneath are
+// still cached.
+export const dynamic = "force-dynamic";
 
 function formatNumber(value: number | string | undefined) {
   if (value === undefined || value === null || value === "") {
@@ -159,7 +166,7 @@ async function loadTeamPlayers(year: number) {
 
   const rosterData = (await rosterResponse.json()) as RosterResponse;
   const roster = rosterData.roster ?? [];
-  const environment = await getSeasonEnvironment(year);
+  const [environment] = await Promise.all([getSeasonEnvironment(year), preloadWarEnvironment(year)]);
 
   const reports = await Promise.all(
     roster.map(async (entry) => {
