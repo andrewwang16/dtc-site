@@ -554,12 +554,6 @@ textarea {
  * into wrapping/cutting off its player cards.
  */
 @media (min-width: 1200px) {
-  /* The offseason banner stands in for the scoreboard at the scoreboard's
-     height (610px), so the podcast videos beside it keep their full size. */
-  .offseason-banner {
-    min-height: 610px;
-  }
-
   .home-top-grid {
     grid-template-columns: 3fr 2fr;
     align-items: stretch;
@@ -822,4 +816,24 @@ select:not([multiple]):focus-visible {
 select:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* Offseason home page: the two latest episodes side by side under the
+   GM Simulator banner, each video at a fixed 16:9 (the desktop rule above
+   that lets videos stretch to the scoreboard's height doesn't apply here). */
+.home-podcasts-row {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: 1fr;
+}
+
+.home-podcasts-row .podcast-video {
+  aspect-ratio: 16 / 9;
+  flex: none;
+}
+
+@media (min-width: 900px) {
+  .home-podcasts-row {
+    grid-template-columns: 1fr 1fr;
+  }
 }

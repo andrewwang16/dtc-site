@@ -39,16 +39,27 @@ export default async function Home() {
         <WelcomeBanner />
       </div>
 
-      <section className="container fade-up">
-        <div className="home-top-grid">
-          <div className="home-podcasts">
+      {offseason ? (
+        // Offseason: a compact GM Simulator invite, then the two latest
+        // episodes side by side.
+        <section className="container fade-up" style={{ display: "grid", gap: "1.25rem" }}>
+          <OffseasonBanner />
+          <div className="home-podcasts-row">
             <Hero />
           </div>
-          <div className="home-scoreboard">
-            {offseason ? <OffseasonBanner /> : <CardinalsLiveScore />}
+        </section>
+      ) : (
+        <section className="container fade-up">
+          <div className="home-top-grid">
+            <div className="home-podcasts">
+              <Hero />
+            </div>
+            <div className="home-scoreboard">
+              <CardinalsLiveScore />
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <DivisionStandings />
 
