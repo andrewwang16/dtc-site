@@ -815,6 +815,30 @@ function SlotCell({
   );
 }
 
+// MLB headshots are 2:3 portraits; showing them at that shape (instead of
+// cropping into a circle) keeps the whole face in view.
+function PortraitHeadshot({ playerId, name, width = 30 }: { playerId: number; name: string; width?: number }) {
+  return (
+    <div
+      style={{
+        width: `${width}px`,
+        height: `${width * 1.5}px`,
+        borderRadius: "6px",
+        overflow: "hidden",
+        flexShrink: 0,
+        background: "rgba(15,31,61,.08)",
+        border: "1px solid var(--line)",
+      }}
+    >
+      <PlayerHeadshot
+        src={playerHeadshotUrl(playerId, width * 3)}
+        alt={name}
+        style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }}
+      />
+    </div>
+  );
+}
+
 const removeChipButtonStyle: React.CSSProperties = {
   width: "1.2rem",
   height: "1.2rem",
@@ -887,23 +911,7 @@ function TradeResultRow({
         background: "var(--panel)",
       }}
     >
-      <div
-        style={{
-          width: "30px",
-          height: "30px",
-          borderRadius: "50%",
-          overflow: "hidden",
-          flexShrink: 0,
-          background: "rgba(15,31,61,.08)",
-          border: "1px solid var(--line)",
-        }}
-      >
-        <PlayerHeadshot
-          src={playerHeadshotUrl(player.id, 60)}
-          alt={player.fullName}
-          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
-        />
-      </div>
+      <PortraitHeadshot playerId={player.id} name={player.fullName} />
       <span style={{ display: "grid", minWidth: 0 }}>
         <span style={{ fontWeight: 700, fontSize: "0.86rem" }}>
           <PlayerName player={player} />
@@ -1918,13 +1926,14 @@ export default function RosterBuilder({
       const blob = await renderRosterGraphic({
         season: CONTRACT_SEASON,
         team,
-        left: [
-          { title: "Lineup", rows: lineupRows },
-          { title: "Bench", rows: slotRows(benchSlots, () => undefined) },
-        ],
-        right: [
-          { title: "Rotation", rows: slotRows(ROTATION_SLOTS, (index) => String(index + 1)) },
-          { title: "Bullpen", rows: slotRows(bullpenSlots, (_, slot) => (BULLPEN_ROLE_IDS.has(slot.id) ? slot.label : undefined)) },
+        // Lineup | rotation and bench | bullpen.
+        columns: [
+          [{ title: "Lineup", rows: lineupRows }],
+          [
+            { title: "Rotation", rows: slotRows(ROTATION_SLOTS, (index) => String(index + 1)) },
+            { title: "Bench", rows: slotRows(benchSlots, () => undefined) },
+          ],
+          [{ title: "Bullpen", rows: slotRows(bullpenSlots, (_, slot) => (BULLPEN_ROLE_IDS.has(slot.id) ? slot.label : undefined)) }],
         ],
         stats: [
           { label: `Est. ${CONTRACT_SEASON} Payroll`, value: formatSalary(payroll.total) },
@@ -2577,23 +2586,7 @@ export default function RosterBuilder({
                           background: "rgba(15,31,61,0.02)",
                         }}
                       >
-                        <div
-                          style={{
-                            width: "34px",
-                            height: "34px",
-                            borderRadius: "50%",
-                            overflow: "hidden",
-                            flexShrink: 0,
-                            background: "rgba(15,31,61,.08)",
-                            border: "1px solid var(--line)",
-                          }}
-                        >
-                          <PlayerHeadshot
-                            src={playerHeadshotUrl(player.id, 68)}
-                            alt={player.fullName}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
-                          />
-                        </div>
+                        <PortraitHeadshot playerId={player.id} name={player.fullName} />
                         <div style={{ display: "grid", gap: "0.1rem", minWidth: 0, flex: "1 1 220px" }}>
                           <span style={{ fontSize: "0.9rem" }}>
                             <span style={{ fontWeight: 700 }}>
@@ -2930,23 +2923,7 @@ export default function RosterBuilder({
                             background: "rgba(15,31,61,0.02)",
                           }}
                         >
-                          <div
-                            style={{
-                              width: "34px",
-                              height: "34px",
-                              borderRadius: "50%",
-                              overflow: "hidden",
-                              flexShrink: 0,
-                              background: "rgba(15,31,61,.08)",
-                              border: "1px solid var(--line)",
-                            }}
-                          >
-                            <PlayerHeadshot
-                              src={playerHeadshotUrl(freeAgent.id, 68)}
-                              alt={freeAgent.fullName}
-                              style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
-                            />
-                          </div>
+                          <PortraitHeadshot playerId={freeAgent.id} name={freeAgent.fullName} />
                           <div style={{ display: "grid", gap: "0.1rem", minWidth: 0, flex: "1 1 220px" }}>
                             <span style={{ fontSize: "0.9rem" }}>
                               <span style={{ fontWeight: 700 }}>
@@ -2987,23 +2964,7 @@ export default function RosterBuilder({
                           background: "rgba(15,31,61,0.02)",
                         }}
                       >
-                        <div
-                          style={{
-                            width: "34px",
-                            height: "34px",
-                            borderRadius: "50%",
-                            overflow: "hidden",
-                            flexShrink: 0,
-                            background: "rgba(15,31,61,.08)",
-                            border: "1px solid var(--line)",
-                          }}
-                        >
-                          <PlayerHeadshot
-                            src={playerHeadshotUrl(player.id, 68)}
-                            alt={player.fullName}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
-                          />
-                        </div>
+                        <PortraitHeadshot playerId={player.id} name={player.fullName} />
                         <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>
                           <PlayerName player={player} />
                         </span>

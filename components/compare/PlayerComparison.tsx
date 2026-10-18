@@ -33,11 +33,11 @@ type ComparisonSide = {
 // W-L is a compound "12-5" string, not a single number, so it's excluded
 // from both sets below and never highlighted.
 const HIGHER_IS_BETTER_HITTER = new Set([
-  "G", "PA", "AVG", "OBP", "SLG", "OPS", "HR", "XBH", "RBI", "SB", "ISO", "BB%",
+  "WAR", "wRC+", "G", "PA", "AVG", "OBP", "SLG", "OPS", "HR", "XBH", "RBI", "SB", "ISO", "BB%",
 ]);
 const LOWER_IS_BETTER_HITTER = new Set(["K%"]);
 
-const HIGHER_IS_BETTER_PITCHER = new Set(["G", "GS", "SV", "IP", "K", "K%", "K-BB%"]);
+const HIGHER_IS_BETTER_PITCHER = new Set(["WAR", "ERA+", "G", "GS", "SV", "IP", "K", "K%", "K-BB%"]);
 const LOWER_IS_BETTER_PITCHER = new Set(["ERA", "WHIP", "BB", "BB%", "HR/9"]);
 
 function parseComparableValue(raw: string): number | null {
@@ -82,13 +82,20 @@ async function loadComparisonSide(playerId: number, year: number): Promise<Compa
   const group = role === "Pitcher" ? "pitching" : "hitting";
   const columns = role === "Pitcher" ? PITCHER_COLUMNS : HITTER_COLUMNS;
 
-  const { season } = await getPlayerYearStats(playerId, year, group);
+  // WAR and wRC+ (ERA+ for pitchers) need server-side park and league data.
+  const [{ season }, advanced] = await Promise.all([
+    getPlayerYearStats(playerId, year, group),
+    fetch(`/api/player-advanced?id=${playerId}&year=${year}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null) as Promise<{ values: Record<string, string> } | null>,
+  ]);
+  const plusColumn = role === "Pitcher" ? "ERA+" : "wRC+";
 
   return {
     bio,
     role,
-    columns,
-    row: buildStatRow(role, season),
+    columns: ["WAR", plusColumn, ...columns],
+    row: { WAR: "-", [plusColumn]: "-", ...buildStatRow(role, season), ...advanced?.values },
     age: computeAgeAsOf(bio.birthDate, `${year}-07-01`),
   };
 }

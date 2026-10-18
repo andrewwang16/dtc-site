@@ -258,7 +258,9 @@ export function signedContract(signing: Signing, current: ContractInfo | null = 
   const years = salaries.length;
   const total = salaries.reduce((sum, salary) => sum + salary, 0);
   const lastSeason = start + years - 1;
-  const isEven = salaries.every((salary) => salary === salaries[0]);
+  // A flat deal whose total doesn't split evenly still counts as flat (the
+  // last season absorbs the rounding), so no per-season schedule is shown.
+  const isEven = flatSalaries(total, years).every((salary, index) => salary === salaries[index]);
   const schedule = isEven ? "" : ` · ${salaries.map((salary) => formatSalary(salary).replace(/^\$|M$/g, "")).join("/")}`;
   const deferralText = deferral
     ? ` · ${formatSalary(deferral.total)} deferred, paid ${seasonSpan(deferral.payoutStart, deferral.payoutStart + deferral.payoutYears - 1)}`
