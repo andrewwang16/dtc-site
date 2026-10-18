@@ -539,9 +539,9 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
                     alignItems: "center",
                     padding: "0.55rem 1rem",
                     borderRadius: "999px",
-                    border: `1px solid ${role === "Hitter" ? "#8a1024" : "var(--line)"}`,
-                    background: role === "Hitter" ? "rgba(196,30,58,0.18)" : "rgba(15,31,61,0.02)",
-                    color: "var(--text)",
+                    border: `1px solid ${role === "Hitter" ? "#fdfaf3" : "rgba(253,250,243,0.4)"}`,
+                    background: role === "Hitter" ? "#fdfaf3" : "rgba(253,250,243,0.12)",
+                    color: role === "Hitter" ? "#a8172f" : "#fdfaf3",
                     fontWeight: 700,
                     textDecoration: "none",
                   }}
@@ -555,9 +555,9 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
                     alignItems: "center",
                     padding: "0.55rem 1rem",
                     borderRadius: "999px",
-                    border: `1px solid ${role === "Pitcher" ? "#8a1024" : "var(--line)"}`,
-                    background: role === "Pitcher" ? "rgba(196,30,58,0.18)" : "rgba(15,31,61,0.02)",
-                    color: "var(--text)",
+                    border: `1px solid ${role === "Pitcher" ? "#fdfaf3" : "rgba(253,250,243,0.4)"}`,
+                    background: role === "Pitcher" ? "#fdfaf3" : "rgba(253,250,243,0.12)",
+                    color: role === "Pitcher" ? "#a8172f" : "#fdfaf3",
                     fontWeight: 700,
                     textDecoration: "none",
                   }}
@@ -590,7 +590,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           }
           standard={
             <>
-              <p style={{ margin: "0 0 0.85rem", color: "var(--muted)", fontSize: "0.85rem" }}>
+              <p style={{ margin: "0 0 0.85rem", color: "rgba(253,250,243,0.8)", fontSize: "0.85rem" }}>
                 {selectedYear} · {seasonTeamLabel}
               </p>
               <SeasonStatCells
@@ -605,7 +605,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           }
           statcast={
             <>
-              <p style={{ margin: "0 0 0.85rem", color: "var(--muted)", fontSize: "0.85rem" }}>
+              <p style={{ margin: "0 0 0.85rem", color: "rgba(253,250,243,0.8)", fontSize: "0.85rem" }}>
                 {selectedYear} · MLB percentile ranks
               </p>
               <StatcastPercentiles metrics={statcastMetrics} />

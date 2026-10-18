@@ -36,6 +36,9 @@ export type TeamPlayerSeason = {
   imageUrl: string;
   hitting: SeasonStatLine | undefined;
   pitching: SeasonStatLine | undefined;
+  // Cardinals-only WAR, and wRC+ (hitters) or ERA+ (pitchers).
+  war: number | null;
+  plus: number | null;
 };
 
 export type LeaderboardPlayer = {

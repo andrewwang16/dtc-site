@@ -61,7 +61,9 @@ export default function SeasonStatCells({
               cursor: tooltip ? "help" : undefined,
               border: `2px solid ${rankOutline(rank)}`,
               borderRadius: "14px",
-              background: highlighted.includes(column) ? "rgba(196,30,58,0.08)" : undefined,
+              // Solid, so the boxes stay white on the red stats card.
+              background: highlighted.includes(column) ? "#fbecef" : "#ffffff",
+              color: "var(--text)",
               padding: "0.9rem 0.6rem",
               display: "grid",
               gap: "0.4rem",

@@ -50,9 +50,11 @@ export default function PlayerStatsPanel({
   return (
     <div
       style={{
-        border: "1px solid var(--line)",
         borderRadius: "18px",
-        background: "var(--panel)",
+        // Same red as the home page scoreboard and the rolling trend chart;
+        // the stat boxes inside stay white.
+        background: "linear-gradient(155deg, #c8253f 0%, #7d0f1f 100%)",
+        color: "#fdfaf3",
         padding: "1.15rem",
         minWidth: 0,
       }}
@@ -76,8 +78,8 @@ export default function PlayerStatsPanel({
             display: "inline-flex",
             padding: "0.25rem",
             borderRadius: "999px",
-            border: "1px solid var(--line)",
-            background: "var(--bg-soft)",
+            border: "1px solid rgba(253,250,243,0.3)",
+            background: "rgba(253,250,243,0.14)",
           }}
         >
           {VIEWS.map((option) => {
@@ -97,9 +99,9 @@ export default function PlayerStatsPanel({
                   fontSize: "0.92rem",
                   letterSpacing: "0.02em",
                   cursor: "pointer",
-                  background: active ? "var(--accent)" : "transparent",
-                  color: active ? "#fff" : "var(--muted)",
-                  boxShadow: active ? "0 2px 8px rgba(196,30,58,0.25)" : "none",
+                  background: active ? "#fdfaf3" : "transparent",
+                  color: active ? "#a8172f" : "rgba(253,250,243,0.85)",
+                  boxShadow: active ? "0 2px 8px rgba(0,0,0,0.2)" : "none",
                   transition: "background 0.15s ease, color 0.15s ease",
                 }}
               >

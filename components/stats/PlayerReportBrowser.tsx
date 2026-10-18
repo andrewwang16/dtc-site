@@ -11,146 +11,109 @@ type Props = {
   data: StatsLeadersPageData;
 };
 
+// Same red card as the home page scoreboard and the rolling trend chart.
+const CARD_GRADIENT = "linear-gradient(155deg, #c8253f 0%, #7d0f1f 100%)";
+
+// The leader gets the headshot (full portrait, so the whole face shows);
+// 2nd through 4th follow as compact rows.
 function LeaderCard({ category }: { category: LeaderboardCategory }) {
+  const [leader, ...rest] = category.players;
+
   return (
     <article
       style={{
-        border: "1px solid var(--line)",
         borderRadius: "18px",
-        background: "var(--panel)",
-        padding: "0.85rem",
+        background: CARD_GRADIENT,
+        color: "#fdfaf3",
+        padding: "0.95rem",
         display: "grid",
         gap: "0.75rem",
+        alignContent: "start",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap",
-          alignItems: "baseline",
-        }}
-      >
-        <div>
-          <p className="kicker" style={{ marginBottom: "0.3rem", fontSize: "0.72rem" }}>
-            {category.description}
-          </p>
-          <h3 style={{ margin: 0, fontSize: "1rem" }}>{category.label}</h3>
-        </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem" }}>
+        <h3 style={{ margin: 0, fontFamily: "Anton, sans-serif", fontSize: "1.45rem", letterSpacing: "0.03em" }}>
+          {category.label}
+        </h3>
+        <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(253,250,243,0.7)" }}>
+          {category.description}
+        </span>
       </div>
 
-      {category.players.length === 0 ? (
-        <p style={{ margin: 0, color: "var(--muted)" }}>
-          No players available for this leaderboard.
-        </p>
+      {!leader ? (
+        <p style={{ margin: 0, color: "rgba(253,250,243,0.75)" }}>No players available for this leaderboard.</p>
       ) : (
-        <div style={{ display: "grid", gap: "0.55rem" }}>
-          {category.players.map((player, index) => (
-            <Link
-              key={`${category.key}-${player.id}`}
-              href={`/players/${player.id}`}
+        <>
+          <Link
+            href={`/players/${leader.id}`}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "64px minmax(0, 1fr) auto",
+              alignItems: "center",
+              gap: "0.85rem",
+              padding: "0.6rem",
+              borderRadius: "14px",
+              background: "rgba(253,250,243,0.1)",
+              border: "1px solid rgba(253,250,243,0.22)",
+              color: "inherit",
+              textDecoration: "none",
+            }}
+          >
+            <img
+              src={leader.imageUrl}
+              alt={`Headshot of ${leader.name}`}
+              loading="lazy"
               style={{
-                display: "grid",
-                gap: "0.85rem",
-                gridTemplateColumns: "60px minmax(0, 1fr) auto",
-                alignItems: "center",
-                border: "1px solid var(--line)",
-                borderRadius: "14px",
-                padding: "0.6rem",
-                background: "rgba(15,31,61,0.02)",
-                color: "inherit",
-                textDecoration: "none",
+                width: "64px",
+                height: "96px",
+                borderRadius: "10px",
+                objectFit: "cover",
+                objectPosition: "top center",
+                background: "rgba(253,250,243,0.15)",
+                display: "block",
               }}
-            >
-              {/* Player Headshot */}
-              <div
-                style={{
-                  width: "60px",
-                  height: "74px",
-                  position: "relative",
-                  flexShrink: 0,
-                }}
-              >
-                <img
-                  src={player.imageUrl}
-                  alt={`Headshot of ${player.name}`}
-                  loading="lazy"
-                  style={{
-                    width: "60px",
-                    height: "74px",
-                    borderRadius: "12px",
-                    objectFit: "cover",
-                    objectPosition: "center top",
-                    border: "1px solid var(--line)",
-                    background: "#f3f4f6",
-                    display: "block",
-                  }}
-                />
+            />
+            <div style={{ minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: "0.66rem", fontWeight: 800, letterSpacing: "0.1em", color: "#f2c14e" }}>LEADER</p>
+              <p style={{ margin: "0.15rem 0 0", fontWeight: 800, fontSize: "1rem", lineHeight: 1.2 }}>{leader.name}</p>
+              <p style={{ margin: "0.2rem 0 0", fontSize: "0.76rem", color: "rgba(253,250,243,0.72)" }}>{leader.position}</p>
+            </div>
+            <div style={{ fontFamily: "Anton, sans-serif", fontSize: "2rem", lineHeight: 1, whiteSpace: "nowrap" }}>
+              {leader.displayValue}
+            </div>
+          </Link>
 
-                <span
-                  style={{
-                    position: "absolute",
-                    top: "-6px",
-                    left: "-6px",
-                    width: "18px",
-                    height: "18px",
-                    borderRadius: "999px",
-                    background: "#111827",
-                    color: "#fff",
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: "0.62rem",
-                    fontWeight: 800,
-                    border: "2px solid var(--panel)",
-                  }}
-                >
-                  {index + 1}
-                </span>
-              </div>
-
-              {/* Player Name and Position */}
-              <div
-                style={{
-                  minWidth: 0,
-                  paddingLeft: "0.15rem",
-                }}
-              >
-                <p
-                  style={{
-                    margin: 0,
-                    fontWeight: 800,
-                    fontSize: "0.88rem",
-                    lineHeight: 1.25,
-                  }}
-                >
-                  {player.name}
-                </p>
-
-                <p
-                  style={{
-                    margin: "0.3rem 0 0",
-                    color: "var(--muted)",
-                    fontSize: "0.76rem",
-                  }}
-                >
-                  {player.position}
-                </p>
-              </div>
-
-              {/* Stat */}
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: "1.05rem",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {player.displayValue}
-              </div>
-            </Link>
-          ))}
-        </div>
+          {rest.length > 0 && (
+            <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "0.15rem" }}>
+              {rest.map((player, index) => (
+                <li key={`${category.key}-${player.id}`}>
+                  <Link
+                    href={`/players/${player.id}`}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.4rem minmax(0, 1fr) auto",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      padding: "0.4rem 0.35rem",
+                      borderTop: "1px solid rgba(253,250,243,0.16)",
+                      color: "inherit",
+                      textDecoration: "none",
+                    }}
+                  >
+                    <span style={{ fontWeight: 800, color: "rgba(253,250,243,0.65)", fontSize: "0.82rem" }}>{index + 2}</span>
+                    <span style={{ minWidth: 0, fontWeight: 700, fontSize: "0.88rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {player.name}
+                      <span style={{ marginLeft: "0.4rem", fontWeight: 500, fontSize: "0.74rem", color: "rgba(253,250,243,0.65)" }}>
+                        {player.position}
+                      </span>
+                    </span>
+                    <span style={{ fontWeight: 800, fontSize: "0.95rem", whiteSpace: "nowrap" }}>{player.displayValue}</span>
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          )}
+        </>
       )}
     </article>
   );
@@ -218,8 +181,8 @@ export default function PlayerReportBrowser({ data }: Props) {
       <div
         style={{
           display: "grid",
-          gap: "0.5rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: "0.75rem",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
         }}
       >
         {active.categories.map((category) => (

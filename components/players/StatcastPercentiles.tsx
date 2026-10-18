@@ -36,7 +36,10 @@ function PercentileTile({ metric }: { metric: StatcastPercentile }) {
         display: "grid",
         gap: "0.45rem",
         alignContent: "start",
-        opacity: qualified ? 1 : 0.75,
+        // Solid white on the red stats card (unqualified tiles show a gray
+        // bar instead of fading the whole tile).
+        background: "#ffffff",
+        color: "var(--text)",
       }}
     >
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
@@ -102,7 +105,8 @@ function PercentileTile({ metric }: { metric: StatcastPercentile }) {
 
 export default function StatcastPercentiles({ metrics }: { metrics: StatcastPercentile[] }) {
   if (metrics.length === 0) {
-    return <p style={{ color: "var(--muted)" }}>No Statcast data available for this season yet.</p>;
+    // Shown on the red stats card, so it inherits the card's light text.
+    return <p style={{ color: "inherit", opacity: 0.85 }}>No Statcast data available for this season yet.</p>;
   }
 
   return (

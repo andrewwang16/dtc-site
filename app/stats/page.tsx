@@ -1,4 +1,7 @@
 import PlayerReportBrowser from "../../components/stats/PlayerReportBrowser";
+import type { StatLine } from "@/lib/mlb";
+import { computeEraPlus, computeWrcPlus, getSeasonEnvironment } from "@/lib/park-adjusted";
+import { getPitcherWar, getPositionPlayerWar } from "@/lib/war";
 import type {
   LeaderboardCategory,
   LeaderboardPlayer,
@@ -22,52 +25,7 @@ type RosterResponse = {
   roster?: RosterEntry[];
 };
 
-type PeopleResponse = {
-  people?: Array<{
-    id: number;
-    fullName: string;
-    stats?: Array<{
-      group?: {
-        displayName?: string;
-      };
-      type?: {
-        displayName?: string;
-      };
-      splits?: Array<{
-        stat?: SeasonStatLine;
-      }>;
-    }>;
-  }>;
-};
-
-type PeopleStatPerson = {
-  stats?: Array<{
-    group?: {
-      displayName?: string;
-    };
-    type?: {
-      displayName?: string;
-    };
-    splits?: Array<{
-      stat?: SeasonStatLine;
-    }>;
-  }>;
-};
-
 const CARDINALS_TEAM_ID = 138;
-
-const CHICAGO_ISO_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/Chicago",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-function toIsoDate(date: Date) {
-  // Pinned to Central time so "today" matches the Cardinals' local day
-  // regardless of the server's own timezone (typically UTC).
-  return CHICAGO_ISO_DATE_FORMATTER.format(date);
-}
 
 function formatNumber(value: number | string | undefined) {
   if (value === undefined || value === null || value === "") {
@@ -91,10 +49,6 @@ function inningsToOuts(innings: string | undefined) {
   const fractionalPart = fraction === "1" ? 1 : fraction === "2" ? 2 : 0;
 
   return wholePart + fractionalPart;
-}
-
-function getSeasonStat(person: PeopleStatPerson, group: "hitting" | "pitching") {
-  return person.stats?.find((entry) => entry.group?.displayName === group && entry.type?.displayName === "season")?.splits?.[0]?.stat;
 }
 
 function getPlayerHeadshotUrl(playerId: number) {
@@ -147,7 +101,7 @@ function buildLeaderboardCategory(
     .sort((left, right) =>
       options.sortDirection === "asc" ? left.sortValue - right.sortValue : right.sortValue - left.sortValue
     )
-    .slice(0, 3);
+    .slice(0, 4);
 
   return {
     key: options.key,
@@ -159,25 +113,37 @@ function buildLeaderboardCategory(
   };
 }
 
-async function loadTeamGamesPlayed(year: number, todayIso: string) {
+// Games the Cardinals actually played (MLB's team totals) — the schedule
+// also lists postponed games, which would inflate the qualifying bars.
+async function loadTeamGamesPlayed(year: number) {
   const response = await fetch(
-    `https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=${CARDINALS_TEAM_ID}&startDate=${year}-01-01&endDate=${todayIso}&gameType=R`,
-    {
-      next: {
-        revalidate: 3600,
-      },
-    }
+    `https://statsapi.mlb.com/api/v1/teams/${CARDINALS_TEAM_ID}/stats?stats=season&group=hitting&season=${year}`,
+    { next: { revalidate: 3600 } }
   );
 
   if (!response.ok) {
     return 0;
   }
 
-  const data = (await response.json()) as { dates?: Array<{ games?: Array<{ status?: { abstractGameState?: string } }> }> };
+  const data = (await response.json()) as { stats?: Array<{ splits?: Array<{ stat?: { gamesPlayed?: number } }> }> };
+  return data.stats?.[0]?.splits?.[0]?.stat?.gamesPlayed ?? 0;
+}
 
-  return (data.dates ?? [])
-    .flatMap((group) => group.games ?? [])
-    .filter((game) => game.status?.abstractGameState !== "Preview").length;
+type PlayerSeasonSplits = {
+  stats?: Array<{
+    group?: { displayName?: string };
+    splits?: Array<{ team?: { id?: number }; stat?: SeasonStatLine & StatLine }>;
+  }>;
+};
+
+// A player's Cardinals-only line for a group, and his full-season line. A
+// player who spent part of the year elsewhere gets one split per team plus
+// a combined one; only the Cardinals split counts on these leaderboards.
+function cardinalsSplits(data: PlayerSeasonSplits, group: "hitting" | "pitching") {
+  const splits = data.stats?.find((entry) => entry.group?.displayName === group)?.splits ?? [];
+  const cardinals = splits.find((split) => split.team?.id === CARDINALS_TEAM_ID)?.stat;
+  const combined = splits.find((split) => !split.team)?.stat ?? cardinals;
+  return { cardinals, combined };
 }
 
 async function loadTeamPlayers(year: number) {
@@ -193,31 +159,24 @@ async function loadTeamPlayers(year: number) {
 
   const rosterData = (await rosterResponse.json()) as RosterResponse;
   const roster = rosterData.roster ?? [];
+  const environment = await getSeasonEnvironment(year);
 
   const reports = await Promise.all(
     roster.map(async (entry) => {
       const response = await fetch(
-        `https://statsapi.mlb.com/api/v1/people/${entry.person.id}?hydrate=stats(group=[hitting,pitching],type=[season])`,
-        {
-          next: {
-            revalidate: 3600,
-          },
-        }
+        `https://statsapi.mlb.com/api/v1/people/${entry.person.id}/stats?stats=season&group=hitting,pitching&season=${year}`,
+        { next: { revalidate: 3600 } }
       );
 
       if (!response.ok) {
         return null;
       }
 
-      const data = (await response.json()) as PeopleResponse;
-      const person = data.people?.[0];
-
-      if (!person) {
-        return null;
-      }
-
-      const hitting = getSeasonStat(person, "hitting");
-      const pitching = getSeasonStat(person, "pitching");
+      const data = (await response.json()) as PlayerSeasonSplits;
+      const hittingSplits = cardinalsSplits(data, "hitting");
+      const pitchingSplits = cardinalsSplits(data, "pitching");
+      const hitting = hittingSplits.cardinals;
+      const pitching = pitchingSplits.cardinals;
       const hittingGames = hitting?.gamesPlayed ?? 0;
       const pitchingGames = pitching?.gamesPitched ?? 0;
 
@@ -227,14 +186,37 @@ async function loadTeamPlayers(year: number) {
 
       const role: TeamPlayerSeason["role"] = pitchingGames > 0 && pitchingGames >= hittingGames ? "Pitcher" : "Hitter";
 
+      // WAR and wRC+/ERA+ for his Cardinals time only, the same way the
+      // player pages compute them.
+      const stints = [{ teamId: CARDINALS_TEAM_ID, stat: (role === "Pitcher" ? pitching : hitting) as StatLine }];
+      const war =
+        role === "Pitcher"
+          ? (await getPitcherWar(year, pitching as StatLine, stints))?.war ?? null
+          : (
+              await getPositionPlayerWar(
+                entry.person.id,
+                year,
+                hitting as StatLine,
+                stints,
+                hittingSplits.combined?.plateAppearances ?? hitting?.plateAppearances ?? 0
+              )
+            )?.war ?? null;
+      const plus = environment
+        ? role === "Pitcher"
+          ? computeEraPlus(pitching as StatLine, stints, environment)
+          : computeWrcPlus(hitting as StatLine, stints, environment)
+        : null;
+
       return {
-        id: person.id,
-        name: person.fullName,
+        id: entry.person.id,
+        name: entry.person.fullName,
         position: entry.position.abbreviation ?? (role === "Pitcher" ? "P" : ""),
         role,
-        imageUrl: getPlayerHeadshotUrl(person.id),
+        imageUrl: getPlayerHeadshotUrl(entry.person.id),
         hitting,
         pitching,
+        war,
+        plus,
       } satisfies TeamPlayerSeason;
     })
   );
@@ -250,6 +232,28 @@ function buildHittersTab(players: TeamPlayerSeason[], teamGamesPlayed: number): 
   return {
     key: "hitters",
     categories: [
+      buildLeaderboardCategory(hitters, {
+        key: "war",
+        label: "WAR",
+        description: "All Cardinals hitters",
+        sortDirection: "desc",
+        qualified: false,
+        pool: "hitting",
+        selectValue: (player) => player.war ?? null,
+        displayValue: (player) => (player.war ?? 0).toFixed(1),
+        isQualified: () => true,
+      }),
+      buildLeaderboardCategory(hitters, {
+        key: "wrcplus",
+        label: "wRC+",
+        description: "Qualified hitters",
+        sortDirection: "desc",
+        qualified: true,
+        pool: "hitting",
+        selectValue: (player) => player.plus ?? null,
+        displayValue: (player) => String(Math.round(player.plus ?? 0)),
+        isQualified: (player) => (player.hitting?.plateAppearances ?? 0) >= hitterQualificationPA,
+      }),
       buildLeaderboardCategory(hitters, {
         key: "avg",
         label: "AVG",
@@ -419,6 +423,28 @@ function buildPitchersTab(players: TeamPlayerSeason[], teamGamesPlayed: number):
     key: "pitchers",
     categories: [
       buildLeaderboardCategory(pitchers, {
+        key: "war",
+        label: "WAR",
+        description: "All Cardinals pitchers",
+        sortDirection: "desc",
+        qualified: false,
+        pool: "pitching",
+        selectValue: (player) => player.war ?? null,
+        displayValue: (player) => (player.war ?? 0).toFixed(1),
+        isQualified: () => true,
+      }),
+      buildLeaderboardCategory(pitchers, {
+        key: "eraplus",
+        label: "ERA+",
+        description: "Qualified pitchers",
+        sortDirection: "desc",
+        qualified: true,
+        pool: "pitching",
+        selectValue: (player) => player.plus ?? null,
+        displayValue: (player) => String(Math.round(player.plus ?? 0)),
+        isQualified: (player) => inningsToOuts(player.pitching?.inningsPitched) >= pitcherQualificationOuts,
+      }),
+      buildLeaderboardCategory(pitchers, {
         key: "era",
         label: "ERA",
         description: "Qualified pitchers",
@@ -564,9 +590,15 @@ function buildPitchersTab(players: TeamPlayerSeason[], teamGamesPlayed: number):
   };
 }
 
-async function loadStatsPageData(year: number): Promise<StatsLeadersPageData> {
-  const todayIso = toIsoDate(new Date());
-  const [teamGamesPlayed, teamPlayers] = await Promise.all([loadTeamGamesPlayed(year, todayIso), loadTeamPlayers(year)]);
+async function loadStatsPageData(currentYear: number): Promise<StatsLeadersPageData> {
+  // Before a new season starts (no games yet), show the last completed one.
+  let year = currentYear;
+  let teamGamesPlayed = await loadTeamGamesPlayed(year);
+  if (teamGamesPlayed === 0) {
+    year -= 1;
+    teamGamesPlayed = await loadTeamGamesPlayed(year);
+  }
+  const teamPlayers = await loadTeamPlayers(year);
 
   const hitters = buildHittersTab(teamPlayers, teamGamesPlayed);
   const pitchers = buildPitchersTab(teamPlayers, teamGamesPlayed);
@@ -591,6 +623,10 @@ export default async function StatsPage() {
       <section className="container fade-up">
         <p className="kicker">Players · Leaders</p>
         <h1 className="section-title">Cardinals Leaderboards</h1>
+        <p style={{ marginTop: "0.6rem", color: "var(--muted)" }}>
+          {data.year} season · Cardinals stats only · qualified: {data.hitterQualificationPA} PA /{" "}
+          {Math.floor(data.pitcherQualificationOuts / 3)} IP
+        </p>
       </section>
 
       <section className="container fade-up" style={{ animationDelay: "0.12s" }}>
