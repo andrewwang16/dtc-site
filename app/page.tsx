@@ -33,11 +33,11 @@ export default async function Home() {
   const offseason = await isOffseason();
 
   return (
-    <div style={{ display: "grid", gap: "2.75rem", paddingBottom: "4rem" }}>
+    <div style={{ display: "grid", gap: "2.75rem", paddingBottom: "4rem", paddingTop: "2.2rem" }}>
 
-      <div style={{ paddingTop: "2.2rem" }}>
-        <WelcomeBanner />
-      </div>
+      {/* The site intro would repeat the offseason banner, so it only shows
+          in season. */}
+      {!offseason && <WelcomeBanner />}
 
       {offseason ? (
         // Offseason: a compact GM Simulator invite, then the two latest
